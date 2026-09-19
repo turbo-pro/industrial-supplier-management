@@ -21,6 +21,18 @@ jobs:
       - name: Verify backend reactor
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
+  infrastructure-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify MySQL, Flyway, MyBatis and Flowable integration
+        run: ./mvnw --batch-mode --no-transfer-progress -pl backend/ism-bootstrap -am -Pintegration-test verify
+
   repository-hygiene:
     runs-on: ubuntu-latest
     steps:

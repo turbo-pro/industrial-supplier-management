@@ -36,6 +36,18 @@ tests/          端到端、夹具和性能测试
 
 当前只建设B0工程与验证骨架。业务模块必须在数据、API、权限和验收契约冻结后实施。
 
+## 本地启动
+
+环境要求：JDK 17+、Docker Desktop（或兼容的 Docker Engine）。仓库自带 Maven Wrapper，无需单独安装 Maven。
+
+```bash
+cp deploy/docker/.env.example deploy/docker/.env
+docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml up -d --wait
+./mvnw -pl backend/ism-bootstrap -am spring-boot:run
+```
+
+启动后可访问 `http://localhost:8080/actuator/health`。完整开发与验收命令见 [本地开发说明](docs/development/local-development.md)。
+
 ## 许可证
 
 Apache License 2.0。详见 [LICENSE](LICENSE)。

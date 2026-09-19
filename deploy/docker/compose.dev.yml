@@ -1,0 +1,29 @@
+name: industrial-supplier-management-dev
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${ISM_MYSQL_DATABASE:-industrial_supplier}
+      MYSQL_USER: ${ISM_MYSQL_USER:-ism}
+      MYSQL_PASSWORD: ${ISM_MYSQL_PASSWORD:-ism}
+      MYSQL_ROOT_PASSWORD: ${ISM_MYSQL_ROOT_PASSWORD:-ism-root}
+      TZ: Asia/Shanghai
+    ports:
+      - "${ISM_MYSQL_PORT:-3306}:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - ism-mysql-data:/var/lib/mysql
+
+volumes:
+  ism-mysql-data:
