@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.github.turbo-pro</groupId>
+    <artifactId>industrial-supplier-management</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+  <artifactId>ism-backend</artifactId>
+  <packaging>pom</packaging>
+  <modules>
+    <module>ism-common-api</module>
+    <module>ism-common-infrastructure</module>
+    <module>ism-platform</module>
+    <module>ism-iam</module>
+    <module>ism-supplier</module>
+    <module>ism-qualification</module>
+    <module>ism-project</module>
+    <module>ism-resource</module>
+    <module>ism-safety</module>
+    <module>ism-quality</module>
+    <module>ism-restriction</module>
+    <module>ism-workflow</module>
+    <module>ism-operation</module>
+    <module>ism-integration</module>
+    <module>ism-bootstrap</module>
+  </modules>
+</project>

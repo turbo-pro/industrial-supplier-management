@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify backend reactor
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject common secret and private environment files
+        shell: bash
+        run: |
+          test ! -f .env
+          test -z "$(find . -type f \( -name '*.pem' -o -name '*.p12' -o -name 'id_rsa' \) -print -quit)"

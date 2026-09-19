@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a scoped product or engineering change.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Which user and business outcome does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Requirement source
+      options:
+        - Original requirement
+        - Original requirement extension
+        - Product capability
+        - Integration
+    validations:
+      required: true
