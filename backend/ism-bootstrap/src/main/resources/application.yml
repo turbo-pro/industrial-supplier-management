@@ -49,3 +49,7 @@ flowable:
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
+
+logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"
