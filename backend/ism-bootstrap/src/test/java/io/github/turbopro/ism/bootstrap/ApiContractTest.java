@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
+import io.github.turbopro.ism.iam.auth.AuthService;
+import io.github.turbopro.ism.iam.auth.JwtTokenService;
 
 import java.util.Map;
 
@@ -46,6 +49,12 @@ class ApiContractTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private JwtTokenService jwtTokenService;
+
+    @MockBean
+    private AuthService authService;
 
     @Test
     void shouldReturnStableSuccessEnvelopeAndReuseTrustedTraceId() throws Exception {

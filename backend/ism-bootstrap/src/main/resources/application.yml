@@ -1,6 +1,8 @@
 spring:
   application:
     name: industrial-supplier-management
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${ISM_DB_URL:jdbc:mysql://localhost:3306/industrial_supplier?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${ISM_DB_USERNAME:ism}
@@ -53,3 +55,13 @@ mybatis:
 logging:
   pattern:
     level: "%5p [traceId=%X{traceId:-}]"
+
+ism:
+  security:
+    jwt:
+      secret: ${ISM_JWT_SECRET:local-development-secret-change-me-32-bytes}
+      access-ttl: ${ISM_JWT_ACCESS_TTL:PT15M}
+      refresh-ttl: ${ISM_JWT_REFRESH_TTL:P7D}
+    login:
+      max-failures: ${ISM_LOGIN_MAX_FAILURES:5}
+      lock-duration: ${ISM_LOGIN_LOCK_DURATION:PT15M}
