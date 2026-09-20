@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.turbopro.ism.common.api.ApiResponse;
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
+import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,7 +58,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 writeError(response, IamErrorCode.PASSWORD_CHANGE_REQUIRED);
                 return;
             }
-            chain.doFilter(request, response);
+            try (TenantContext.Scope ignored = TenantContext.open(principal.tenantId(), principal.userId())) {
+                chain.doFilter(request, response);
+            }
         } catch (JwtException | IllegalArgumentException | ApiException exception) {
             SecurityContextHolder.clearContext();
             writeError(response, exception instanceof ApiException api ? api.errorCode() : IamErrorCode.TOKEN_INVALID);

@@ -3,6 +3,8 @@ package io.github.turbopro.ism.bootstrap;
 import io.github.turbopro.ism.bootstrap.schema.SchemaMarker;
 import io.github.turbopro.ism.bootstrap.schema.SchemaMarkerMapper;
 import io.github.turbopro.ism.common.api.error.ApiException;
+import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.common.infrastructure.tenant.TenantIsolationException;
 import io.github.turbopro.ism.iam.auth.AuthModels;
 import io.github.turbopro.ism.iam.auth.AuthService;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
@@ -16,14 +18,19 @@ import org.flowable.task.api.Task;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.annotation.DirtiesContext;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -33,8 +40,13 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
+@Import(B0InfrastructureIT.TenantProbeController.class)
 @Testcontainers(disabledWithoutDocker = true)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class B0InfrastructureIT {
@@ -75,6 +87,12 @@ class B0InfrastructureIT {
 
     @Autowired
     private JwtTokenService jwtTokenService;
+
+    @Autowired
+    private TenantIsolationTestMapper tenantMapper;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
     void shouldMigrateDatabaseAndReadWriteThroughMyBatis() {
@@ -218,6 +236,59 @@ class B0InfrastructureIT {
         }
     }
 
+    @Test
+    void shouldFailClosedAndIsolateTenantReadsWritesAndExports() throws Exception {
+        long tenantA = 120L;
+        long tenantB = 121L;
+        long userA = 122L;
+        long userB = 123L;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantA, "T-ISO-A", "隔离租户A", "ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantB, "T-ISO-B", "隔离租户B", "ACTIVE");
+        try {
+            try (TenantContext.Scope ignored = TenantContext.open(tenantA, 9001L)) {
+                assertThat(tenantMapper.insert(userA, tenantA, "same-admin", "A管理员",
+                        passwordEncoder.encode("TenantA#Pass123"))).isOne();
+            }
+            try (TenantContext.Scope ignored = TenantContext.open(tenantB, 9002L)) {
+                assertThat(tenantMapper.insert(userB, tenantB, "same-admin", "B管理员",
+                        passwordEncoder.encode("TenantB#Pass123"))).isOne();
+            }
+
+            try (TenantContext.Scope ignored = TenantContext.open(tenantA, 9001L)) {
+                assertThat(tenantMapper.findAll(tenantA)).extracting(TenantIsolationTestMapper.TenantUserRow::id)
+                        .containsExactly(userA);
+                assertThat(tenantMapper.exportAll(tenantA)).extracting(TenantIsolationTestMapper.TenantUserRow::id)
+                        .containsExactly(userA);
+                assertThat(tenantMapper.findById(userB, tenantA)).isNull();
+                assertTenantIsolation(() -> tenantMapper.rename(userB, tenantB, "越权修改"));
+                assertTenantIsolation(() -> tenantMapper.insert(124L, tenantB,
+                        "forged-admin", "伪造租户", "not-used"));
+                assertTenantIsolation(() -> tenantMapper.unsafeFindWithoutTenant("same-admin"));
+            }
+
+            assertTenantIsolation(() -> tenantMapper.findAll(tenantA));
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT display_name FROM iam_user WHERE id=?", String.class, userB)).isEqualTo("B管理员");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM iam_user WHERE id=124", Integer.class)).isZero();
+
+            AuthModels.TokenPair tenantATokens = authService.login(new AuthModels.LoginCommand(
+                    "T-ISO-A", "same-admin", "TenantA#Pass123", "tenant-probe"), "127.0.0.1");
+            mockMvc.perform(get("/test/tenant-probe")
+                            .header("Authorization", "Bearer " + tenantATokens.accessToken())
+                            .header("X-Tenant-Id", Long.toString(tenantB)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.tenantId").value(Long.toString(tenantA)))
+                    .andExpect(jsonPath("$.rowCount").value(1));
+        } finally {
+            jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id IN (?,?)", userA, userB);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?,?)", userA, userB, 124L);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantA, tenantB);
+        }
+    }
+
     private Object refreshAfterSignal(String refreshToken, CountDownLatch ready, CountDownLatch start)
             throws InterruptedException {
         ready.countDown();
@@ -234,6 +305,33 @@ class B0InfrastructureIT {
             return future.get();
         } catch (Exception exception) {
             throw new AssertionError("Concurrent refresh failed unexpectedly", exception);
+        }
+    }
+
+    private void assertTenantIsolation(Runnable action) {
+        assertThatThrownBy(action::run).satisfies(error -> {
+            Throwable cause = error;
+            while (cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            assertThat(cause).isInstanceOf(TenantIsolationException.class);
+        });
+    }
+
+    @RestController
+    static class TenantProbeController {
+        private final TenantIsolationTestMapper mapper;
+
+        TenantProbeController(TenantIsolationTestMapper mapper) {
+            this.mapper = mapper;
+        }
+
+        @GetMapping("/test/tenant-probe")
+        java.util.Map<String, Object> probe() {
+            long tenantId = TenantContext.require().tenantId();
+            return java.util.Map.of(
+                    "tenantId", Long.toString(tenantId),
+                    "rowCount", mapper.findAll(tenantId).size());
         }
     }
 }
