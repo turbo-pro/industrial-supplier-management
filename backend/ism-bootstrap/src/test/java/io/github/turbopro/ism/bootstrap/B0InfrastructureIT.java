@@ -5,6 +5,13 @@ import io.github.turbopro.ism.bootstrap.schema.SchemaMarkerMapper;
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantIsolationException;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
+import io.github.turbopro.ism.common.infrastructure.authorization.DataScope;
+import io.github.turbopro.ism.common.infrastructure.authorization.DataTarget;
+import io.github.turbopro.ism.common.infrastructure.authorization.PermissionGuard;
+import io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot;
+import io.github.turbopro.ism.common.infrastructure.authorization.RequiresPermission;
+import io.github.turbopro.ism.common.infrastructure.authorization.SensitiveDataMasker;
 import io.github.turbopro.ism.iam.auth.AuthModels;
 import io.github.turbopro.ism.iam.auth.AuthService;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
@@ -19,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,9 +38,13 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,13 +52,15 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(B0InfrastructureIT.TenantProbeController.class)
+@Import({B0InfrastructureIT.TenantProbeController.class, B0InfrastructureIT.PermissionProbeController.class})
 @Testcontainers(disabledWithoutDocker = true)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class B0InfrastructureIT {
@@ -93,6 +107,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private AuthorizationGrantLoader grantLoader;
 
     @Test
     void shouldMigrateDatabaseAndReadWriteThroughMyBatis() {
@@ -276,12 +293,36 @@ class B0InfrastructureIT {
 
             AuthModels.TokenPair tenantATokens = authService.login(new AuthModels.LoginCommand(
                     "T-ISO-A", "same-admin", "TenantA#Pass123", "tenant-probe"), "127.0.0.1");
+            when(grantLoader.load(tenantA, userA)).thenReturn(new PermissionSnapshot(
+                    Set.of("sample:contact:view", "sample:contact:export"),
+                    Map.of("sample:contact", DataScope.organizations(Set.of(500L))),
+                    Set.of()));
             mockMvc.perform(get("/test/tenant-probe")
                             .header("Authorization", "Bearer " + tenantATokens.accessToken())
                             .header("X-Tenant-Id", Long.toString(tenantB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.tenantId").value(Long.toString(tenantA)))
                     .andExpect(jsonPath("$.rowCount").value(1));
+
+            String bearer = "Bearer " + tenantATokens.accessToken();
+            mockMvc.perform(get("/test/permission-probe/500").header("Authorization", bearer))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.phone").value("138****5678"));
+            mockMvc.perform(get("/test/permission-probe/501").header("Authorization", bearer))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(get("/test/permission-probe/500/export").header("Authorization", bearer))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.phone").value("138****5678"));
+            mockMvc.perform(put("/test/permission-probe/500").header("Authorization", bearer))
+                    .andExpect(status().isForbidden());
+
+            when(grantLoader.load(tenantA, userA)).thenReturn(new PermissionSnapshot(
+                    Set.of("sample:contact:view"),
+                    Map.of("sample:contact", DataScope.organizations(Set.of(500L))),
+                    Set.of("sample:contact:phone:view")));
+            mockMvc.perform(get("/test/permission-probe/500").header("Authorization", bearer))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.phone").value("13812345678"));
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id IN (?,?)", userA, userB);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?,?)", userA, userB, 124L);
@@ -332,6 +373,43 @@ class B0InfrastructureIT {
             return java.util.Map.of(
                     "tenantId", Long.toString(tenantId),
                     "rowCount", mapper.findAll(tenantId).size());
+        }
+    }
+
+    @RestController
+    static class PermissionProbeController {
+        private final PermissionGuard guard;
+        private final SensitiveDataMasker masker;
+
+        PermissionProbeController(PermissionGuard guard, SensitiveDataMasker masker) {
+            this.guard = guard;
+            this.masker = masker;
+        }
+
+        @GetMapping("/test/permission-probe/{organizationId}")
+        @RequiresPermission("sample:contact:view")
+        Map<String, String> detail(@PathVariable long organizationId) {
+            guard.requireData("sample:contact", DataTarget.organization(organizationId));
+            return protectedContact();
+        }
+
+        @GetMapping("/test/permission-probe/{organizationId}/export")
+        @RequiresPermission("sample:contact:export")
+        Map<String, String> export(@PathVariable long organizationId) {
+            guard.requireData("sample:contact", DataTarget.organization(organizationId));
+            return protectedContact();
+        }
+
+        @PutMapping("/test/permission-probe/{organizationId}")
+        @RequiresPermission("sample:contact:update")
+        Map<String, String> update(@PathVariable long organizationId) {
+            guard.requireData("sample:contact", DataTarget.organization(organizationId));
+            return Map.of("status", "updated");
+        }
+
+        private Map<String, String> protectedContact() {
+            return Map.of("phone", masker.protect(
+                    "sample:contact:phone:view", "13812345678", SensitiveDataMasker.Kind.PHONE));
         }
     }
 }

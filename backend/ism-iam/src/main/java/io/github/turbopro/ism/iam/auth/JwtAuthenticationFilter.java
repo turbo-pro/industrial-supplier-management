@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.turbopro.ism.common.api.ApiResponse;
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
+import io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,13 +30,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AuthService authService;
     private final ApiResponseFactory responses;
     private final ObjectMapper objectMapper;
+    private final AuthorizationGrantLoader grantLoader;
 
     public JwtAuthenticationFilter(JwtTokenService tokens, AuthService authService,
-                                   ApiResponseFactory responses, ObjectMapper objectMapper) {
+                                   ApiResponseFactory responses, ObjectMapper objectMapper,
+                                   AuthorizationGrantLoader grantLoader) {
         this.tokens = tokens;
         this.authService = authService;
         this.responses = responses;
         this.objectMapper = objectMapper;
+        this.grantLoader = grantLoader;
     }
 
     @Override
@@ -59,7 +65,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             try (TenantContext.Scope ignored = TenantContext.open(principal.tenantId(), principal.userId())) {
-                chain.doFilter(request, response);
+                PermissionSnapshot grants = grantLoader.load(principal.tenantId(), principal.userId());
+                try (AuthorizationContext.Scope ignoredGrants = AuthorizationContext.open(grants)) {
+                    chain.doFilter(request, response);
+                }
             }
         } catch (JwtException | IllegalArgumentException | ApiException exception) {
             SecurityContextHolder.clearContext();
