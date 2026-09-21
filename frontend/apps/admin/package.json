@@ -2,5 +2,22 @@
   "name": "@ism/admin",
   "private": true,
   "version": "0.1.0",
-  "description": "Tenant Administration"
+  "description": "Tenant Administration",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vue-tsc --noEmit && vite build",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@ism/api-client": "workspace:*",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.1.5",
+    "vue": "^3.5.21"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "typescript": "^5.9.2",
+    "vue-tsc": "^3.0.6"
+  }
 }

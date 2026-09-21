@@ -8,7 +8,10 @@
   },
   "scripts": {
     "build": "pnpm --recursive --if-present build",
+    "generate:api": "pnpm --filter @ism/api-client generate",
+    "check:api": "pnpm --filter @ism/api-client check:generated",
     "lint": "pnpm --recursive --if-present lint",
-    "test": "pnpm --recursive --if-present test"
+    "test": "pnpm --recursive --if-present test",
+    "test:e2e": "pnpm --filter @ism/admin test:e2e"
   }
 }

@@ -1,0 +1,188 @@
+openapi: 3.0.3
+info:
+  title: Industrial Supplier Management API
+  version: 1.0.0
+  description: Versioned public contract. The generated frontend client is derived from this file.
+servers:
+  - url: /api
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginCommand' }
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPairResponse' }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshCommand' }
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPairResponse' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogoutCommand' }
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmptyResponse' }
+  /auth/me:
+    get:
+      operationId: currentUser
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSummaryResponse' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordCommand' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmptyResponse' }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    ApiFailure:
+      description: Standard error envelope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FailureResponse' }
+  schemas:
+    LoginCommand:
+      type: object
+      required: [tenantCode, username, password, deviceId]
+      properties:
+        tenantCode: { type: string, minLength: 1 }
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1, format: password, writeOnly: true }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
+    RefreshCommand:
+      type: object
+      required: [refreshToken, deviceId]
+      properties:
+        refreshToken: { type: string, minLength: 1, writeOnly: true }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
+    LogoutCommand:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 1, writeOnly: true }
+    ChangePasswordCommand:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword: { type: string, minLength: 1, format: password, writeOnly: true }
+        newPassword: { type: string, minLength: 12, maxLength: 128, format: password, writeOnly: true }
+    UserSummary:
+      type: object
+      required: [id, tenantId, username, displayName, passwordChangeRequired]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        passwordChangeRequired: { type: boolean }
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { type: string, writeOnly: true }
+        refreshToken: { type: string, writeOnly: true }
+        expiresIn: { type: integer, format: int64 }
+        user: { $ref: '#/components/schemas/UserSummary' }
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+    ApiError:
+      type: object
+      required: [code, message, fieldErrors, details, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        fieldErrors: { type: array, items: { $ref: '#/components/schemas/FieldError' } }
+        details: { type: object, additionalProperties: true }
+        retryable: { type: boolean }
+    TokenPairResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/TokenPair' } }
+    UserSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/UserSummary' } }
+    EmptyResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties: { data: { nullable: true } }
+    SuccessEnvelope:
+      type: object
+      required: [success, traceId, timestamp]
+      properties:
+        success: { type: boolean, enum: [true] }
+        traceId: { type: string }
+        timestamp: { type: string, format: date-time }
+    FailureResponse:
+      type: object
+      required: [success, error, traceId, timestamp]
+      properties:
+        success: { type: boolean, enum: [false] }
+        error: { $ref: '#/components/schemas/ApiError' }
+        traceId: { type: string }
+        timestamp: { type: string, format: date-time }

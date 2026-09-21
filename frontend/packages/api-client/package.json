@@ -2,5 +2,21 @@
   "name": "@ism/api-client",
   "private": true,
   "version": "0.1.0",
-  "description": "Generated API Client"
+  "description": "OpenAPI generated typed API client",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../../contracts/openapi/ism-v1.yaml -o src/generated/schema.ts",
+    "check:generated": "pnpm generate && git diff --exit-code -- src/generated/schema.ts",
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.9.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
 }
