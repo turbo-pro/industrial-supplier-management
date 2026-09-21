@@ -46,7 +46,7 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml up
 ./mvnw -pl backend/ism-bootstrap -am spring-boot:run
 ```
 
-启动后可访问 `http://localhost:8080/actuator/health`。完整开发与验收命令见 [本地开发说明](docs/development/local-development.md)，接口实现必须遵循 [统一 API 契约](docs/development/api-contract.md)、[认证与令牌契约](docs/development/authentication.md)、[租户隔离契约](docs/development/tenant-isolation.md) 和 [后端授权契约](docs/development/authorization.md)。
+启动后可访问 `http://localhost:8080/actuator/health`。完整开发与验收命令见 [本地开发说明](docs/development/local-development.md)，接口实现必须遵循 [统一 API 契约](docs/development/api-contract.md)、[认证与令牌契约](docs/development/authentication.md)、[租户隔离契约](docs/development/tenant-isolation.md)、[后端授权契约](docs/development/authorization.md) 和 [可靠操作契约](docs/development/reliable-operations.md)。
 
 ## 许可证
 

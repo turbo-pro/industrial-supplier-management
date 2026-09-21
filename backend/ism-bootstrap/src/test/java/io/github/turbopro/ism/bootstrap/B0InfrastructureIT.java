@@ -16,6 +16,11 @@ import io.github.turbopro.ism.iam.auth.AuthModels;
 import io.github.turbopro.ism.iam.auth.AuthService;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.JwtTokenService;
+import io.github.turbopro.ism.operation.AsyncTaskService;
+import io.github.turbopro.ism.operation.AuditService;
+import io.github.turbopro.ism.operation.IdempotencyService;
+import io.github.turbopro.ism.operation.OperationModels;
+import io.github.turbopro.ism.operation.OutboxService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -23,6 +28,7 @@ import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,6 +37,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.annotation.DirtiesContext;
@@ -45,10 +52,14 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -110,6 +121,21 @@ class B0InfrastructureIT {
 
     @MockBean
     private AuthorizationGrantLoader grantLoader;
+
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private OutboxService outboxService;
+
+    @Autowired
+    private AsyncTaskService asyncTaskService;
+
+    @Autowired
+    private IdempotencyService idempotencyService;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void shouldMigrateDatabaseAndReadWriteThroughMyBatis() {
@@ -327,6 +353,137 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id IN (?,?)", userA, userB);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?,?)", userA, userB, 124L);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantA, tenantB);
+        }
+    }
+
+    @Test
+    void shouldAuditSanitizeRetryIdempotentlyAndRecoverExpiredLeases() throws Exception {
+        long tenantId = 130L;
+        long actorId = 131L;
+        String traceId = "b0-operation-trace";
+        AtomicInteger businessExecutions = new AtomicInteger();
+        AtomicInteger consumerExecutions = new AtomicInteger();
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        jdbcTemplate.update("DELETE FROM sys_event_consumption");
+        jdbcTemplate.update("DELETE FROM sys_outbox_event WHERE tenant_id=?", tenantId);
+        jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id=?", tenantId);
+        jdbcTemplate.update("DELETE FROM sys_idempotency_record WHERE tenant_id=?", tenantId);
+        jdbcTemplate.update("DELETE FROM ops_async_task WHERE tenant_id=?", tenantId);
+        try {
+            MDC.put("traceId", traceId);
+            String eventId;
+            long taskId;
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
+                auditService.append(new AuditService.AuditCommand(
+                        "USER_DISABLE", "USER", 900L, null,
+                        Map.of("status", "ACTIVE", "password", "Audit#Secret123"),
+                        Map.of("status", "DISABLED", "accessToken", "audit-token-secret"),
+                        "127.0.0.1", "integration-test"));
+                eventId = outboxService.enqueue("UserDisabled", 1, "USER", 900L,
+                        Map.of("userId", "900", "bankAccount", "6222020012345678"));
+                taskId = asyncTaskService.submit("EXPORT", Map.of(
+                        "format", "xlsx", "secret", "task-secret-value"), 10);
+
+                assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+                    auditService.append(new AuditService.AuditCommand(
+                            "ROLLBACK_PROBE", "USER", 901L, null, Map.of(), Map.of(), null, null));
+                    outboxService.enqueue("RollbackProbe", 1, "USER", 901L, Map.of());
+                    throw new IllegalStateException("force rollback");
+                })).isInstanceOf(IllegalStateException.class);
+            }
+
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='ROLLBACK_PROBE'",
+                    Integer.class, tenantId)).isZero();
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM sys_outbox_event WHERE tenant_id=? AND event_type='RollbackProbe'",
+                    Integer.class, tenantId)).isZero();
+            String auditJson = jdbcTemplate.queryForObject(
+                    "SELECT CONCAT(before_summary,after_summary) FROM sys_audit_event WHERE tenant_id=?",
+                    String.class, tenantId);
+            String outboxJson = jdbcTemplate.queryForObject(
+                    "SELECT payload FROM sys_outbox_event WHERE event_id=?", String.class, eventId);
+            String taskJson = jdbcTemplate.queryForObject(
+                    "SELECT request_payload FROM ops_async_task WHERE id=?", String.class, taskId);
+            assertThat(auditJson).contains("[REDACTED]").doesNotContain("Audit#Secret123", "audit-token-secret");
+            assertThat(outboxJson).contains("[REDACTED]").doesNotContain("6222020012345678");
+            assertThat(taskJson).contains("[REDACTED]").doesNotContain("task-secret-value");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT trace_id FROM sys_audit_event WHERE tenant_id=?", String.class, tenantId))
+                    .isEqualTo(traceId);
+
+            CountDownLatch ready = new CountDownLatch(10);
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<String>> idempotentCalls = java.util.stream.IntStream.range(0, 10)
+                    .mapToObj(index -> executor.submit(() -> {
+                        ready.countDown();
+                        start.await();
+                        try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
+                            return idempotencyService.execute("SAMPLE_CREATE", "idem-key-001", "{\"name\":\"same\"}",
+                                    Duration.ofHours(1), () -> {
+                                        businessExecutions.incrementAndGet();
+                                        return "created";
+                                    });
+                        }
+                    })).toList();
+            ready.await();
+            start.countDown();
+            assertThat(idempotentCalls).allSatisfy(call -> assertThat(call.get()).isEqualTo("created"));
+            assertThat(businessExecutions).hasValue(1);
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
+                assertThatThrownBy(() -> idempotencyService.execute(
+                        "SAMPLE_CREATE", "idem-key-001", "{\"name\":\"different\"}",
+                        Duration.ofHours(1), () -> "must-not-run"))
+                        .isInstanceOf(ApiException.class);
+            }
+
+            OperationModels.OutboxEvent nodeAEvent = outboxService.claimNext("node-a", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(outboxService.claimNext("node-b", Duration.ofMinutes(1))).isEmpty();
+            jdbcTemplate.update("UPDATE sys_outbox_event SET lease_until=? WHERE id=?",
+                    LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), nodeAEvent.id());
+            OperationModels.OutboxEvent nodeBEvent = outboxService.claimNext("node-b", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(outboxService.markPublished(nodeAEvent.id(), "node-a")).isFalse();
+            assertThat(outboxService.markPublished(nodeBEvent.id(), "node-b")).isTrue();
+
+            String retryEventId;
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
+                retryEventId = outboxService.enqueue("RetryProbe", 1, "USER", 902L, Map.of("safe", "value"));
+            }
+            OperationModels.OutboxEvent failedAttempt = outboxService.claimNext("node-retry-a", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(failedAttempt.eventId()).isEqualTo(retryEventId);
+            assertThat(outboxService.markFailed(failedAttempt.id(), "node-retry-a",
+                    failedAttempt.retryCount(), 3, Duration.ZERO, "MOCK_UNAVAILABLE")).isTrue();
+            OperationModels.OutboxEvent retryAttempt = outboxService.claimNext("node-retry-b", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(retryAttempt.retryCount()).isOne();
+            assertThat(outboxService.markPublished(retryAttempt.id(), "node-retry-b")).isTrue();
+
+            assertThat(outboxService.consumeOnce(eventId, "sample-consumer", consumerExecutions::incrementAndGet))
+                    .isTrue();
+            assertThat(outboxService.consumeOnce(eventId, "sample-consumer", consumerExecutions::incrementAndGet))
+                    .isFalse();
+            assertThat(consumerExecutions).hasValue(1);
+
+            OperationModels.AsyncTask nodeATask = asyncTaskService.claimNext("node-a", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(asyncTaskService.claimNext("node-b", Duration.ofMinutes(1))).isEmpty();
+            jdbcTemplate.update("UPDATE ops_async_task SET lease_until=? WHERE id=?",
+                    LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), nodeATask.id());
+            OperationModels.AsyncTask nodeBTask = asyncTaskService.claimNext("node-b", Duration.ofMinutes(1))
+                    .orElseThrow();
+            assertThat(asyncTaskService.complete(nodeATask.id(), "node-a")).isFalse();
+            assertThat(asyncTaskService.complete(nodeBTask.id(), "node-b")).isTrue();
+        } finally {
+            executor.shutdownNow();
+            MDC.remove("traceId");
+            jdbcTemplate.update("DELETE FROM sys_event_consumption WHERE event_id IN (SELECT event_id FROM sys_outbox_event WHERE tenant_id=?)", tenantId);
+            jdbcTemplate.update("DELETE FROM sys_outbox_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sys_idempotency_record WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM ops_async_task WHERE tenant_id=?", tenantId);
         }
     }
 
