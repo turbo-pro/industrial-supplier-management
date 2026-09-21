@@ -12,6 +12,6 @@
     "check:api": "pnpm --filter @ism/api-client check:generated",
     "lint": "pnpm --recursive --if-present lint",
     "test": "pnpm --recursive --if-present test",
-    "test:e2e": "pnpm --filter @ism/admin test:e2e"
+    "test:e2e": "pnpm --recursive --if-present test:e2e"
   }
 }

@@ -16,6 +16,8 @@ import io.github.turbopro.ism.iam.auth.AuthModels;
 import io.github.turbopro.ism.iam.auth.AuthService;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.JwtTokenService;
+import io.github.turbopro.ism.iam.console.ConsoleAuthModels;
+import io.github.turbopro.ism.iam.console.ConsoleAuthService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -71,7 +73,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({B0InfrastructureIT.TenantProbeController.class, B0InfrastructureIT.PermissionProbeController.class})
+@Import({B0InfrastructureIT.TenantProbeController.class, B0InfrastructureIT.PermissionProbeController.class,
+        B0InfrastructureIT.ConsolePermissionProbeController.class})
 @Testcontainers(disabledWithoutDocker = true)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class B0InfrastructureIT {
@@ -135,6 +138,9 @@ class B0InfrastructureIT {
     private IdempotencyService idempotencyService;
 
     @Autowired
+    private ConsoleAuthService consoleAuthService;
+
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     @Test
@@ -176,6 +182,60 @@ class B0InfrastructureIT {
         } finally {
             repositoryService.deleteDeployment(deployment.getId(), true);
         }
+    }
+
+    @Test
+    void shouldSeparateConsoleAuthenticationAndEnforcePlatformPermissions() throws Exception {
+        long platformAdminId = 9001L;
+        long platformViewerId = 9002L;
+        jdbcTemplate.update("""
+                INSERT INTO plt_user(id,username,display_name,password_hash,status)
+                VALUES(?,?,?,?,?),(?,?,?,?,?)
+                """, platformAdminId, "platform-admin", "平台管理员", passwordEncoder.encode("Console#Pass123"), "ACTIVE",
+                platformViewerId, "platform-viewer", "平台访客", passwordEncoder.encode("Console#Pass123"), "ACTIVE");
+        jdbcTemplate.update("INSERT INTO plt_user_role(user_id,role_id) VALUES(?,1001)", platformAdminId);
+
+        ConsoleAuthModels.TokenPair admin = consoleAuthService.login(
+                new ConsoleAuthModels.LoginCommand("platform-admin", "Console#Pass123", "console-device"), "127.0.0.1");
+        ConsoleAuthModels.TokenPair viewer = consoleAuthService.login(
+                new ConsoleAuthModels.LoginCommand("platform-viewer", "Console#Pass123", "viewer-device"), "127.0.0.1");
+
+        mockMvc.perform(get("/api/console/auth/me").header("Authorization", "Bearer " + admin.accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value("platform-admin"))
+                .andExpect(jsonPath("$.data.permissions[?(@ == 'platform:tenant:view')]").exists());
+        mockMvc.perform(get("/api/console/test-permission").header("Authorization", "Bearer " + admin.accessToken()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/console/test-permission").header("Authorization", "Bearer " + viewer.accessToken()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + admin.accessToken()))
+                .andExpect(status().isUnauthorized());
+
+        long tenantId = 9100L;
+        long tenantUserId = 9101L;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "CONSOLE-BOUNDARY", "边界租户", "ACTIVE");
+        jdbcTemplate.update("""
+                INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status)
+                VALUES(?,?,?,?,?,?)
+                """, tenantUserId, tenantId, "boundary-admin", "租户管理员",
+                passwordEncoder.encode("Tenant#Pass123"), "ACTIVE");
+        AuthModels.TokenPair tenant = authService.login(new AuthModels.LoginCommand(
+                "CONSOLE-BOUNDARY", "boundary-admin", "Tenant#Pass123", "tenant-device"), "127.0.0.1");
+        mockMvc.perform(get("/api/console/test-permission")
+                        .header("Authorization", "Bearer " + tenant.accessToken()))
+                .andExpect(status().isUnauthorized());
+
+        ConsoleAuthModels.TokenPair rotated = consoleAuthService.refresh(
+                new ConsoleAuthModels.RefreshCommand(admin.refreshToken(), "console-device"), "127.0.0.1");
+        assertThatThrownBy(() -> consoleAuthService.refresh(
+                new ConsoleAuthModels.RefreshCommand(admin.refreshToken(), "console-device"), "127.0.0.1"))
+                .isInstanceOf(ApiException.class)
+                .extracting(error -> ((ApiException) error).errorCode())
+                .isEqualTo(IamErrorCode.TOKEN_REUSED);
+        mockMvc.perform(get("/api/console/auth/me").header("Authorization", "Bearer " + rotated.accessToken()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -567,6 +627,15 @@ class B0InfrastructureIT {
         private Map<String, String> protectedContact() {
             return Map.of("phone", masker.protect(
                     "sample:contact:phone:view", "13812345678", SensitiveDataMasker.Kind.PHONE));
+        }
+    }
+
+    @RestController
+    static class ConsolePermissionProbeController {
+        @GetMapping("/api/console/test-permission")
+        @RequiresPermission("platform:tenant:view")
+        Map<String, String> viewTenantSummary() {
+            return Map.of("scope", "control-plane-only");
         }
     }
 }

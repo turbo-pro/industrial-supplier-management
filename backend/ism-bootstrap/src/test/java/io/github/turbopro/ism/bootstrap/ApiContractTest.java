@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
 import io.github.turbopro.ism.iam.auth.AuthService;
 import io.github.turbopro.ism.iam.auth.JwtTokenService;
+import io.github.turbopro.ism.iam.console.ConsoleAuthService;
+import io.github.turbopro.ism.iam.console.ConsoleJwtTokenService;
 import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
 
 import java.util.Map;
@@ -59,6 +61,12 @@ class ApiContractTest {
 
     @MockBean
     private AuthorizationGrantLoader authorizationGrantLoader;
+
+    @MockBean
+    private ConsoleJwtTokenService consoleJwtTokenService;
+
+    @MockBean
+    private ConsoleAuthService consoleAuthService;
 
     @Test
     void shouldReturnStableSuccessEnvelopeAndReuseTrustedTraceId() throws Exception {

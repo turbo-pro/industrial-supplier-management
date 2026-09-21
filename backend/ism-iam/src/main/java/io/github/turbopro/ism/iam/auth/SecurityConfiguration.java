@@ -13,6 +13,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.nio.charset.StandardCharsets;
+import io.github.turbopro.ism.iam.console.ConsoleJwtAuthenticationFilter;
 
 @Configuration
 public class SecurityConfiguration {
@@ -23,12 +24,14 @@ public class SecurityConfiguration {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter,
+                                            ConsoleJwtAuthenticationFilter consoleJwtFilter,
                                             ApiResponseFactory responses, ObjectMapper objectMapper) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/refresh", "/actuator/health/**").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/refresh",
+                                "/api/console/auth/login", "/api/console/auth/refresh", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
                     response.setStatus(401);
@@ -37,6 +40,7 @@ public class SecurityConfiguration {
                     objectMapper.writeValue(response.getOutputStream(),
                             responses.failure(IamErrorCode.TOKEN_INVALID, IamErrorCode.TOKEN_INVALID.defaultMessage()));
                 }))
+                .addFilterBefore(consoleJwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

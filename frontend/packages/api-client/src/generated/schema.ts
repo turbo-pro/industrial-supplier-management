@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/console/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["consoleLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["consoleRefreshToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["consoleLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["currentConsoleUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeConsolePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -88,6 +168,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ConsoleLoginCommand: {
+            username: string;
+            /** Format: password */
+            password: string;
+            deviceId: string;
+        };
         LoginCommand: {
             tenantCode: string;
             username: string;
@@ -115,12 +201,26 @@ export interface components {
             displayName: string;
             passwordChangeRequired: boolean;
         };
+        ConsoleUserSummary: {
+            id: string;
+            username: string;
+            displayName: string;
+            passwordChangeRequired: boolean;
+            permissions: string[];
+        };
         TokenPair: {
             accessToken: string;
             refreshToken: string;
             /** Format: int64 */
             expiresIn: number;
             user: components["schemas"]["UserSummary"];
+        };
+        ConsoleTokenPair: {
+            accessToken: string;
+            refreshToken: string;
+            /** Format: int64 */
+            expiresIn: number;
+            user: components["schemas"]["ConsoleUserSummary"];
         };
         FieldError: {
             field: string;
@@ -140,6 +240,12 @@ export interface components {
         };
         UserSummaryResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["UserSummary"];
+        };
+        ConsoleTokenPairResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ConsoleTokenPair"];
+        };
+        ConsoleUserSummaryResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ConsoleUserSummary"];
         };
         EmptyResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: unknown;
@@ -178,6 +284,128 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    consoleLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleLoginCommand"];
+            };
+        };
+        responses: {
+            /** @description Console login succeeded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleTokenPairResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+        };
+    };
+    consoleRefreshToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshCommand"];
+            };
+        };
+        responses: {
+            /** @description Console token refreshed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleTokenPairResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+        };
+    };
+    consoleLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogoutCommand"];
+            };
+        };
+        responses: {
+            /** @description Console logout succeeded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+        };
+    };
+    currentConsoleUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current platform user and effective permissions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserSummaryResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+        };
+    };
+    changeConsolePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordCommand"];
+            };
+        };
+        responses: {
+            /** @description Console password changed and existing sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+        };
+    };
     login: {
         parameters: {
             query?: never;

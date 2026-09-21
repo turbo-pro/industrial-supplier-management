@@ -6,6 +6,84 @@ info:
 servers:
   - url: /api
 paths:
+  /console/auth/login:
+    post:
+      operationId: consoleLogin
+      tags: [Console Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsoleLoginCommand' }
+      responses:
+        '200':
+          description: Console login succeeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsoleTokenPairResponse' }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /console/auth/refresh:
+    post:
+      operationId: consoleRefreshToken
+      tags: [Console Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshCommand' }
+      responses:
+        '200':
+          description: Console token refreshed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsoleTokenPairResponse' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /console/auth/logout:
+    post:
+      operationId: consoleLogout
+      tags: [Console Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogoutCommand' }
+      responses:
+        '200':
+          description: Console logout succeeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmptyResponse' }
+  /console/auth/me:
+    get:
+      operationId: currentConsoleUser
+      tags: [Console Authentication]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current platform user and effective permissions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsoleUserSummaryResponse' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+  /console/auth/change-password:
+    post:
+      operationId: changeConsolePassword
+      tags: [Console Authentication]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordCommand' }
+      responses:
+        '200':
+          description: Console password changed and existing sessions revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmptyResponse' }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -97,6 +175,13 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    ConsoleLoginCommand:
+      type: object
+      required: [username, password, deviceId]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1, format: password, writeOnly: true }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
     LoginCommand:
       type: object
       required: [tenantCode, username, password, deviceId]
@@ -131,6 +216,18 @@ components:
         username: { type: string }
         displayName: { type: string }
         passwordChangeRequired: { type: boolean }
+    ConsoleUserSummary:
+      type: object
+      required: [id, username, displayName, passwordChangeRequired, permissions]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        passwordChangeRequired: { type: boolean }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { type: string }
     TokenPair:
       type: object
       required: [accessToken, refreshToken, expiresIn, user]
@@ -139,6 +236,14 @@ components:
         refreshToken: { type: string, writeOnly: true }
         expiresIn: { type: integer, format: int64 }
         user: { $ref: '#/components/schemas/UserSummary' }
+    ConsoleTokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { type: string, writeOnly: true }
+        refreshToken: { type: string, writeOnly: true }
+        expiresIn: { type: integer, format: int64 }
+        user: { $ref: '#/components/schemas/ConsoleUserSummary' }
     FieldError:
       type: object
       required: [field, message]
@@ -166,6 +271,18 @@ components:
         - type: object
           required: [data]
           properties: { data: { $ref: '#/components/schemas/UserSummary' } }
+    ConsoleTokenPairResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ConsoleTokenPair' } }
+    ConsoleUserSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ConsoleUserSummary' } }
     EmptyResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessEnvelope'

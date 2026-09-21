@@ -1,55 +1,44 @@
-package io.github.turbopro.ism.iam.auth;
+package io.github.turbopro.ism.iam.console;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.turbopro.ism.common.api.ApiResponse;
 import io.github.turbopro.ism.common.api.error.ApiException;
+import io.github.turbopro.ism.common.infrastructure.authorization.*;
 import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
-import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext;
-import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
-import io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot;
-import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import io.github.turbopro.ism.iam.auth.IamErrorCode;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.*;
 
 @Component
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    private final JwtTokenService tokens;
-    private final AuthService authService;
+public class ConsoleJwtAuthenticationFilter extends OncePerRequestFilter {
+    private final ConsoleJwtTokenService tokens;
+    private final ConsoleAuthService auth;
     private final ApiResponseFactory responses;
     private final ObjectMapper objectMapper;
-    private final AuthorizationGrantLoader grantLoader;
 
-    public JwtAuthenticationFilter(JwtTokenService tokens, AuthService authService,
-                                   ApiResponseFactory responses, ObjectMapper objectMapper,
-                                   AuthorizationGrantLoader grantLoader) {
-        this.tokens = tokens;
-        this.authService = authService;
-        this.responses = responses;
-        this.objectMapper = objectMapper;
-        this.grantLoader = grantLoader;
+    public ConsoleJwtAuthenticationFilter(ConsoleJwtTokenService tokens, ConsoleAuthService auth,
+                                          ApiResponseFactory responses, ObjectMapper objectMapper) {
+        this.tokens = tokens; this.auth = auth; this.responses = responses; this.objectMapper = objectMapper;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/api/console/");
+        return !request.getRequestURI().startsWith("/api/console/");
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
         String authorization = request.getHeader("Authorization");
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             chain.doFilter(request, response);
@@ -58,10 +47,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Jwt jwt = tokens.decode(authorization.substring(7));
             long userId = Long.parseLong(jwt.getSubject());
-            int tokenVersion = ((Number) jwt.getClaim("tokenVersion")).intValue();
-            String familyId = jwt.getClaimAsString("tokenFamilyId");
-            AuthModels.AuthUser user = authService.requireActiveSession(userId, tokenVersion, familyId);
-            AuthPrincipal principal = new AuthPrincipal(user.id(), user.tenantId(), user.username(), user.tokenVersion(),
+            int version = ((Number) jwt.getClaim("tokenVersion")).intValue();
+            ConsoleAuthModels.PlatformUser user = auth.requireActiveSession(
+                    userId, version, jwt.getClaimAsString("tokenFamilyId"));
+            ConsolePrincipal principal = new ConsolePrincipal(user.id(), user.username(), user.tokenVersion(),
                     user.forcePasswordChange());
             SecurityContextHolder.getContext().setAuthentication(
                     new UsernamePasswordAuthenticationToken(principal, null, List.of()));
@@ -69,11 +58,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 writeError(response, IamErrorCode.PASSWORD_CHANGE_REQUIRED);
                 return;
             }
-            try (TenantContext.Scope ignored = TenantContext.open(principal.tenantId(), principal.userId())) {
-                PermissionSnapshot grants = grantLoader.load(principal.tenantId(), principal.userId());
-                try (AuthorizationContext.Scope ignoredGrants = AuthorizationContext.open(grants)) {
-                    chain.doFilter(request, response);
-                }
+            PermissionSnapshot snapshot = new PermissionSnapshot(auth.permissions(user.id()), Map.of(), Set.of());
+            try (AuthorizationContext.Scope ignored = AuthorizationContext.open(snapshot)) {
+                chain.doFilter(request, response);
             }
         } catch (JwtException | IllegalArgumentException | ApiException exception) {
             SecurityContextHolder.clearContext();
@@ -82,7 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean passwordChangeAllowed(String uri) {
-        return "/api/auth/change-password".equals(uri) || "/api/auth/logout".equals(uri);
+        return "/api/console/auth/change-password".equals(uri) || "/api/console/auth/logout".equals(uri);
     }
 
     private void writeError(HttpServletResponse response, io.github.turbopro.ism.common.api.error.ErrorCode code)
