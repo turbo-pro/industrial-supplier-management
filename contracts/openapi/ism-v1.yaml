@@ -84,6 +84,108 @@ paths:
               schema: { $ref: '#/components/schemas/EmptyResponse' }
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
+  /console/packages:
+    get:
+      operationId: listPackages
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Package plans, content: { application/json: { schema: { $ref: '#/components/schemas/PackageListResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: createPackage
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreatePackage' } } } }
+      responses:
+        '200': { description: Draft package created, content: { application/json: { schema: { $ref: '#/components/schemas/PackageResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/packages/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getPackage
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Package detail, content: { application/json: { schema: { $ref: '#/components/schemas/PackageResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+    put:
+      operationId: updatePackage
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdatePackage' } } } }
+      responses:
+        '200': { description: Draft package updated, content: { application/json: { schema: { $ref: '#/components/schemas/PackageResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/packages/{id}/versions:
+    post:
+      operationId: createPackageVersion
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreatePackageVersion' } } } }
+      responses:
+        '200': { description: Draft version created, content: { application/json: { schema: { $ref: '#/components/schemas/PackageVersionResponse' } } } }
+  /console/package-versions/{id}/validate:
+    post:
+      operationId: validatePackageVersion
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Validation result, content: { application/json: { schema: { $ref: '#/components/schemas/ValidationResponse' } } } }
+  /console/package-versions/{id}/publish:
+    post:
+      operationId: publishPackageVersion
+      tags: [Console Packages]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PublishPackageVersion' } } } }
+      responses:
+        '200': { description: Version published, content: { application/json: { schema: { $ref: '#/components/schemas/PackageVersionResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscription-preview:
+    post:
+      operationId: previewTenantSubscription
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: packageVersionId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Module and quota impact preview, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPreviewResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscription:
+    post:
+      operationId: assignTenantSubscription
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AssignSubscription' } } } }
+      responses:
+        '200': { description: Subscription assigned, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPreviewResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/quota-usage:
+    get:
+      operationId: getTenantQuotaUsage
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: quotaCode, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Current quota usage, content: { application/json: { schema: { $ref: '#/components/schemas/QuotaUsageResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -163,6 +265,13 @@ paths:
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique request key retained for 24 hours; retries must use the same request body.
+      schema: { type: string, minLength: 8, maxLength: 128 }
   securitySchemes:
     bearerAuth:
       type: http
@@ -175,6 +284,110 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    CreatePackage:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        name: { type: string, maxLength: 100 }
+    UpdatePackage:
+      type: object
+      required: [name, version]
+      properties:
+        name: { type: string, maxLength: 100 }
+        version: { type: integer, minimum: 0 }
+    PackageModuleGrant:
+      type: object
+      required: [moduleCode, enabled, quotas]
+      properties:
+        moduleCode: { type: string }
+        enabled: { type: boolean }
+        quotas: { type: object, additionalProperties: { type: integer, format: int64, minimum: 0 } }
+    CreatePackageVersion:
+      type: object
+      required: [versionNo, name, modules]
+      properties:
+        versionNo: { type: integer, minimum: 1 }
+        name: { type: string, maxLength: 100 }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        modules: { type: array, minItems: 1, items: { $ref: '#/components/schemas/PackageModuleGrant' } }
+    PublishPackageVersion:
+      type: object
+      required: [version]
+      properties: { version: { type: integer, minimum: 0 } }
+    PackageVersion:
+      type: object
+      required: [id, versionNo, name, status, version, modules]
+      properties:
+        id: { type: string }
+        versionNo: { type: integer }
+        name: { type: string }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [DRAFT, PUBLISHED, OFFLINE] }
+        version: { type: integer }
+        modules: { type: array, items: { $ref: '#/components/schemas/PackageModuleGrant' } }
+    PackagePlan:
+      type: object
+      required: [id, code, name, status, version, versions]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        status: { type: string }
+        version: { type: integer }
+        versions: { type: array, items: { $ref: '#/components/schemas/PackageVersion' } }
+    PackageListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/PackagePlan' } } } }]
+    PackageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PackagePlan' } } }]
+    PackageVersionResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PackageVersion' } } }]
+    ValidationResult:
+      type: object
+      required: [valid, errors]
+      properties: { valid: { type: boolean }, errors: { type: array, items: { type: string } } }
+    ValidationResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ValidationResult' } } }]
+    AssignSubscription:
+      type: object
+      required: [packageVersionId, effectiveFrom]
+      properties:
+        packageVersionId: { type: string }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        exceptions: { type: object, additionalProperties: true }
+    QuotaChange:
+      type: object
+      required: [currentLimit, targetLimit, usedValue, exceedsTarget]
+      properties:
+        currentLimit: { type: integer, format: int64 }
+        targetLimit: { type: integer, format: int64 }
+        usedValue: { type: integer, format: int64 }
+        exceedsTarget: { type: boolean }
+    SubscriptionPreview:
+      type: object
+      required: [tenantId, targetPackageVersionId, removedModules, quotaChanges, recommendations]
+      properties:
+        tenantId: { type: string }
+        currentPackageVersionId: { type: string, nullable: true }
+        targetPackageVersionId: { type: string }
+        removedModules: { type: array, uniqueItems: true, items: { type: string } }
+        quotaChanges: { type: object, additionalProperties: { $ref: '#/components/schemas/QuotaChange' } }
+        recommendations: { type: array, items: { type: string } }
+    SubscriptionPreviewResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SubscriptionPreview' } } }]
+    QuotaUsage:
+      type: object
+      required: [quotaCode, limit, used, remaining, warning, hardLimited]
+      properties:
+        quotaCode: { type: string }
+        limit: { type: integer, format: int64 }
+        used: { type: integer, format: int64 }
+        remaining: { type: integer, format: int64 }
+        warning: { type: boolean }
+        hardLimited: { type: boolean }
+    QuotaUsageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/QuotaUsage' } } }]
     ConsoleLoginCommand:
       type: object
       required: [username, password, deviceId]

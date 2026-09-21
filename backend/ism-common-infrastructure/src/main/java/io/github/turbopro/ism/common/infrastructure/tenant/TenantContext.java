@@ -9,8 +9,8 @@ public final class TenantContext {
     }
 
     public static Scope open(long tenantId, long actorId) {
-        if (tenantId <= 0 || actorId <= 0) {
-            throw new IllegalArgumentException("tenantId and actorId must be positive");
+        if (tenantId < 0 || actorId <= 0) {
+            throw new IllegalArgumentException("tenantId must be non-negative and actorId must be positive");
         }
         Identity previous = CURRENT.get();
         CURRENT.set(new Identity(tenantId, actorId));

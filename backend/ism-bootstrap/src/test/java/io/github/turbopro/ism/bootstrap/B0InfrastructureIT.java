@@ -23,6 +23,8 @@ import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
 import io.github.turbopro.ism.operation.OperationModels;
 import io.github.turbopro.ism.operation.OutboxService;
+import io.github.turbopro.ism.platform.packageplan.PackagePlanModels;
+import io.github.turbopro.ism.platform.packageplan.PackagePlanService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -141,6 +143,9 @@ class B0InfrastructureIT {
     private ConsoleAuthService consoleAuthService;
 
     @Autowired
+    private PackagePlanService packagePlanService;
+
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     @Test
@@ -236,6 +241,47 @@ class B0InfrastructureIT {
                 .isEqualTo(IamErrorCode.TOKEN_REUSED);
         mockMvc.perform(get("/api/console/auth/me").header("Authorization", "Bearer " + rotated.accessToken()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldPublishImmutablePackagesPreviewDowngradeAndEnforceQuota() {
+        var plan = packagePlanService.create(new PackagePlanModels.CreatePackage("CHEMICAL_ENTERPRISE", "化工企业版"));
+        long packageId = Long.parseLong(plan.id());
+        var full = packagePlanService.createVersion(packageId, new PackagePlanModels.CreateVersion(
+                1, "完整版本", LocalDateTime.now(), List.of(
+                new PackagePlanModels.ModuleGrant("SUPPLIER", true, Map.of("SUPPLIER_COUNT", 100L)),
+                new PackagePlanModels.ModuleGrant("QUALITY", true, Map.of()),
+                new PackagePlanModels.ModuleGrant("SAFETY", true, Map.of("USER_COUNT", 50L)))));
+        assertThat(packagePlanService.validate(Long.parseLong(full.id())).valid()).isTrue();
+        var publishedFull = packagePlanService.publish(Long.parseLong(full.id()), full.version(), 9001L);
+        assertThat(publishedFull.status()).isEqualTo("PUBLISHED");
+        assertThatThrownBy(() -> packagePlanService.publish(Long.parseLong(full.id()), publishedFull.version(), 9001L))
+                .isInstanceOf(ApiException.class);
+
+        var basic = packagePlanService.createVersion(packageId, new PackagePlanModels.CreateVersion(
+                2, "基础版本", LocalDateTime.now(), List.of(
+                new PackagePlanModels.ModuleGrant("SUPPLIER", true, Map.of("SUPPLIER_COUNT", 10L)),
+                new PackagePlanModels.ModuleGrant("QUALITY", false, Map.of()),
+                new PackagePlanModels.ModuleGrant("SAFETY", true, Map.of("USER_COUNT", 20L)))));
+        packagePlanService.publish(Long.parseLong(basic.id()), basic.version(), 9001L);
+
+        long tenantId = 9200L;
+        jdbcTemplate.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "PLAN-TENANT", "套餐验收租户", "ACTIVE");
+        packagePlanService.assign(tenantId, Long.parseLong(full.id()), new PackagePlanModels.AssignSubscription(
+                full.id(), LocalDateTime.now(), null, Map.of()));
+        jdbcTemplate.update("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(?,?,?,?,?)",
+                9201L, tenantId, "SUPPLIER_COUNT", "CURRENT", 12L);
+
+        var preview = packagePlanService.preview(tenantId, Long.parseLong(basic.id()));
+        assertThat(preview.removedModules()).contains("QUALITY");
+        assertThat(preview.quotaChanges().get("SUPPLIER_COUNT").exceedsTarget()).isTrue();
+        assertThatThrownBy(() -> packagePlanService.assign(tenantId, Long.parseLong(basic.id()),
+                new PackagePlanModels.AssignSubscription(basic.id(), LocalDateTime.now(), null, Map.of())))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> packagePlanService.requireQuota(tenantId, "SUPPLIER_COUNT", 89L))
+                .isInstanceOf(ApiException.class);
+        packagePlanService.requireModule(tenantId, "QUALITY");
     }
 
     @Test

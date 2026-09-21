@@ -11,9 +11,15 @@ test('platform operator logs in through the isolated Console endpoint', async ({
       traceId: 'console-login', timestamp: new Date().toISOString(),
     }) });
   });
+  await page.route('**/api/console/packages', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    success: true, data: [{ id: '100', code: 'CHEMICAL', name: '化工企业版', status: 'DRAFT', version: 0, versions: [] }],
+    traceId: 'packages', timestamp: new Date().toISOString(),
+  }) }));
   await page.goto('/');
   await page.getByLabel('平台用户名').fill('platform-admin');
   await page.getByLabel('密码').fill('Console#Pass123');
   await page.getByRole('button', { name: '进入 Console' }).click();
   await expect(page.getByRole('status')).toHaveText('欢迎进入平台控制台，平台管理员');
+  await expect(page.getByRole('heading', { name: '套餐与模块' })).toBeVisible();
+  await expect(page.getByText('化工企业版')).toBeVisible();
 });

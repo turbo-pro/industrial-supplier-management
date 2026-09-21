@@ -5,6 +5,7 @@ import io.github.turbopro.ism.common.api.ApiResponse;
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.infrastructure.authorization.*;
 import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
+import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
@@ -59,8 +60,9 @@ public class ConsoleJwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             PermissionSnapshot snapshot = new PermissionSnapshot(auth.permissions(user.id()), Map.of(), Set.of());
-            try (AuthorizationContext.Scope ignored = AuthorizationContext.open(snapshot)) {
-                chain.doFilter(request, response);
+            try (TenantContext.Scope ignoredTenant = TenantContext.open(0L, user.id());
+                 AuthorizationContext.Scope ignored = AuthorizationContext.open(snapshot)) {
+                    chain.doFilter(request, response);
             }
         } catch (JwtException | IllegalArgumentException | ApiException exception) {
             SecurityContextHolder.clearContext();
