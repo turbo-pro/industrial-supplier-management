@@ -46,7 +46,7 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml up
 ./mvnw -pl backend/ism-bootstrap -am spring-boot:run
 ```
 
-启动后可访问 `http://localhost:8080/actuator/health`。完整开发与验收命令见 [本地开发说明](docs/development/local-development.md)，接口实现必须遵循 [统一 API 契约](docs/development/api-contract.md)、[认证与令牌契约](docs/development/authentication.md)、[Console 认证与平台授权契约](docs/development/console-authentication.md)、[套餐模块额度契约](docs/development/package-module-quota.md)、[租户开通与生命周期契约](docs/development/tenant-provisioning.md)、[集团总部与场站组织模型](docs/development/organization-hierarchy.md)、[租户用户角色与菜单契约](docs/development/tenant-rbac-menu.md)、[租户隔离契约](docs/development/tenant-isolation.md)、[后端授权契约](docs/development/authorization.md)、[可靠操作契约](docs/development/reliable-operations.md) 和 [OpenAPI 客户端与前端冒烟规范](docs/development/openapi-client-and-e2e.md)。
+启动后可访问 `http://localhost:8080/actuator/health`。完整开发与验收命令见 [本地开发说明](docs/development/local-development.md)，接口实现必须遵循 [统一 API 契约](docs/development/api-contract.md)、[认证与令牌契约](docs/development/authentication.md)、[Console 认证与平台授权契约](docs/development/console-authentication.md)、[套餐模块额度契约](docs/development/package-module-quota.md)、[租户开通与生命周期契约](docs/development/tenant-provisioning.md)、[集团总部与场站组织模型](docs/development/organization-hierarchy.md)、[租户用户角色与菜单契约](docs/development/tenant-rbac-menu.md)、[租户字典与配置中心契约](docs/development/tenant-dictionary-configuration.md)、[租户隔离契约](docs/development/tenant-isolation.md)、[后端授权契约](docs/development/authorization.md)、[可靠操作契约](docs/development/reliable-operations.md) 和 [OpenAPI 客户端与前端冒烟规范](docs/development/openapi-client-and-e2e.md)。
 
 ## 许可证
 

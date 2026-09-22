@@ -490,6 +490,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/configuration/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDictionaries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/configuration/dictionaries/{typeCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDictionary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/configuration/dictionaries/{typeCode}/items/{itemCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["upsertDictionaryItem"];
+        post?: never;
+        delete: operations["deleteDictionaryItemOverride"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/configuration/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTenantSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/configuration/settings/{settingKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateTenantSetting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -574,6 +654,59 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DictionaryItem: {
+            id: string;
+            code: string;
+            label: string;
+            value: string;
+            sortOrder: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+            /** @enum {string} */
+            source: "SYSTEM" | "TENANT_OVERRIDE" | "TENANT_CUSTOM";
+        };
+        DictionaryType: {
+            code: string;
+            name: string;
+            tenantExtensible: boolean;
+            items: components["schemas"]["DictionaryItem"][];
+        };
+        UpsertDictionaryItem: {
+            code: string;
+            label: string;
+            value: string;
+            sortOrder: number;
+            /**
+             * @default ACTIVE
+             * @enum {string}
+             */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+        };
+        TenantSetting: {
+            key: string;
+            /** @enum {string} */
+            valueType: "STRING" | "URL" | "INTEGER";
+            value: string;
+            version: number;
+        };
+        UpdateTenantSetting: {
+            value: string;
+            version: number;
+        };
+        DictionaryTypeListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["DictionaryType"][];
+        };
+        DictionaryTypeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["DictionaryType"];
+        };
+        SettingListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["TenantSetting"][];
+        };
+        SettingResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["TenantSetting"];
+        };
         CreatePackage: {
             code: string;
             name: string;
@@ -1913,6 +2046,161 @@ export interface operations {
                     "application/json": components["schemas"]["EmptyResponse"];
                 };
             };
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    listDictionaries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective system and tenant dictionaries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryTypeListResponse"];
+                };
+            };
+        };
+    };
+    getDictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                typeCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective dictionary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryTypeResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    upsertDictionaryItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                typeCode: string;
+                itemCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertDictionaryItem"];
+            };
+        };
+        responses: {
+            /** @description Dictionary override or extension saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryTypeResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    deleteDictionaryItemOverride: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                typeCode: string;
+                itemCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant override removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listTenantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective tenant settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingListResponse"];
+                };
+            };
+        };
+    };
+    updateTenantSetting: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                settingKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTenantSetting"];
+            };
+        };
+        responses: {
+            /** @description Tenant setting saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };
     };

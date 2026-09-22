@@ -398,6 +398,68 @@ paths:
       responses:
         '200': { description: Roles assigned and existing sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/dictionaries:
+    get:
+      operationId: listDictionaries
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Effective system and tenant dictionaries, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeListResponse' } } } }
+  /configuration/dictionaries/{typeCode}:
+    get:
+      operationId: getDictionary
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: typeCode, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Effective dictionary, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/dictionaries/{typeCode}/items/{itemCode}:
+    put:
+      operationId: upsertDictionaryItem
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: typeCode, in: path, required: true, schema: { type: string } }
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertDictionaryItem' } } } }
+      responses:
+        '200': { description: Dictionary override or extension saved, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+    delete:
+      operationId: deleteDictionaryItemOverride
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: typeCode, in: path, required: true, schema: { type: string } }
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Tenant override removed, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/settings:
+    get:
+      operationId: listTenantSettings
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Effective tenant settings, content: { application/json: { schema: { $ref: '#/components/schemas/SettingListResponse' } } } }
+  /configuration/settings/{settingKey}:
+    put:
+      operationId: updateTenantSetting
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: settingKey, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTenantSetting' } } } }
+      responses:
+        '200': { description: Tenant setting saved, content: { application/json: { schema: { $ref: '#/components/schemas/SettingResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -496,6 +558,58 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    DictionaryItem:
+      type: object
+      required: [id, code, label, value, sortOrder, status, version, source]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        label: { type: string }
+        value: { type: string }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer }
+        source: { type: string, enum: [SYSTEM, TENANT_OVERRIDE, TENANT_CUSTOM] }
+    DictionaryType:
+      type: object
+      required: [code, name, tenantExtensible, items]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        tenantExtensible: { type: boolean }
+        items: { type: array, items: { $ref: '#/components/schemas/DictionaryItem' } }
+    UpsertDictionaryItem:
+      type: object
+      required: [code, label, value, sortOrder, version]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        label: { type: string, maxLength: 100 }
+        value: { type: string, maxLength: 200 }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [ACTIVE, DISABLED], default: ACTIVE }
+        version: { type: integer, minimum: 0 }
+    TenantSetting:
+      type: object
+      required: [key, valueType, value, version]
+      properties:
+        key: { type: string }
+        valueType: { type: string, enum: [STRING, URL, INTEGER] }
+        value: { type: string }
+        version: { type: integer }
+    UpdateTenantSetting:
+      type: object
+      required: [value, version]
+      properties:
+        value: { type: string, maxLength: 2000 }
+        version: { type: integer, minimum: 0 }
+    DictionaryTypeListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/DictionaryType' } } } }]
+    DictionaryTypeResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/DictionaryType' } } }]
+    SettingListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/TenantSetting' } } } }]
+    SettingResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/TenantSetting' } } }]
     CreatePackage:
       type: object
       required: [code, name]

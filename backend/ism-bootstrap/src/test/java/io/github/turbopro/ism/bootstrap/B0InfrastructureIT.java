@@ -25,6 +25,8 @@ import io.github.turbopro.ism.iam.authorization.TenantAuthorizationMapper;
 import io.github.turbopro.ism.iam.navigation.NavigationService;
 import io.github.turbopro.ism.iam.access.AccessModels;
 import io.github.turbopro.ism.iam.access.AccessService;
+import io.github.turbopro.ism.iam.configuration.ConfigurationModels;
+import io.github.turbopro.ism.iam.configuration.ConfigurationService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -168,6 +170,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private AccessService accessService;
+
+    @Autowired
+    private ConfigurationService configurationService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -348,7 +353,34 @@ class B0InfrastructureIT {
                     "iam:user:manage", "iam:role:manage");
             assertThat(grants.dataScope("organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(navigationService.currentMenus()).singleElement()
-                    .satisfies(menu -> assertThat(menu.children()).hasSize(3));
+                    .satisfies(menu -> assertThat(menu.children()).hasSize(5));
+            assertThat(configurationService.dictionary("SUPPLIER_TYPE").items())
+                    .extracting(ConfigurationModels.DictionaryItemView::code)
+                    .contains("MATERIAL", "SERVICE", "CONTRACTOR");
+            var supplierTypes = configurationService.upsertItem("SUPPLIER_TYPE",
+                    new ConfigurationModels.UpsertDictionaryItem(
+                            "LOGISTICS", "物流供应商", "LOGISTICS", 40, "ACTIVE", 0));
+            assertThat(supplierTypes.items()).filteredOn(item -> item.code().equals("LOGISTICS"))
+                    .singleElement().extracting(ConfigurationModels.DictionaryItemView::source)
+                    .isEqualTo("TENANT_CUSTOM");
+            configurationService.upsertItem("SUPPLIER_TYPE", new ConfigurationModels.UpsertDictionaryItem(
+                    "LOGISTICS", "物流与运输供应商", "LOGISTICS", 40, "ACTIVE", 0));
+            assertThatThrownBy(() -> configurationService.upsertItem("SUPPLIER_TYPE",
+                    new ConfigurationModels.UpsertDictionaryItem(
+                            "LOGISTICS", "过期写入", "LOGISTICS", 40, "ACTIVE", 0)))
+                    .isInstanceOf(ApiException.class);
+            assertThatThrownBy(() -> configurationService.upsertItem("COMMON_STATUS",
+                    new ConfigurationModels.UpsertDictionaryItem(
+                            "PENDING", "待处理", "PENDING", 30, "ACTIVE", 0)))
+                    .isInstanceOf(ApiException.class);
+            var systemName = configurationService.updateSetting("branding.systemName",
+                    new ConfigurationModels.UpdateSetting("化工供应商协同平台", 0));
+            assertThat(systemName.value()).isEqualTo("化工供应商协同平台");
+            var renamed = configurationService.updateSetting("branding.systemName",
+                    new ConfigurationModels.UpdateSetting("制造业供应商协同平台", 0));
+            assertThat(renamed.version()).isOne();
+            assertThatThrownBy(() -> configurationService.updateSetting("branding.systemName",
+                    new ConfigurationModels.UpdateSetting("过期配置", 0))).isInstanceOf(ApiException.class);
             assertThat(organizationService.tree()).singleElement()
                     .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
             var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(
