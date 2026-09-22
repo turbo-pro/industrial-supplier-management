@@ -82,6 +82,12 @@ public class TenantService {
                     passwords.encode(command.initialPassword()));
             mapper.insertAdminOrganization(tenant.id(), administratorId, headquartersId);
             mapper.insertAdminContext(tenant.id(), administratorId, headquartersId);
+            long administratorRoleId = ids.nextId();
+            mapper.insertTenantAdminRole(tenant.id(), administratorRoleId);
+            mapper.insertAdminRole(tenant.id(), administratorId, administratorRoleId);
+            mapper.grantAdminPermissions(tenant.id(), administratorRoleId);
+            mapper.grantAdminMenus(tenant.id(), administratorRoleId);
+            mapper.grantAdminDataScopes(tenant.id(), administratorRoleId);
             if (mapper.markReady(id, utcNow()) != 1) {
                 throw new ApiException(TenantErrorCode.INVALID_STATE);
             }

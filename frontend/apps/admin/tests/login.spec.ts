@@ -20,6 +20,11 @@ test('tenant administrator can log in with the generated API client', async ({ p
     success: true, data: { id: '100', code: 'HEADQUARTERS', name: '集团总部', type: 'HEADQUARTERS' },
     traceId: 'current-org', timestamp: new Date().toISOString(),
   }) }));
+  await page.route('**/api/navigation/menus', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    success: true, data: [{ id: '300', code: 'SYSTEM_MANAGEMENT', name: '系统管理', route: '/system', component: 'Layout', icon: 'setting',
+      children: [{ id: '301', code: 'ORGANIZATION_MANAGEMENT', name: '组织管理', route: '/system/organizations', component: 'OrganizationPage', icon: 'organization', children: [] }] }],
+    traceId: 'menus', timestamp: new Date().toISOString(),
+  }) }));
   await page.goto('/');
   await page.getByLabel('租户编码').fill('demo');
   await page.getByLabel('用户名').fill('admin');
@@ -28,4 +33,5 @@ test('tenant administrator can log in with the generated API client', async ({ p
   await expect(page.getByRole('status')).toHaveText('欢迎，演示管理员');
   await expect(page.getByRole('heading', { name: '集团总部' })).toBeVisible();
   await expect(page.getByLabel('当前组织')).toHaveValue('100');
+  await expect(page.getByRole('link', { name: '组织管理' })).toBeVisible();
 });

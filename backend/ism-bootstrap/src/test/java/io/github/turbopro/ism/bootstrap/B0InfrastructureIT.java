@@ -20,6 +20,11 @@ import io.github.turbopro.ism.iam.console.ConsoleAuthModels;
 import io.github.turbopro.ism.iam.console.ConsoleAuthService;
 import io.github.turbopro.ism.iam.organization.OrganizationModels;
 import io.github.turbopro.ism.iam.organization.OrganizationService;
+import io.github.turbopro.ism.iam.authorization.DatabaseAuthorizationGrantLoader;
+import io.github.turbopro.ism.iam.authorization.TenantAuthorizationMapper;
+import io.github.turbopro.ism.iam.navigation.NavigationService;
+import io.github.turbopro.ism.iam.access.AccessModels;
+import io.github.turbopro.ism.iam.access.AccessService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -154,6 +159,15 @@ class B0InfrastructureIT {
 
     @Autowired
     private OrganizationService organizationService;
+
+    @Autowired
+    private TenantAuthorizationMapper tenantAuthorizationMapper;
+
+    @Autowired
+    private NavigationService navigationService;
+
+    @Autowired
+    private AccessService accessService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -328,6 +342,13 @@ class B0InfrastructureIT {
                 "SELECT id FROM iam_organization WHERE tenant_id=? AND organization_type='HEADQUARTERS'",
                 Long.class, tenantId);
         try (TenantContext.Scope ignored = TenantContext.open(tenantId, administratorId)) {
+            var grants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+                    .load(tenantId, administratorId);
+            assertThat(grants.actions()).contains("iam:organization:view", "iam:organization:manage",
+                    "iam:user:manage", "iam:role:manage");
+            assertThat(grants.dataScope("organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
+            assertThat(navigationService.currentMenus()).singleElement()
+                    .satisfies(menu -> assertThat(menu.children()).hasSize(3));
             assertThat(organizationService.tree()).singleElement()
                     .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
             var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(
@@ -341,6 +362,19 @@ class B0InfrastructureIT {
                     .isInstanceOf(ApiException.class);
             assertThatThrownBy(() -> organizationService.disable(Long.parseLong(subsidiary.id()), subsidiary.version()))
                     .isInstanceOf(ApiException.class);
+
+            var siteManager = accessService.createRole(new AccessModels.CreateRole("SITE_MANAGER", "场站管理员"));
+            accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    Set.of("iam:organization:view", "iam:menu:view"), Set.of("ORGANIZATION_MANAGEMENT"),
+                    List.of(new AccessModels.DataScopeGrant("organization", "ORGANIZATION_SET",
+                            Set.of(subsidiary.id())))));
+            var siteUser = accessService.createUser(new AccessModels.CreateUser("site-manager", "场站管理员",
+                    "Initial#Site123", site.id(), Set.of(siteManager.id())));
+            var siteGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+                    .load(tenantId, Long.parseLong(siteUser.id()));
+            assertThat(siteGrants.actions()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
+            assertThat(siteGrants.dataScope("organization").organizationIds())
+                    .contains(Long.parseLong(subsidiary.id()), Long.parseLong(site.id()));
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");

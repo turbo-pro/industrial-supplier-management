@@ -46,6 +46,21 @@ public interface TenantMapper {
     @Insert("INSERT INTO iam_user_context(tenant_id,user_id,current_organization_id) VALUES(#{tenantId},#{userId},#{organizationId})")
     int insertAdminContext(long tenantId, long userId, long organizationId);
 
+    @Insert("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(#{id},#{tenantId},'TENANT_ADMIN','租户管理员',1,'ACTIVE')")
+    int insertTenantAdminRole(long tenantId, long id);
+
+    @Insert("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(#{tenantId},#{userId},#{roleId})")
+    int insertAdminRole(long tenantId, long userId, long roleId);
+
+    @Insert("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT #{tenantId},#{roleId},id FROM sys_permission WHERE status='ACTIVE'")
+    int grantAdminPermissions(long tenantId, long roleId);
+
+    @Insert("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT #{tenantId},#{roleId},id FROM sys_menu WHERE status='ACTIVE'")
+    int grantAdminMenus(long tenantId, long roleId);
+
+    @Insert("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(#{tenantId},#{roleId},'organization','TENANT_ALL'),(#{tenantId},#{roleId},'supplier','TENANT_ALL'),(#{tenantId},#{roleId},'project','TENANT_ALL'),(#{tenantId},#{roleId},'qualification','TENANT_ALL'),(#{tenantId},#{roleId},'safety','TENANT_ALL'),(#{tenantId},#{roleId},'quality','TENANT_ALL')")
+    int grantAdminDataScopes(long tenantId, long roleId);
+
     @Update("UPDATE plt_tenant SET status='ACTIVE',initialization_status='READY',initialized_at=#{now},version=version+1 WHERE id=#{id} AND status='PROVISIONING' AND initialization_status='PENDING'")
     int markReady(long id, LocalDateTime now);
 

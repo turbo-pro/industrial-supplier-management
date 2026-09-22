@@ -394,6 +394,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/navigation/menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentMenus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRoles"];
+        put?: never;
+        post: operations["createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/roles/{id}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["grantRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUsers"];
+        put?: never;
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/users/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["assignUserRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -671,6 +767,78 @@ export interface components {
         };
         CurrentOrganizationResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["CurrentOrganization"];
+        };
+        MenuNode: {
+            id: string;
+            code: string;
+            name: string;
+            route: string;
+            component: string;
+            icon?: string | null;
+            children: components["schemas"]["MenuNode"][];
+        };
+        MenuTreeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["MenuNode"][];
+        };
+        CreateRole: {
+            code: string;
+            name: string;
+        };
+        UpdateRole: {
+            name: string;
+            version: number;
+        };
+        DataScopeGrant: {
+            resourceCode: string;
+            /** @enum {string} */
+            scopeType: "TENANT_ALL" | "ORGANIZATION_SET" | "PROJECT_SET" | "OWNED" | "CREATED" | "NONE";
+            organizationIds: string[];
+        };
+        GrantRole: {
+            permissionCodes: string[];
+            menuCodes: string[];
+            dataScopes: components["schemas"]["DataScopeGrant"][];
+        };
+        Role: {
+            id: string;
+            code: string;
+            name: string;
+            builtIn: boolean;
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+        };
+        RoleListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["Role"][];
+        };
+        RoleResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["Role"];
+        };
+        CreateAccessUser: {
+            username: string;
+            displayName: string;
+            /** Format: password */
+            initialPassword: string;
+            primaryOrganizationId: string;
+            roleIds: string[];
+        };
+        AssignUserRoles: {
+            roleIds: string[];
+        };
+        AccessUser: {
+            id: string;
+            username: string;
+            displayName: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "SUSPENDED" | "DISABLED";
+            passwordChangeRequired: boolean;
+            version: number;
+        };
+        AccessUserListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AccessUser"][];
+        };
+        AccessUserResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AccessUser"];
         };
         ConsoleLoginCommand: {
             username: string;
@@ -1538,6 +1706,214 @@ export interface operations {
                 };
             };
             403: components["responses"]["ApiFailure"];
+        };
+    };
+    getCurrentMenus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Menus granted to current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuTreeResponse"];
+                };
+            };
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant roles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleListResponse"];
+                };
+            };
+        };
+    };
+    createRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRole"];
+            };
+        };
+        responses: {
+            /** @description Role created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRole"];
+            };
+        };
+        responses: {
+            /** @description Role updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    grantRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantRole"];
+            };
+        };
+        responses: {
+            /** @description Role grants replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessUserListResponse"];
+                };
+            };
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccessUser"];
+            };
+        };
+        responses: {
+            /** @description User created with forced password change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessUserResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    assignUserRoles: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignUserRoles"];
+            };
+        };
+        responses: {
+            /** @description Roles assigned and existing sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            422: components["responses"]["ApiFailure"];
         };
     };
     login: {

@@ -17,6 +17,11 @@ button:disabled { opacity: .65; }
 .workspace header { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1180px; margin: 0 auto 28px; }
 .workspace h1 { margin: 4px 0; }
 .organization-switcher { margin: 0; }
-.summary-card { max-width: 1180px; margin: auto; padding: 28px; border-radius: 10px; background: white; box-shadow: 0 12px 35px #0b1f3314; }
+.workspace-grid { max-width: 1180px; margin: auto; display: grid; grid-template-columns: 230px 1fr; gap: 24px; }
+.navigation, .summary-card { padding: 28px; border-radius: 10px; background: white; box-shadow: 0 12px 35px #0b1f3314; }
+.navigation section { display: grid; gap: 8px; margin-bottom: 20px; }
+.navigation a { color: #526579; text-decoration: none; padding: 7px 0; }
+.navigation a:hover { color: #176b87; }
 .summary-card h2 { margin: 6px 0; }
 .summary-card > p:not(.eyebrow) { color: #68778a; }
+@media (max-width: 760px) { .workspace-grid { grid-template-columns: 1fr; } .workspace header { align-items: flex-start; flex-direction: column; } }

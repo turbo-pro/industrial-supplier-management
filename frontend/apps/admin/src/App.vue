@@ -8,6 +8,7 @@ const submitting = ref(false);
 const accessToken = ref<string>();
 const organizations = ref<components['schemas']['OrganizationNode'][]>([]);
 const currentOrganization = ref<components['schemas']['CurrentOrganization']>();
+const menus = ref<components['schemas']['MenuNode'][]>([]);
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
 const organizationOptions = computed(() => {
   const result: { id: string; label: string }[] = [];
@@ -32,11 +33,12 @@ async function login() {
   } else {
     accessToken.value = data.data.accessToken;
     message.value = `欢迎，${data.data.user.displayName}`;
-    const [tree, current] = await Promise.all([
-      client.GET('/organizations/tree'), client.GET('/organizations/current'),
+    const [tree, current, navigation] = await Promise.all([
+      client.GET('/organizations/tree'), client.GET('/organizations/current'), client.GET('/navigation/menus'),
     ]);
     organizations.value = tree.data?.data ?? [];
     currentOrganization.value = current.data?.data;
+    menus.value = navigation.data?.data ?? [];
   }
   submitting.value = false;
 }
@@ -70,11 +72,19 @@ async function switchOrganization(event: Event) {
         </select>
       </label>
     </header>
-    <section class="summary-card">
+    <div class="workspace-grid">
+      <nav class="navigation" aria-label="主菜单">
+        <section v-for="menu in menus" :key="menu.id">
+          <strong>{{ menu.name }}</strong>
+          <a v-for="child in menu.children" :key="child.id" :href="child.route">{{ child.name }}</a>
+        </section>
+      </nav>
+      <section class="summary-card">
       <p class="eyebrow">OPERATING CONTEXT</p>
       <h2>{{ currentOrganization?.name }}</h2>
       <p>当前数据录入默认归属此组织；实际可见范围仍由后端角色与数据权限决定。</p>
       <span role="status">{{ message }}</span>
-    </section>
+      </section>
+    </div>
   </main>
 </template>
