@@ -682,6 +682,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/messages/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMessageTemplates"];
+        put?: never;
+        post: operations["createMessageTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateMessageTemplate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["sendMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getInbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/inbox/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUnreadMessageCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/inbox/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["markMessageRead"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/inbox/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["markAllMessagesRead"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -766,6 +878,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SaveMessageTemplate: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            channel: "IN_APP" | "EMAIL" | "SMS" | "WE_COM" | "DINGTALK";
+            titleTemplate: string;
+            contentTemplate: string;
+            requiredVariables: string[];
+            version: number;
+        };
+        MessageTemplate: components["schemas"]["SaveMessageTemplate"] & {
+            id: string;
+            status: string;
+        };
+        SendMessage: {
+            templateCode: string;
+            recipientIds: string[];
+            variables: {
+                [key: string]: string;
+            };
+            businessType?: string;
+            businessId?: string;
+        };
+        InboxMessage: {
+            id: string;
+            title: string;
+            content: string;
+            businessType?: string;
+            businessId?: string;
+            /** Format: date-time */
+            readAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MessageTemplateListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["MessageTemplate"][];
+        };
+        MessageTemplateResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["MessageTemplate"];
+        };
+        InboxListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["InboxMessage"][];
+        };
+        SendMessageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: {
+                requested?: number;
+                delivered?: number;
+                deliveryIds?: string[];
+            };
+        };
         InitializeFileUpload: {
             fileName: string;
             contentType: string;
@@ -2564,6 +2726,179 @@ export interface operations {
                 };
             };
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    listMessageTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant message templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageTemplateListResponse"];
+                };
+            };
+        };
+    };
+    createMessageTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveMessageTemplate"];
+            };
+        };
+        responses: {
+            /** @description Template created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageTemplateResponse"];
+                };
+            };
+        };
+    };
+    updateMessageTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveMessageTemplate"];
+            };
+        };
+        responses: {
+            /** @description Template updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageTemplateResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    sendMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessage"];
+            };
+        };
+        responses: {
+            /** @description Message delivery result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendMessageResponse"];
+                };
+            };
+        };
+    };
+    getInbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user inbox */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxListResponse"];
+                };
+            };
+        };
+    };
+    getUnreadMessageCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unread count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markMessageRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message marked read */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+        };
+    };
+    markAllMessagesRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All messages marked read */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     login: {

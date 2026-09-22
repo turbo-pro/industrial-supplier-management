@@ -1,0 +1,2 @@
+package io.github.turbopro.ism.operation.message;import io.github.turbopro.ism.common.api.error.ErrorCode;
+public enum MessageErrorCode implements ErrorCode{DUPLICATE("MSG_001","模板编码和渠道已存在",409),INVALID_VARIABLES("MSG_002","消息变量不完整或模板包含未声明变量",422),CHANNEL_UNAVAILABLE("MSG_003","消息渠道尚未配置",422);private final String c,m;private final int s;MessageErrorCode(String c,String m,int s){this.c=c;this.m=m;this.s=s;}public String code(){return c;}public String defaultMessage(){return m;}public int httpStatus(){return s;}public boolean retryable(){return false;}}

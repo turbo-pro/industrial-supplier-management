@@ -29,6 +29,8 @@ import io.github.turbopro.ism.iam.configuration.ConfigurationModels;
 import io.github.turbopro.ism.iam.configuration.ConfigurationService;
 import io.github.turbopro.ism.resource.file.FileModels;
 import io.github.turbopro.ism.resource.file.FileService;
+import io.github.turbopro.ism.operation.message.MessageModels;
+import io.github.turbopro.ism.operation.message.MessageService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -182,6 +184,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private FileService fileService;
+
+    @Autowired
+    private MessageService messageService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -416,6 +421,22 @@ class B0InfrastructureIT {
             assertThat(fileService.initialize(new FileModels.InitializeUpload(
                     "same-content.txt", "text/plain", content.length, contentHash)).status())
                     .isEqualTo("COMPLETED");
+            var template = messageService.create(new MessageModels.SaveTemplate(
+                    "QUALIFICATION_EXPIRES", "资质到期提醒", "IN_APP", "{{supplierName}}资质即将到期",
+                    "供应商{{supplierName}}的{{qualificationName}}将在{{expiryDate}}到期。",
+                    Set.of("supplierName", "qualificationName", "expiryDate"), 0));
+            assertThat(template.version()).isZero();
+            var sent = messageService.send(new MessageModels.SendMessage("QUALIFICATION_EXPIRES",
+                    Set.of(Long.toString(administratorId)), Map.of("supplierName", "示例供应商",
+                    "qualificationName", "安全生产许可证", "expiryDate", "2026-12-31"),
+                    "SUPPLIER_QUALIFICATION", "10001"));
+            assertThat(sent.delivered()).isOne();
+            assertThat(messageService.unread()).isOne();
+            var inbox = messageService.inbox();
+            assertThat(inbox).singleElement().satisfies(item ->
+                    assertThat(item.content()).contains("示例供应商", "安全生产许可证"));
+            messageService.read(Long.parseLong(inbox.get(0).id()));
+            assertThat(messageService.unread()).isZero();
             assertThat(organizationService.tree()).singleElement()
                     .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
             var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(

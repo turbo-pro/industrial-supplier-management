@@ -540,6 +540,58 @@ paths:
       responses:
         '200': { description: File binary content, headers: { Content-Disposition: { schema: { type: string } } }, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
         '404': { $ref: '#/components/responses/ApiFailure' }
+  /messages/templates:
+    get:
+      operationId: listMessageTemplates
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Tenant message templates, content: { application/json: { schema: { $ref: '#/components/schemas/MessageTemplateListResponse' } } } } }
+    post:
+      operationId: createMessageTemplate
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveMessageTemplate' } } } }
+      responses: { '200': { description: Template created, content: { application/json: { schema: { $ref: '#/components/schemas/MessageTemplateResponse' } } } } }
+  /messages/templates/{id}:
+    put:
+      operationId: updateMessageTemplate
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveMessageTemplate' } } } }
+      responses: { '200': { description: Template updated, content: { application/json: { schema: { $ref: '#/components/schemas/MessageTemplateResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /messages/send:
+    post:
+      operationId: sendMessage
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SendMessage' } } } }
+      responses: { '200': { description: Message delivery result, content: { application/json: { schema: { $ref: '#/components/schemas/SendMessageResponse' } } } } }
+  /messages/inbox:
+    get:
+      operationId: getInbox
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Current user inbox, content: { application/json: { schema: { $ref: '#/components/schemas/InboxListResponse' } } } } }
+  /messages/inbox/unread-count:
+    get:
+      operationId: getUnreadMessageCount
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Unread count } }
+  /messages/inbox/{id}/read:
+    put:
+      operationId: markMessageRead
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Message marked read, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } } }
+  /messages/inbox/read-all:
+    put:
+      operationId: markAllMessagesRead
+      tags: [Messages]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: All messages marked read } }
   /auth/login:
     post:
       operationId: login
@@ -638,6 +690,40 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SaveMessageTemplate:
+      type: object
+      required: [code, name, channel, titleTemplate, contentTemplate, requiredVariables, version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        channel: { type: string, enum: [IN_APP, EMAIL, SMS, WE_COM, DINGTALK] }
+        titleTemplate: { type: string }
+        contentTemplate: { type: string }
+        requiredVariables: { type: array, uniqueItems: true, items: { type: string } }
+        version: { type: integer, minimum: 0 }
+    MessageTemplate:
+      allOf: [{ $ref: '#/components/schemas/SaveMessageTemplate' }, { type: object, required: [id, status], properties: { id: { type: string }, status: { type: string } } }]
+    SendMessage:
+      type: object
+      required: [templateCode, recipientIds, variables]
+      properties:
+        templateCode: { type: string }
+        recipientIds: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
+        variables: { type: object, additionalProperties: { type: string } }
+        businessType: { type: string }
+        businessId: { type: string }
+    InboxMessage:
+      type: object
+      required: [id, title, content, createdAt]
+      properties: { id: { type: string }, title: { type: string }, content: { type: string }, businessType: { type: string }, businessId: { type: string }, readAt: { type: string, format: date-time }, createdAt: { type: string, format: date-time } }
+    MessageTemplateListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MessageTemplate' } } } }]
+    MessageTemplateResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/MessageTemplate' } } }]
+    InboxListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/InboxMessage' } } } }]
+    SendMessageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: object, properties: { requested: { type: integer }, delivered: { type: integer }, deliveryIds: { type: array, items: { type: string } } } } } }]
     InitializeFileUpload:
       type: object
       required: [fileName, contentType, totalSize, sha256]
