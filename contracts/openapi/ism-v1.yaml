@@ -186,6 +186,86 @@ paths:
       responses:
         '200': { description: Current quota usage, content: { application/json: { schema: { $ref: '#/components/schemas/QuotaUsageResponse' } } } }
         '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants:
+    get:
+      operationId: listTenants
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Tenant control-plane summaries, content: { application/json: { schema: { $ref: '#/components/schemas/TenantListResponse' } } } }
+    post:
+      operationId: createTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateTenant' } } } }
+      responses:
+        '200': { description: Tenant pending initialization, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Tenant control-plane detail, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+    put:
+      operationId: updateTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTenant' } } } }
+      responses:
+        '200': { description: Tenant updated, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}/initialize:
+    post:
+      operationId: initializeTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/InitializeTenant' } } } }
+      responses:
+        '200': { description: Tenant initialized, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}/suspend:
+    post:
+      operationId: suspendTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Tenant suspended and sessions invalidated, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}/resume:
+    post:
+      operationId: resumeTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Tenant resumed, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}/cancel:
+    post:
+      operationId: cancelTenant
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Suspended tenant cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -388,6 +468,49 @@ components:
         hardLimited: { type: boolean }
     QuotaUsageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/QuotaUsage' } } }]
+    CreateTenant:
+      type: object
+      required: [code, name, timezone, locale, packageVersionId]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_-]{1,49}$' }
+        name: { type: string, maxLength: 200 }
+        timezone: { type: string, example: Asia/Shanghai }
+        locale: { type: string, example: zh-CN }
+        packageVersionId: { type: string }
+    InitializeTenant:
+      type: object
+      required: [adminUsername, adminDisplayName, initialPassword, headquartersName]
+      properties:
+        adminUsername: { type: string, pattern: '^[a-zA-Z][a-zA-Z0-9._-]{2,99}$' }
+        adminDisplayName: { type: string, maxLength: 100 }
+        initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128 }
+        headquartersName: { type: string, maxLength: 200 }
+    UpdateTenant:
+      type: object
+      required: [name, timezone, locale, version]
+      properties:
+        name: { type: string, maxLength: 200 }
+        timezone: { type: string }
+        locale: { type: string }
+        version: { type: integer, minimum: 0 }
+    Tenant:
+      type: object
+      required: [id, code, name, status, initializationStatus, timezone, locale, packageVersionId, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [PROVISIONING, ACTIVE, SUSPENDED, CANCELLED] }
+        initializationStatus: { type: string, enum: [PENDING, READY] }
+        timezone: { type: string }
+        locale: { type: string }
+        packageVersionId: { type: string }
+        version: { type: integer }
+        initializedAt: { type: string, format: date-time, nullable: true }
+    TenantListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Tenant' } } } }]
+    TenantResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Tenant' } } }]
     ConsoleLoginCommand:
       type: object
       required: [username, password, deviceId]

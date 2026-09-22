@@ -7,6 +7,7 @@ const message = ref('');
 const submitting = ref(false);
 const accessToken = ref<string>();
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
+const tenants = ref<components['schemas']['Tenant'][]>([]);
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
 
 async function login() {
@@ -20,8 +21,12 @@ async function login() {
   } else {
     accessToken.value = data.data.accessToken;
     message.value = `欢迎进入平台控制台，${data.data.user.displayName}`;
-    const result = await client.GET('/console/packages');
-    packages.value = result.data?.data ?? [];
+    const [packageResult, tenantResult] = await Promise.all([
+      client.GET('/console/packages'),
+      client.GET('/console/tenants'),
+    ]);
+    packages.value = packageResult.data?.data ?? [];
+    tenants.value = tenantResult.data?.data ?? [];
   }
   submitting.value = false;
 }
@@ -50,6 +55,13 @@ async function login() {
       <table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th></tr></thead>
         <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.status }}</td><td>{{ item.versions.length }}</td></tr>
         <tr v-if="packages.length === 0"><td colspan="4" class="empty">尚未创建套餐</td></tr></tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button type="button">新建租户</button></div>
+      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th></tr></thead>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td></tr>
+        <tr v-if="tenants.length === 0"><td colspan="4" class="empty">尚未创建租户</td></tr></tbody>
       </table>
     </section>
   </main>

@@ -25,6 +25,8 @@ import io.github.turbopro.ism.operation.OperationModels;
 import io.github.turbopro.ism.operation.OutboxService;
 import io.github.turbopro.ism.platform.packageplan.PackagePlanModels;
 import io.github.turbopro.ism.platform.packageplan.PackagePlanService;
+import io.github.turbopro.ism.platform.tenant.TenantModels;
+import io.github.turbopro.ism.platform.tenant.TenantService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -144,6 +146,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private PackagePlanService packagePlanService;
+
+    @Autowired
+    private TenantService platformTenantService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -282,6 +287,43 @@ class B0InfrastructureIT {
         assertThatThrownBy(() -> packagePlanService.requireQuota(tenantId, "SUPPLIER_COUNT", 89L))
                 .isInstanceOf(ApiException.class);
         packagePlanService.requireModule(tenantId, "QUALITY");
+    }
+
+    @Test
+    void shouldProvisionTenantHeadquartersAndFirstAdministrator() {
+        var plan = packagePlanService.create(new PackagePlanModels.CreatePackage(
+                "TENANT_BOOTSTRAP", "租户开通验收套餐"));
+        var draft = packagePlanService.createVersion(Long.parseLong(plan.id()),
+                new PackagePlanModels.CreateVersion(1, "正式版", LocalDateTime.now(), List.of(
+                        new PackagePlanModels.ModuleGrant("SUPPLIER", true,
+                                Map.of("SUPPLIER_COUNT", 100L)))));
+        var published = packagePlanService.publish(Long.parseLong(draft.id()), draft.version(), 9001L);
+
+        var pending = platformTenantService.create(new TenantModels.CreateTenant(
+                "BOOTSTRAP-TENANT", "初始化验收租户", "Asia/Shanghai", "zh-CN", published.id()));
+        assertThat(pending.status()).isEqualTo("PROVISIONING");
+        assertThat(pending.initializationStatus()).isEqualTo("PENDING");
+
+        var ready = platformTenantService.initialize(Long.parseLong(pending.id()),
+                new TenantModels.InitializeTenant("tenant-admin", "租户首管理员",
+                        "Initial#Pass123", "集团总部"));
+        assertThat(ready.status()).isEqualTo("ACTIVE");
+        assertThat(ready.initializationStatus()).isEqualTo("READY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM iam_organization WHERE tenant_id=? AND organization_type='HEADQUARTERS'",
+                Integer.class, Long.parseLong(ready.id()))).isOne();
+
+        AuthModels.TokenPair firstLogin = authService.login(new AuthModels.LoginCommand(
+                "BOOTSTRAP-TENANT", "tenant-admin", "Initial#Pass123", "bootstrap-device"), "127.0.0.1");
+        assertThat(firstLogin.user().passwordChangeRequired()).isTrue();
+
+        assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");
+        assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                "BOOTSTRAP-TENANT", "tenant-admin", "Initial#Pass123", "bootstrap-device"), "127.0.0.1"))
+                .isInstanceOf(ApiException.class);
+        assertThat(platformTenantService.resume(Long.parseLong(ready.id())).status()).isEqualTo("ACTIVE");
+        platformTenantService.suspend(Long.parseLong(ready.id()));
+        assertThat(platformTenantService.cancel(Long.parseLong(ready.id())).status()).isEqualTo("CANCELLED");
     }
 
     @Test
