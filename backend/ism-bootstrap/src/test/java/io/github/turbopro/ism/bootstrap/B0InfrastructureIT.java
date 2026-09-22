@@ -27,6 +27,8 @@ import io.github.turbopro.ism.iam.access.AccessModels;
 import io.github.turbopro.ism.iam.access.AccessService;
 import io.github.turbopro.ism.iam.configuration.ConfigurationModels;
 import io.github.turbopro.ism.iam.configuration.ConfigurationService;
+import io.github.turbopro.ism.resource.file.FileModels;
+import io.github.turbopro.ism.resource.file.FileService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -70,6 +72,9 @@ import java.util.Set;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -103,6 +108,7 @@ class B0InfrastructureIT {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
+        registry.add("ism.storage.local-root", () -> System.getProperty("java.io.tmpdir") + "/ism-it-storage");
     }
 
     @Autowired
@@ -173,6 +179,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private ConfigurationService configurationService;
+
+    @Autowired
+    private FileService fileService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -352,8 +361,11 @@ class B0InfrastructureIT {
             assertThat(grants.actions()).contains("iam:organization:view", "iam:organization:manage",
                     "iam:user:manage", "iam:role:manage");
             assertThat(grants.dataScope("organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
-            assertThat(navigationService.currentMenus()).singleElement()
-                    .satisfies(menu -> assertThat(menu.children()).hasSize(5));
+            assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("SYSTEM_MANAGEMENT"))
+                    .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
+            assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
+                    .singleElement().satisfies(menu -> assertThat(menu.children()).singleElement()
+                            .extracting("code").isEqualTo("FILE_MANAGEMENT"));
             assertThat(configurationService.dictionary("SUPPLIER_TYPE").items())
                     .extracting(ConfigurationModels.DictionaryItemView::code)
                     .contains("MATERIAL", "SERVICE", "CONTRACTOR");
@@ -381,6 +393,29 @@ class B0InfrastructureIT {
             assertThat(renamed.version()).isOne();
             assertThatThrownBy(() -> configurationService.updateSetting("branding.systemName",
                     new ConfigurationModels.UpdateSetting("过期配置", 0))).isInstanceOf(ApiException.class);
+
+            byte[] content = "industrial supplier file upload".getBytes(StandardCharsets.UTF_8);
+            String contentHash;
+            try {
+                contentHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+            } catch (Exception exception) {
+                throw new IllegalStateException(exception);
+            }
+            var upload = fileService.initialize(new FileModels.InitializeUpload(
+                    "qualification.txt", "text/plain", content.length, contentHash));
+            assertThat(upload.status()).isEqualTo("UPLOADING");
+            var resumed = fileService.putChunk(Long.parseLong(upload.id()), 0, contentHash, content);
+            assertThat(resumed.uploadedChunks()).containsExactly(0);
+            var storedFile = fileService.complete(Long.parseLong(upload.id()), resumed.version());
+            assertThat(storedFile.sha256()).isEqualTo(contentHash);
+            try (var input = fileService.download(Long.parseLong(storedFile.id())).stream()) {
+                assertThat(input.readAllBytes()).isEqualTo(content);
+            } catch (Exception exception) {
+                throw new IllegalStateException(exception);
+            }
+            assertThat(fileService.initialize(new FileModels.InitializeUpload(
+                    "same-content.txt", "text/plain", content.length, contentHash)).status())
+                    .isEqualTo("COMPLETED");
             assertThat(organizationService.tree()).singleElement()
                     .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
             var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(

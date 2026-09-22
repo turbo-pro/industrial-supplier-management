@@ -460,6 +460,86 @@ paths:
         '200': { description: Tenant setting saved, content: { application/json: { schema: { $ref: '#/components/schemas/SettingResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /files/uploads:
+    post:
+      operationId: initializeFileUpload
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/InitializeFileUpload' } } } }
+      responses:
+        '200': { description: Upload initialized or tenant-local instant upload matched, content: { application/json: { schema: { $ref: '#/components/schemas/FileUploadResponse' } } } }
+        '413': { $ref: '#/components/responses/ApiFailure' }
+  /files/uploads/{id}:
+    get:
+      operationId: getFileUpload
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Upload progress and uploaded chunk indexes, content: { application/json: { schema: { $ref: '#/components/schemas/FileUploadResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /files/uploads/{id}/chunks/{index}:
+    put:
+      operationId: uploadFileChunk
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 } }
+        - { name: X-Chunk-SHA256, in: header, required: true, schema: { type: string, pattern: '^[a-fA-F0-9]{64}$' } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses:
+        '200': { description: Chunk stored idempotently, content: { application/json: { schema: { $ref: '#/components/schemas/FileUploadResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /files/uploads/{id}/complete:
+    post:
+      operationId: completeFileUpload
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: File assembled and verified, content: { application/json: { schema: { $ref: '#/components/schemas/FileObjectResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '503': { $ref: '#/components/responses/ApiFailure' }
+  /files:
+    get:
+      operationId: listFiles
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Tenant files, content: { application/json: { schema: { $ref: '#/components/schemas/FileObjectListResponse' } } } }
+  /files/{id}:
+    get:
+      operationId: getFile
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: File metadata, content: { application/json: { schema: { $ref: '#/components/schemas/FileObjectResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+    delete:
+      operationId: deleteFile
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: File metadata removed, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+  /files/{id}/content:
+    get:
+      operationId: downloadFile
+      tags: [Files]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: File binary content, headers: { Content-Disposition: { schema: { type: string } } }, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -558,6 +638,48 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    InitializeFileUpload:
+      type: object
+      required: [fileName, contentType, totalSize, sha256]
+      properties:
+        fileName: { type: string, maxLength: 255 }
+        contentType: { type: string, maxLength: 150 }
+        totalSize: { type: integer, format: int64, minimum: 1 }
+        sha256: { type: string, pattern: '^[a-fA-F0-9]{64}$' }
+    FileUpload:
+      type: object
+      required: [id, fileName, contentType, totalSize, sha256, chunkSize, totalChunks, uploadedChunks, status, expiresAt, version]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        totalSize: { type: integer, format: int64 }
+        sha256: { type: string }
+        chunkSize: { type: integer }
+        totalChunks: { type: integer }
+        uploadedChunks: { type: array, items: { type: integer } }
+        status: { type: string, enum: [UPLOADING, ASSEMBLING, COMPLETED, EXPIRED] }
+        fileId: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer }
+    FileObject:
+      type: object
+      required: [id, originalName, contentType, size, sha256, provider, status, createdAt]
+      properties:
+        id: { type: string }
+        originalName: { type: string }
+        contentType: { type: string }
+        size: { type: integer, format: int64 }
+        sha256: { type: string }
+        provider: { type: string, enum: [LOCAL, MINIO, S3] }
+        status: { type: string, enum: [ACTIVE] }
+        createdAt: { type: string, format: date-time }
+    FileUploadResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/FileUpload' } } }]
+    FileObjectResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/FileObject' } } }]
+    FileObjectListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/FileObject' } } } }]
     DictionaryItem:
       type: object
       required: [id, code, label, value, sortOrder, status, version, source]
