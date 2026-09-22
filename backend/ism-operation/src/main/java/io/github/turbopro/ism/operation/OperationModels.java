@@ -18,6 +18,8 @@ public final class OperationModels {
 
     public record AsyncTask(long id, long tenantId, String taskNo, String taskType, long requesterId,
                             String requestPayload, String status, int progress, String leaseOwner,
-                            LocalDateTime leaseUntil, int retryCount, int version) {
+                            LocalDateTime leaseUntil, int retryCount, int version, String currentStage,
+                            boolean cancelRequested, Long resultFileId, String errorCode, String errorMessage,
+                            LocalDateTime createdAt, LocalDateTime startedAt, LocalDateTime finishedAt) {
     }
 }

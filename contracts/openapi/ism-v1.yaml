@@ -592,6 +592,35 @@ paths:
       tags: [Messages]
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: All messages marked read } }
+  /tasks:
+    get:
+      operationId: listMyTasks
+      tags: [Task Center]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Current user tasks, content: { application/json: { schema: { $ref: '#/components/schemas/TaskListResponse' } } } } }
+  /tasks/{id}:
+    get:
+      operationId: getMyTask
+      tags: [Task Center]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Task detail, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } } }
+  /tasks/{id}/cancel:
+    post:
+      operationId: cancelMyTask
+      tags: [Task Center]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskVersionCommand' } } } }
+      responses: { '200': { description: Cancellation requested, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /tasks/{id}/retry:
+    post:
+      operationId: retryMyTask
+      tags: [Task Center]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskVersionCommand' } } } }
+      responses: { '200': { description: Failed task queued again, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/login:
     post:
       operationId: login
@@ -690,6 +719,33 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    TaskVersionCommand:
+      type: object
+      required: [version]
+      properties: { version: { type: integer, minimum: 0 } }
+    AsyncTask:
+      type: object
+      required: [id, taskNo, taskType, status, progress, cancelRequested, retryCount, version, createdAt]
+      properties:
+        id: { type: string }
+        taskNo: { type: string }
+        taskType: { type: string }
+        status: { type: string, enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED] }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        currentStage: { type: string }
+        cancelRequested: { type: boolean }
+        retryCount: { type: integer }
+        resultFileId: { type: string }
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    TaskListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/AsyncTask' } } } }]
+    TaskResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AsyncTask' } } }]
     SaveMessageTemplate:
       type: object
       required: [code, name, channel, titleTemplate, contentTemplate, requiredVariables, version]

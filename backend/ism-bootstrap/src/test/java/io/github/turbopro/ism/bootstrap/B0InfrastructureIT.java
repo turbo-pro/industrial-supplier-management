@@ -31,6 +31,7 @@ import io.github.turbopro.ism.resource.file.FileModels;
 import io.github.turbopro.ism.resource.file.FileService;
 import io.github.turbopro.ism.operation.message.MessageModels;
 import io.github.turbopro.ism.operation.message.MessageService;
+import io.github.turbopro.ism.operation.task.TaskCenterService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -187,6 +188,7 @@ class B0InfrastructureIT {
 
     @Autowired
     private MessageService messageService;
+    @Autowired private TaskCenterService taskCenterService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -369,8 +371,8 @@ class B0InfrastructureIT {
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("SYSTEM_MANAGEMENT"))
                     .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
-                    .singleElement().satisfies(menu -> assertThat(menu.children()).singleElement()
-                            .extracting("code").isEqualTo("FILE_MANAGEMENT"));
+                    .singleElement().satisfies(menu -> assertThat(menu.children())
+                            .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER"));
             assertThat(configurationService.dictionary("SUPPLIER_TYPE").items())
                     .extracting(ConfigurationModels.DictionaryItemView::code)
                     .contains("MATERIAL", "SERVICE", "CONTRACTOR");
@@ -771,7 +773,12 @@ class B0InfrastructureIT {
             OperationModels.AsyncTask nodeBTask = asyncTaskService.claimNext("node-b", Duration.ofMinutes(1))
                     .orElseThrow();
             assertThat(asyncTaskService.complete(nodeATask.id(), "node-a")).isFalse();
+            assertThat(asyncTaskService.progress(nodeBTask.id(), "node-b", 60, "生成导出文件")).isTrue();
             assertThat(asyncTaskService.complete(nodeBTask.id(), "node-b")).isTrue();
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
+                assertThat(taskCenterService.task(taskId).status()).isEqualTo("SUCCEEDED");
+                assertThat(taskCenterService.task(taskId).progress()).isEqualTo(100);
+            }
         } finally {
             executor.shutdownNow();
             MDC.remove("traceId");

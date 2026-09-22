@@ -41,7 +41,8 @@ public interface DispatchOperationMapper {
 
     @Select("""
         SELECT id,tenant_id,task_no,task_type,requester_id,request_payload,status,progress,
-          lease_owner,lease_until,retry_count,version
+          lease_owner,lease_until,retry_count,version,current_stage,cancel_requested,result_file_id,
+          error_code,error_message,created_at,started_at,finished_at
         FROM ops_async_task
         WHERE status='QUEUED' OR (status='RUNNING' AND lease_until<#{now})
         ORDER BY priority DESC,created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -67,4 +68,13 @@ public interface DispatchOperationMapper {
         WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>=#{now}
         """)
     int completeTask(long id, String owner, LocalDateTime now);
+
+    @Update("UPDATE ops_async_task SET progress=#{progress},current_stage=#{stage},version=version+1 WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND cancel_requested=0")
+    int updateTaskProgress(long id,String owner,int progress,String stage);
+
+    @Update("UPDATE ops_async_task SET status='FAILED',error_code=#{code},error_message=#{message},finished_at=#{now},lease_owner=NULL,lease_until=NULL,retry_count=retry_count+1,version=version+1 WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner}")
+    int failTask(long id,String owner,String code,String message,LocalDateTime now);
+
+    @Update("UPDATE ops_async_task SET result_file_id=#{fileId} WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner}")
+    int attachTaskResult(long id,String owner,long fileId);
 }

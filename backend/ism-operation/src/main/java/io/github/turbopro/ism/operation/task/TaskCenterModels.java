@@ -1,0 +1,2 @@
+package io.github.turbopro.ism.operation.task;import java.time.LocalDateTime;
+public final class TaskCenterModels{private TaskCenterModels(){}public record TaskView(String id,String taskNo,String taskType,String status,int progress,String currentStage,boolean cancelRequested,int retryCount,String resultFileId,String errorCode,String errorMessage,int version,LocalDateTime createdAt,LocalDateTime startedAt,LocalDateTime finishedAt){}public record VersionCommand(int version){}}
