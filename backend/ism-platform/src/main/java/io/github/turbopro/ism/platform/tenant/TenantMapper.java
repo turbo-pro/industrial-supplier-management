@@ -37,6 +37,15 @@ public interface TenantMapper {
     @Insert("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status,force_password_change) VALUES(#{id},#{tenantId},#{username},#{displayName},#{passwordHash},'ACTIVE',1)")
     int insertAdmin(long id, long tenantId, String username, String displayName, String passwordHash);
 
+    @Insert("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(#{tenantId},#{organizationId},#{organizationId},0)")
+    int insertOrganizationClosure(long tenantId, long organizationId);
+
+    @Insert("INSERT INTO iam_user_organization(tenant_id,user_id,organization_id,is_primary) VALUES(#{tenantId},#{userId},#{organizationId},1)")
+    int insertAdminOrganization(long tenantId, long userId, long organizationId);
+
+    @Insert("INSERT INTO iam_user_context(tenant_id,user_id,current_organization_id) VALUES(#{tenantId},#{userId},#{organizationId})")
+    int insertAdminContext(long tenantId, long userId, long organizationId);
+
     @Update("UPDATE plt_tenant SET status='ACTIVE',initialization_status='READY',initialized_at=#{now},version=version+1 WHERE id=#{id} AND status='PROVISIONING' AND initialization_status='PENDING'")
     int markReady(long id, LocalDateTime now);
 

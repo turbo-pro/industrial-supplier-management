@@ -18,6 +18,8 @@ import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.JwtTokenService;
 import io.github.turbopro.ism.iam.console.ConsoleAuthModels;
 import io.github.turbopro.ism.iam.console.ConsoleAuthService;
+import io.github.turbopro.ism.iam.organization.OrganizationModels;
+import io.github.turbopro.ism.iam.organization.OrganizationService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -149,6 +151,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private TenantService platformTenantService;
+
+    @Autowired
+    private OrganizationService organizationService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -316,6 +321,27 @@ class B0InfrastructureIT {
         AuthModels.TokenPair firstLogin = authService.login(new AuthModels.LoginCommand(
                 "BOOTSTRAP-TENANT", "tenant-admin", "Initial#Pass123", "bootstrap-device"), "127.0.0.1");
         assertThat(firstLogin.user().passwordChangeRequired()).isTrue();
+
+        long tenantId = Long.parseLong(ready.id());
+        long administratorId = Long.parseLong(firstLogin.user().id());
+        long headquartersId = jdbcTemplate.queryForObject(
+                "SELECT id FROM iam_organization WHERE tenant_id=? AND organization_type='HEADQUARTERS'",
+                Long.class, tenantId);
+        try (TenantContext.Scope ignored = TenantContext.open(tenantId, administratorId)) {
+            assertThat(organizationService.tree()).singleElement()
+                    .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
+            var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(
+                    Long.toString(headquartersId), "EAST_COMPANY", "华东子公司", "SUBSIDIARY", 10));
+            var site = organizationService.create(new OrganizationModels.CreateOrganization(
+                    subsidiary.id(), "CHEMICAL_SITE", "化工生产基地", "SITE", 10));
+            assertThat(organizationService.switchTo(site.id()).id()).isEqualTo(site.id());
+            assertThat(organizationService.current().name()).isEqualTo("化工生产基地");
+            assertThatThrownBy(() -> organizationService.create(new OrganizationModels.CreateOrganization(
+                    site.id(), "INVALID_SITE", "错误场站", "SITE", 20)))
+                    .isInstanceOf(ApiException.class);
+            assertThatThrownBy(() -> organizationService.disable(Long.parseLong(subsidiary.id()), subsidiary.version()))
+                    .isInstanceOf(ApiException.class);
+        }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");
         assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(

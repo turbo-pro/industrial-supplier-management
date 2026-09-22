@@ -266,6 +266,61 @@ paths:
       responses:
         '200': { description: Suspended tenant cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /organizations/tree:
+    get:
+      operationId: getOrganizationTree
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Tenant organization tree, content: { application/json: { schema: { $ref: '#/components/schemas/OrganizationTreeResponse' } } } }
+  /organizations:
+    post:
+      operationId: createOrganization
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateOrganization' } } } }
+      responses:
+        '200': { description: Organization created, content: { application/json: { schema: { $ref: '#/components/schemas/OrganizationResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /organizations/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateOrganization
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateOrganization' } } } }
+      responses:
+        '200': { description: Organization updated, content: { application/json: { schema: { $ref: '#/components/schemas/OrganizationResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+    delete:
+      operationId: disableOrganization
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Organization disabled, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /organizations/current:
+    get:
+      operationId: getCurrentOrganization
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current operating organization, content: { application/json: { schema: { $ref: '#/components/schemas/CurrentOrganizationResponse' } } } }
+  /organizations/switch:
+    post:
+      operationId: switchOrganization
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SwitchOrganization' } } } }
+      responses:
+        '200': { description: Current operating organization changed, content: { application/json: { schema: { $ref: '#/components/schemas/CurrentOrganizationResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /auth/login:
     post:
       operationId: login
@@ -511,6 +566,53 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Tenant' } } } }]
     TenantResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Tenant' } } }]
+    CreateOrganization:
+      type: object
+      required: [parentId, code, name, type, sortOrder]
+      properties:
+        parentId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_-]{1,63}$' }
+        name: { type: string, maxLength: 200 }
+        type: { type: string, enum: [SUBSIDIARY, SITE, DEPARTMENT] }
+        sortOrder: { type: integer, minimum: 0 }
+    UpdateOrganization:
+      type: object
+      required: [name, sortOrder, version]
+      properties:
+        name: { type: string, maxLength: 200 }
+        sortOrder: { type: integer, minimum: 0 }
+        version: { type: integer, minimum: 0 }
+    SwitchOrganization:
+      type: object
+      required: [organizationId]
+      properties: { organizationId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+    OrganizationNode:
+      type: object
+      required: [id, code, name, type, status, sortOrder, version, children]
+      properties:
+        id: { type: string }
+        parentId: { type: string, nullable: true }
+        code: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [HEADQUARTERS, SUBSIDIARY, SITE, DEPARTMENT] }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        sortOrder: { type: integer }
+        version: { type: integer }
+        children: { type: array, items: { $ref: '#/components/schemas/OrganizationNode' } }
+    CurrentOrganization:
+      type: object
+      required: [id, code, name, type]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [HEADQUARTERS, SUBSIDIARY, SITE, DEPARTMENT] }
+    OrganizationTreeResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/OrganizationNode' } } } }]
+    OrganizationResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/OrganizationNode' } } }]
+    CurrentOrganizationResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/CurrentOrganization' } } }]
     ConsoleLoginCommand:
       type: object
       required: [username, password, deviceId]

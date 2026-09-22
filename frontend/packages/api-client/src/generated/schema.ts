@@ -312,6 +312,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organizations/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOrganizationTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateOrganization"];
+        post?: never;
+        delete: operations["disableOrganization"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["switchOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -544,6 +626,51 @@ export interface components {
         };
         TenantResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["Tenant"];
+        };
+        CreateOrganization: {
+            parentId: string;
+            code: string;
+            name: string;
+            /** @enum {string} */
+            type: "SUBSIDIARY" | "SITE" | "DEPARTMENT";
+            sortOrder: number;
+        };
+        UpdateOrganization: {
+            name: string;
+            sortOrder: number;
+            version: number;
+        };
+        SwitchOrganization: {
+            organizationId: string;
+        };
+        OrganizationNode: {
+            id: string;
+            parentId?: string | null;
+            code: string;
+            name: string;
+            /** @enum {string} */
+            type: "HEADQUARTERS" | "SUBSIDIARY" | "SITE" | "DEPARTMENT";
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            sortOrder: number;
+            version: number;
+            children: components["schemas"]["OrganizationNode"][];
+        };
+        CurrentOrganization: {
+            id: string;
+            code: string;
+            name: string;
+            /** @enum {string} */
+            type: "HEADQUARTERS" | "SUBSIDIARY" | "SITE" | "DEPARTMENT";
+        };
+        OrganizationTreeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["OrganizationNode"][];
+        };
+        OrganizationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["OrganizationNode"];
+        };
+        CurrentOrganizationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["CurrentOrganization"];
         };
         ConsoleLoginCommand: {
             username: string;
@@ -1259,6 +1386,158 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getOrganizationTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant organization tree */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationTreeResponse"];
+                };
+            };
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganization"];
+            };
+        };
+        responses: {
+            /** @description Organization created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganization"];
+            };
+        };
+        responses: {
+            /** @description Organization updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    disableOrganization: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organization disabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getCurrentOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current operating organization */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentOrganizationResponse"];
+                };
+            };
+        };
+    };
+    switchOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchOrganization"];
+            };
+        };
+        responses: {
+            /** @description Current operating organization changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentOrganizationResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
         };
     };
     login: {

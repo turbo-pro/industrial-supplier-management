@@ -74,9 +74,14 @@ public class TenantService {
         try {
             mapper.insertIamTenant(tenant.id(), tenant.tenantCode(), tenant.tenantName(), tenant.timezone(),
                     tenant.locale());
-            mapper.insertHeadquarters(ids.nextId(), tenant.id(), command.headquartersName());
-            mapper.insertAdmin(ids.nextId(), tenant.id(), command.adminUsername(), command.adminDisplayName(),
+            long headquartersId = ids.nextId();
+            long administratorId = ids.nextId();
+            mapper.insertHeadquarters(headquartersId, tenant.id(), command.headquartersName());
+            mapper.insertOrganizationClosure(tenant.id(), headquartersId);
+            mapper.insertAdmin(administratorId, tenant.id(), command.adminUsername(), command.adminDisplayName(),
                     passwords.encode(command.initialPassword()));
+            mapper.insertAdminOrganization(tenant.id(), administratorId, headquartersId);
+            mapper.insertAdminContext(tenant.id(), administratorId, headquartersId);
             if (mapper.markReady(id, utcNow()) != 1) {
                 throw new ApiException(TenantErrorCode.INVALID_STATE);
             }
