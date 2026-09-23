@@ -6,6 +6,7 @@ import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantIsolationException;
 import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext;
 import io.github.turbopro.ism.common.infrastructure.authorization.DataScope;
 import io.github.turbopro.ism.common.infrastructure.authorization.DataTarget;
 import io.github.turbopro.ism.common.infrastructure.authorization.PermissionGuard;
@@ -34,6 +35,8 @@ import io.github.turbopro.ism.operation.message.MessageService;
 import io.github.turbopro.ism.operation.task.TaskCenterService;
 import io.github.turbopro.ism.resource.print.PrintModels;
 import io.github.turbopro.ism.resource.print.PrintService;
+import io.github.turbopro.ism.integration.search.SearchModels;
+import io.github.turbopro.ism.integration.search.SearchService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -193,6 +196,7 @@ class B0InfrastructureIT {
     private MessageService messageService;
     @Autowired private TaskCenterService taskCenterService;
     @Autowired private PrintService printService;
+    @Autowired private SearchService searchService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -666,6 +670,29 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id IN (?,?)", userA, userB);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?,?)", userA, userB, 124L);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantA, tenantB);
+        }
+    }
+
+    @Test
+    void shouldSearchOnlyAuthorizedTenantResourcesAndPersistPersonalSchemes(){
+        long tenantId=125L,userId=126L,organizationId=127L;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",tenantId,"SEARCH_IT","Search Tenant","ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,?)",userId,tenantId,"search.user","Searchable User",passwordEncoder.encode("Search#123456"),"ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",organizationId,tenantId,"SEARCH_SITE","Searchable Site","SITE","ACTIVE");
+        var permissions=new PermissionSnapshot(Set.of("iam:user:view","iam:organization:view"),Map.of("iam:user",DataScope.all(),"iam:organization",DataScope.all()),Set.of());
+        try(var tenant=TenantContext.open(tenantId,userId);var authorization=AuthorizationContext.open(permissions)){
+            var query=new SearchModels.SearchRequest("Searchable",Set.of(SearchModels.EntityType.USER,SearchModels.EntityType.ORGANIZATION,SearchModels.EntityType.FILE),Set.of("ACTIVE"),null,null,0,20);
+            var result=searchService.search(query);
+            assertThat(result.searchedTypes()).containsExactlyInAnyOrder(SearchModels.EntityType.USER,SearchModels.EntityType.ORGANIZATION);
+            assertThat(result.items()).extracting(SearchModels.SearchItem::title).containsExactlyInAnyOrder("Searchable User","Searchable Site");
+            var saved=searchService.create(new SearchModels.SaveSearch("常用搜索",query,true,0));
+            assertThat(saved.defaultSearch()).isTrue();assertThat(searchService.saved()).extracting(SearchModels.SavedView::name).containsExactly("常用搜索");
+            searchService.delete(Long.parseLong(saved.id()),saved.version());assertThat(searchService.saved()).isEmpty();
+        }finally{
+            jdbcTemplate.update("DELETE FROM src_saved_search WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE id=?",organizationId);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE id=?",userId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?",tenantId);
         }
     }
 

@@ -664,6 +664,41 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrintRenderRequest' } } } }
       responses: { '200': { description: Print task submitted } }
+  /search:
+    post:
+      operationId: searchTenantResources
+      tags: [Search]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SearchRequest' } } } }
+      responses:
+        '200': { description: Permission-filtered global or advanced search page, content: { application/json: { schema: { $ref: '#/components/schemas/SearchResultResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+  /search/saved:
+    get:
+      operationId: listSavedSearches
+      tags: [Search]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Current user saved search schemes, content: { application/json: { schema: { $ref: '#/components/schemas/SavedSearchListResponse' } } } } }
+    post:
+      operationId: createSavedSearch
+      tags: [Search]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveSearch' } } } }
+      responses: { '200': { description: Search scheme created, content: { application/json: { schema: { $ref: '#/components/schemas/SavedSearchResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /search/saved/{id}:
+    put:
+      operationId: updateSavedSearch
+      tags: [Search]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveSearch' } } } }
+      responses: { '200': { description: Search scheme updated, content: { application/json: { schema: { $ref: '#/components/schemas/SavedSearchResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+    delete:
+      operationId: deleteSavedSearch
+      tags: [Search]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }]
+      responses: { '200': { description: Search scheme deleted, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/login:
     post:
       operationId: login
@@ -762,6 +797,60 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SearchEntityType:
+      type: string
+      enum: [USER, ORGANIZATION, FILE, PRINT_TEMPLATE, MESSAGE, TASK]
+    SearchRequest:
+      type: object
+      required: [keyword, types, statuses, page, size]
+      properties:
+        keyword: { type: string, maxLength: 100 }
+        types: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/SearchEntityType' } }
+        statuses: { type: array, uniqueItems: true, items: { type: string, maxLength: 32 } }
+        updatedFrom: { type: string, format: date-time }
+        updatedTo: { type: string, format: date-time }
+        page: { type: integer, minimum: 0, maximum: 100 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+    SearchItem:
+      type: object
+      required: [id, type, title, status, route, updatedAt]
+      properties:
+        id: { type: string }
+        type: { $ref: '#/components/schemas/SearchEntityType' }
+        title: { type: string }
+        subtitle: { type: string }
+        status: { type: string }
+        route: { type: string }
+        updatedAt: { type: string, format: date-time }
+    SearchResult:
+      type: object
+      required: [hasMore, page, size, searchedTypes, items]
+      properties:
+        hasMore: { type: boolean }
+        page: { type: integer }
+        size: { type: integer }
+        searchedTypes: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/SearchEntityType' } }
+        items: { type: array, items: { $ref: '#/components/schemas/SearchItem' } }
+    SaveSearch:
+      type: object
+      required: [name, query, defaultSearch, version]
+      properties:
+        name: { type: string, maxLength: 100 }
+        query: { $ref: '#/components/schemas/SearchRequest' }
+        defaultSearch: { type: boolean }
+        version: { type: integer, minimum: 0 }
+    SavedSearch:
+      allOf:
+        - $ref: '#/components/schemas/SaveSearch'
+        - type: object
+          required: [id, updatedAt]
+          properties: { id: { type: string }, updatedAt: { type: string, format: date-time } }
+    SearchResultResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SearchResult' } } }]
+    SavedSearchResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SavedSearch' } } }]
+    SavedSearchListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/SavedSearch' } } } }]
     SavePrintTemplate:
       type: object
       required: [code, name, businessType, html, requiredVariables, pageSize, orientation, version]
