@@ -49,6 +49,14 @@ public class FileService {
     public List<FileModels.FileView> files(){return mapper.files(tenant()).stream().map(this::fileView).toList();}
     public FileModels.FileView file(long id){return fileView(requireFile(tenant(),id));}
     public Download download(long id){var row=requireFile(tenant(),id);try{return new Download(fileView(row),storage(row.storageProvider()).open(row.objectKey()));}catch(FileStorageException exception){throw new ApiException(FileErrorCode.STORAGE_UNAVAILABLE);}}
+    @Transactional
+    public FileModels.FileView createGenerated(String fileName,String contentType,byte[] content){
+        long tenantId=tenant();String hash=sha256(content);var existing=mapper.fileByHash(tenantId,hash,content.length);if(existing!=null)return fileView(existing);
+        ObjectStorage target=storage();
+        try{var stored=target.storeGenerated(tenantId,hash,content);long id=ids.nextId();mapper.insertFile(tenantId,id,TenantContext.require().actorId(),safeName(fileName),contentType,stored.size(),stored.sha256(),target.provider(),stored.objectKey());return file(id);}
+        catch(DuplicateKeyException e){var concurrent=mapper.fileByHash(tenantId,hash,content.length);if(concurrent!=null)return fileView(concurrent);throw e;}
+        catch(FileStorageException e){throw new ApiException(FileErrorCode.STORAGE_UNAVAILABLE);}
+    }
     @Transactional public void delete(long id){if(mapper.deleteFile(tenant(),id)!=1)throw new ApiException(CommonErrorCode.NOT_FOUND);}
     private FileModels.UploadRow requireUpload(long tenantId,long id){var row=mapper.upload(tenantId,id);if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);return row;}
     private FileModels.UploadRow requireWritable(long tenantId,long id){var row=requireUpload(tenantId,id);if(row.expiresAt().isBefore(now()))throw new ApiException(FileErrorCode.UPLOAD_EXPIRED);if(!row.status().equals("UPLOADING"))throw new ApiException(CommonErrorCode.CONFLICT);return row;}

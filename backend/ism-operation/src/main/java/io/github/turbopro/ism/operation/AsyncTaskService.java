@@ -37,8 +37,18 @@ public class AsyncTaskService {
 
     @Transactional
     public Optional<OperationModels.AsyncTask> claimNext(String nodeId, Duration leaseDuration) {
+        return claim(null,nodeId,leaseDuration);
+    }
+
+    @Transactional
+    public Optional<OperationModels.AsyncTask> claimNext(String taskType,String nodeId,Duration leaseDuration){
+        if(taskType==null||taskType.isBlank())throw new IllegalArgumentException("taskType is required");
+        return claim(taskType,nodeId,leaseDuration);
+    }
+
+    private Optional<OperationModels.AsyncTask> claim(String taskType,String nodeId,Duration leaseDuration){
         LocalDateTime now = utcNow();
-        OperationModels.AsyncTask task = dispatchMapper.lockNextTask(now);
+        OperationModels.AsyncTask task = taskType==null?dispatchMapper.lockNextTask(now):dispatchMapper.lockNextTaskOfType(taskType,now);
         if (task == null) {
             return Optional.empty();
         }

@@ -114,6 +114,7 @@ class B0InfrastructureIT {
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("ism.storage.local-root", () -> System.getProperty("java.io.tmpdir") + "/ism-it-storage");
+        registry.add("ism.print.worker-enabled",()->"false");
     }
 
     @Autowired

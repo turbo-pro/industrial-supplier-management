@@ -5,6 +5,7 @@ public final class PrintModels{private PrintModels(){}
  public record RenderRequest(Map<String,String> variables,String businessType,String businessId){public RenderRequest{variables=variables==null?Map.of():Map.copyOf(variables);}}
  public record TemplateRow(long id,String templateCode,String templateName,String businessType,String draftHtml,String variableSchema,String pageConfig,String status,int currentVersion,int version){}
  public record VersionRow(long id,long templateId,int versionNo,String htmlContent,String variableSchema,String pageConfig){}
+ public record JobRow(long id,long taskId,long templateVersionId,String templateName,String htmlContent,String pageConfig,String renderPayload){}
  public record TemplateView(String id,String code,String name,String businessType,String html,Set<String> requiredVariables,String pageSize,String orientation,String status,int currentVersion,int version){}
  public record Preview(String title,String html,String pageSize,String orientation){}
  public record PrintJob(String id,String taskId,int templateVersion){}

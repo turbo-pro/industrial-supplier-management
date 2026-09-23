@@ -67,6 +67,12 @@ ism:
     chunk-size: ${ISM_STORAGE_CHUNK_SIZE:5242880}
     max-file-size: ${ISM_STORAGE_MAX_FILE_SIZE:104857600}
     upload-ttl: ${ISM_STORAGE_UPLOAD_TTL:PT24H}
+  print:
+    font-path: ${ISM_PRINT_FONT_PATH:}
+    worker-enabled: ${ISM_PRINT_WORKER_ENABLED:true}
+    lease-duration: ${ISM_PRINT_LEASE_DURATION:PT5M}
+    poll-interval: ${ISM_PRINT_POLL_INTERVAL:2000}
+    node-id: ${ISM_PRINT_NODE_ID:print-worker}
   security:
     jwt:
       secret: ${ISM_JWT_SECRET:local-development-secret-change-me-32-bytes}

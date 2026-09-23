@@ -31,6 +31,9 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml up
 | 数据库用户 | `ism` | `ISM_DB_USERNAME` |
 | 数据库密码 | `ism` | `ISM_DB_PASSWORD` |
 | HTTP 端口 | `8080` | `ISM_SERVER_PORT` |
+| 中文打印字体 | 无，使用打印功能前必须配置标准 TrueType 字体 | `ISM_PRINT_FONT_PATH` |
+
+例如 Linux 可安装 Noto Sans CJK 并将字体集合中的简体中文字体导出为独立 TTF 后配置；不要直接传入 `.ttc` 字体集合。若暂不验证打印任务，可设置 `ISM_PRINT_WORKER_ENABLED=false` 停止打印 Worker。
 
 应用启动时 Flyway 会执行版本化迁移，Flowable 会维护自己的引擎表。健康检查地址为：
 
