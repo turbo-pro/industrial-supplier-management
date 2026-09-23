@@ -621,6 +621,49 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskVersionCommand' } } } }
       responses: { '200': { description: Failed task queued again, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /print-templates:
+    get:
+      operationId: listPrintTemplates
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Print templates, content: { application/json: { schema: { $ref: '#/components/schemas/PrintTemplateListResponse' } } } } }
+    post:
+      operationId: createPrintTemplate
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePrintTemplate' } } } }
+      responses: { '200': { description: Draft created, content: { application/json: { schema: { $ref: '#/components/schemas/PrintTemplateResponse' } } } } }
+  /print-templates/{id}:
+    put:
+      operationId: updatePrintTemplate
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePrintTemplate' } } } }
+      responses: { '200': { description: Draft updated, content: { application/json: { schema: { $ref: '#/components/schemas/PrintTemplateResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /print-templates/{id}/publish:
+    post:
+      operationId: publishPrintTemplate
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: version, in: query, required: true, schema: { type: integer } }]
+      responses: { '200': { description: Immutable version published, content: { application/json: { schema: { $ref: '#/components/schemas/PrintTemplateResponse' } } } } }
+  /print-templates/{id}/preview:
+    post:
+      operationId: previewPrintTemplate
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrintRenderRequest' } } } }
+      responses: { '200': { description: Sandboxed preview payload } }
+  /print-templates/{id}/print:
+    post:
+      operationId: submitPrintJob
+      tags: [Printing]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrintRenderRequest' } } } }
+      responses: { '200': { description: Print task submitted } }
   /auth/login:
     post:
       operationId: login
@@ -719,6 +762,28 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SavePrintTemplate:
+      type: object
+      required: [code, name, businessType, html, requiredVariables, pageSize, orientation, version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        businessType: { type: string }
+        html: { type: string }
+        requiredVariables: { type: array, uniqueItems: true, items: { type: string } }
+        pageSize: { type: string, enum: [A4, A5, LETTER] }
+        orientation: { type: string, enum: [PORTRAIT, LANDSCAPE] }
+        version: { type: integer, minimum: 0 }
+    PrintRenderRequest:
+      type: object
+      required: [variables]
+      properties: { variables: { type: object, additionalProperties: { type: string } }, businessType: { type: string }, businessId: { type: string } }
+    PrintTemplate:
+      allOf: [{ $ref: '#/components/schemas/SavePrintTemplate' }, { type: object, required: [id, status, currentVersion], properties: { id: { type: string }, status: { type: string }, currentVersion: { type: integer } } }]
+    PrintTemplateListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/PrintTemplate' } } } }]
+    PrintTemplateResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PrintTemplate' } } }]
     TaskVersionCommand:
       type: object
       required: [version]

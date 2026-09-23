@@ -32,6 +32,8 @@ import io.github.turbopro.ism.resource.file.FileService;
 import io.github.turbopro.ism.operation.message.MessageModels;
 import io.github.turbopro.ism.operation.message.MessageService;
 import io.github.turbopro.ism.operation.task.TaskCenterService;
+import io.github.turbopro.ism.resource.print.PrintModels;
+import io.github.turbopro.ism.resource.print.PrintService;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -189,6 +191,7 @@ class B0InfrastructureIT {
     @Autowired
     private MessageService messageService;
     @Autowired private TaskCenterService taskCenterService;
+    @Autowired private PrintService printService;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -372,7 +375,7 @@ class B0InfrastructureIT {
                     .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
                     .singleElement().satisfies(menu -> assertThat(menu.children())
-                            .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER"));
+                            .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER", "PRINT_TEMPLATE"));
             assertThat(configurationService.dictionary("SUPPLIER_TYPE").items())
                     .extracting(ConfigurationModels.DictionaryItemView::code)
                     .contains("MATERIAL", "SERVICE", "CONTRACTOR");
@@ -439,6 +442,17 @@ class B0InfrastructureIT {
                     assertThat(item.content()).contains("示例供应商", "安全生产许可证"));
             messageService.read(Long.parseLong(inbox.get(0).id()));
             assertThat(messageService.unread()).isZero();
+            var printTemplate = printService.create(new PrintModels.SaveTemplate("SUPPLIER_CARD", "供应商卡片",
+                    "SUPPLIER", "<html><body><h1>{{supplierName}}</h1><p>{{creditCode}}</p></body></html>",
+                    Set.of("supplierName", "creditCode"), "A4", "PORTRAIT", 0));
+            var publishedTemplate = printService.publish(Long.parseLong(printTemplate.id()), printTemplate.version());
+            assertThat(publishedTemplate.currentVersion()).isOne();
+            var preview = printService.preview(Long.parseLong(printTemplate.id()), new PrintModels.RenderRequest(
+                    Map.of("supplierName", "示例化工供应商", "creditCode", "91370000TEST"), "SUPPLIER", "10001"));
+            assertThat(preview.html()).contains("示例化工供应商", "91370000TEST");
+            var printJob = printService.print(Long.parseLong(printTemplate.id()), new PrintModels.RenderRequest(
+                    Map.of("supplierName", "示例化工供应商", "creditCode", "91370000TEST"), "SUPPLIER", "10001"));
+            assertThat(taskCenterService.task(Long.parseLong(printJob.taskId())).taskType()).isEqualTo("PRINT_DOCUMENT");
             assertThat(organizationService.tree()).singleElement()
                     .extracting(OrganizationModels.OrganizationNode::type).isEqualTo("HEADQUARTERS");
             var subsidiary = organizationService.create(new OrganizationModels.CreateOrganization(

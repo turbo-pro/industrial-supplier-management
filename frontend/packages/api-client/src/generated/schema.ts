@@ -858,6 +858,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/print-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPrintTemplates"];
+        put?: never;
+        post: operations["createPrintTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/print-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updatePrintTemplate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/print-templates/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishPrintTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/print-templates/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewPrintTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/print-templates/{id}/print": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitPrintJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -942,6 +1022,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SavePrintTemplate: {
+            code: string;
+            name: string;
+            businessType: string;
+            html: string;
+            requiredVariables: string[];
+            /** @enum {string} */
+            pageSize: "A4" | "A5" | "LETTER";
+            /** @enum {string} */
+            orientation: "PORTRAIT" | "LANDSCAPE";
+            version: number;
+        };
+        PrintRenderRequest: {
+            variables: {
+                [key: string]: string;
+            };
+            businessType?: string;
+            businessId?: string;
+        };
+        PrintTemplate: components["schemas"]["SavePrintTemplate"] & {
+            id: string;
+            status: string;
+            currentVersion: number;
+        };
+        PrintTemplateListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PrintTemplate"][];
+        };
+        PrintTemplateResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PrintTemplate"];
+        };
         TaskVersionCommand: {
             version: number;
         };
@@ -3089,6 +3199,149 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    listPrintTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Print templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintTemplateListResponse"];
+                };
+            };
+        };
+    };
+    createPrintTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePrintTemplate"];
+            };
+        };
+        responses: {
+            /** @description Draft created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintTemplateResponse"];
+                };
+            };
+        };
+    };
+    updatePrintTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePrintTemplate"];
+            };
+        };
+        responses: {
+            /** @description Draft updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintTemplateResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    publishPrintTemplate: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable version published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintTemplateResponse"];
+                };
+            };
+        };
+    };
+    previewPrintTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrintRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Sandboxed preview payload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    submitPrintJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrintRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Print task submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     login: {
