@@ -9,6 +9,7 @@ ENV_FILE="${PROJECT_ROOT}/deploy/docker/.env"
 ENV_EXAMPLE="${PROJECT_ROOT}/deploy/docker/.env.example"
 
 mkdir -p "${RUNTIME_DIR}" "${LOG_DIR}"
+cd "${PROJECT_ROOT}"
 
 usage() {
   echo "Usage: ./scripts/dev.sh {up|down|restart|status|logs}"
