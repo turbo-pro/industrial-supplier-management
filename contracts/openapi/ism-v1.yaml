@@ -716,6 +716,67 @@ paths:
               schema: { $ref: '#/components/schemas/TokenPairResponse' }
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
+  /workflows/definitions:
+    get:
+      operationId: listWorkflowDefinitions
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Tenant workflow definitions, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionListResponse' } } } } }
+    post:
+      operationId: createWorkflowDefinition
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveWorkflowDefinition' } } } }
+      responses: { '200': { description: Workflow draft created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionResponse' } } } } }
+  /workflows/definitions/{id}:
+    get:
+      operationId: getWorkflowDefinition
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Workflow definition, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionResponse' } } } } }
+    put:
+      operationId: updateWorkflowDefinition
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveWorkflowDefinition' } } } }
+      responses: { '200': { description: Workflow draft updated, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /workflows/definitions/{id}/publish:
+    post:
+      operationId: publishWorkflowDefinition
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }]
+      responses: { '200': { description: Immutable workflow version published, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /workflows/instances:
+    post:
+      operationId: startWorkflowInstance
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StartWorkflowInstance' } } } }
+      responses: { '200': { description: Workflow instance started, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowInstanceResponse' } } } } }
+  /workflows/tasks/my:
+    get:
+      operationId: listMyWorkflowTasks
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Candidate or assigned active tasks, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowTaskListResponse' } } } } }
+  /workflows/tasks/{taskId}/claim:
+    post:
+      operationId: claimWorkflowTask
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Task claimed, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowTaskResponse' } } } } }
+  /workflows/tasks/{taskId}/complete:
+    post:
+      operationId: completeWorkflowTask
+      tags: [Workflow]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CompleteWorkflowTask' } } } }
+      responses: { '200': { description: Task completed, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -797,6 +858,72 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SaveWorkflowDefinition:
+      type: object
+      required: [code, name, businessType, bpmnXml, version]
+      properties:
+        code: { type: string, pattern: '^[a-z][a-z0-9_]{2,63}$' }
+        name: { type: string, maxLength: 100 }
+        businessType: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        bpmnXml: { type: string, maxLength: 500000 }
+        version: { type: integer, minimum: 0 }
+    WorkflowDefinition:
+      allOf:
+        - $ref: '#/components/schemas/SaveWorkflowDefinition'
+        - type: object
+          required: [id, status, currentVersion, updatedAt]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [DRAFT, PUBLISHED] }
+            currentVersion: { type: integer, minimum: 0 }
+            updatedAt: { type: string, format: date-time }
+    StartWorkflowInstance:
+      type: object
+      required: [definitionCode, businessId]
+      properties:
+        definitionCode: { type: string, maxLength: 64 }
+        businessId: { type: string, maxLength: 128 }
+        variables: { type: object, maxProperties: 50, additionalProperties: true }
+    WorkflowInstance:
+      type: object
+      required: [id, definitionId, definitionVersion, processInstanceId, businessType, businessId, status, startedAt]
+      properties:
+        id: { type: string }
+        definitionId: { type: string }
+        definitionVersion: { type: integer }
+        processInstanceId: { type: string }
+        businessType: { type: string }
+        businessId: { type: string }
+        status: { type: string, enum: [RUNNING, COMPLETED, CANCELLED] }
+        result: { type: string, enum: [APPROVED, REJECTED, CANCELLED] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    WorkflowTask:
+      type: object
+      required: [id, processInstanceId, taskDefinitionKey, name, createdAt]
+      properties:
+        id: { type: string }
+        processInstanceId: { type: string }
+        taskDefinitionKey: { type: string }
+        name: { type: string }
+        assignee: { type: string }
+        createdAt: { type: string, format: date-time }
+    CompleteWorkflowTask:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        comment: { type: string, maxLength: 500 }
+    WorkflowDefinitionResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/WorkflowDefinition' } } }]
+    WorkflowDefinitionListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/WorkflowDefinition' } } } }]
+    WorkflowInstanceResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/WorkflowInstance' } } }]
+    WorkflowTaskResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/WorkflowTask' } } }]
+    WorkflowTaskListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/WorkflowTask' } } } }]
     SearchEntityType:
       type: string
       enum: [USER, ORGANIZATION, FILE, PRINT_TEMPLATE, MESSAGE, TASK]

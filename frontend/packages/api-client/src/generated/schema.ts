@@ -1002,6 +1002,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWorkflowDefinitions"];
+        put?: never;
+        post: operations["createWorkflowDefinition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/definitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWorkflowDefinition"];
+        put: operations["updateWorkflowDefinition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/definitions/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishWorkflowDefinition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startWorkflowInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/tasks/my": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyWorkflowTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/tasks/{taskId}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["claimWorkflowTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeWorkflowTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1070,6 +1182,73 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SaveWorkflowDefinition: {
+            code: string;
+            name: string;
+            businessType: string;
+            bpmnXml: string;
+            version: number;
+        };
+        WorkflowDefinition: components["schemas"]["SaveWorkflowDefinition"] & {
+            id: string;
+            /** @enum {string} */
+            status: "DRAFT" | "PUBLISHED";
+            currentVersion: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        StartWorkflowInstance: {
+            definitionCode: string;
+            businessId: string;
+            variables?: {
+                [key: string]: unknown;
+            };
+        };
+        WorkflowInstance: {
+            id: string;
+            definitionId: string;
+            definitionVersion: number;
+            processInstanceId: string;
+            businessType: string;
+            businessId: string;
+            /** @enum {string} */
+            status: "RUNNING" | "COMPLETED" | "CANCELLED";
+            /** @enum {string} */
+            result?: "APPROVED" | "REJECTED" | "CANCELLED";
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt?: string;
+        };
+        WorkflowTask: {
+            id: string;
+            processInstanceId: string;
+            taskDefinitionKey: string;
+            name: string;
+            assignee?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CompleteWorkflowTask: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment?: string;
+        };
+        WorkflowDefinitionResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkflowDefinition"];
+        };
+        WorkflowDefinitionListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkflowDefinition"][];
+        };
+        WorkflowInstanceResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkflowInstance"];
+        };
+        WorkflowTaskResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkflowTask"];
+        };
+        WorkflowTaskListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["WorkflowTask"][];
+        };
         /** @enum {string} */
         SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK";
         SearchRequest: {
@@ -3588,6 +3767,216 @@ export interface operations {
             };
             400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
+        };
+    };
+    listWorkflowDefinitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant workflow definitions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionListResponse"];
+                };
+            };
+        };
+    };
+    createWorkflowDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWorkflowDefinition"];
+            };
+        };
+        responses: {
+            /** @description Workflow draft created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionResponse"];
+                };
+            };
+        };
+    };
+    getWorkflowDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workflow definition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionResponse"];
+                };
+            };
+        };
+    };
+    updateWorkflowDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWorkflowDefinition"];
+            };
+        };
+        responses: {
+            /** @description Workflow draft updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    publishWorkflowDefinition: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable workflow version published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    startWorkflowInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartWorkflowInstance"];
+            };
+        };
+        responses: {
+            /** @description Workflow instance started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowInstanceResponse"];
+                };
+            };
+        };
+    };
+    listMyWorkflowTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Candidate or assigned active tasks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowTaskListResponse"];
+                };
+            };
+        };
+    };
+    claimWorkflowTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task claimed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowTaskResponse"];
+                };
+            };
+        };
+    };
+    completeWorkflowTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteWorkflowTask"];
+            };
+        };
+        responses: {
+            /** @description Task completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
         };
     };
     refreshToken: {
