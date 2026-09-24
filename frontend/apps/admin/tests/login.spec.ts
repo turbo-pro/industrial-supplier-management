@@ -25,17 +25,20 @@ test('tenant administrator can log in with the generated API client', async ({ p
       children: [{ id: '301', code: 'ORGANIZATION_MANAGEMENT', name: '组织管理', route: '/system/organizations', component: 'OrganizationPage', icon: 'organization', children: [] }] }],
     traceId: 'menus', timestamp: new Date().toISOString(),
   }) }));
+  await page.route('**/api/suppliers**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    success: true, data: { total: 1, page: 0, size: 20, items: [{ id: '900', organizationId: '100', code: 'SUP-001', name: '华东设备制造', type: 'MANUFACTURER', status: 'ACTIVE', riskLevel: 'LOW', version: 0, updatedAt: new Date().toISOString() }] }, traceId: 'suppliers', timestamp: new Date().toISOString(),
+  }) }));
   await page.goto('/');
   await page.getByLabel('租户编码').fill('demo');
   await page.getByLabel('用户名').fill('admin');
   await page.getByLabel('密码').fill('Demo-password-1');
-  await page.getByRole('button', { name: '登录', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('欢迎，演示管理员');
-  await expect(page.getByRole('heading', { name: '集团总部' })).toBeVisible();
-  await expect(page.getByLabel('当前组织')).toHaveValue('100');
-  await expect(page.getByRole('link', { name: '组织管理' })).toBeVisible();
-  await page.getByRole('link', { name: '组织管理' }).click();
-  await expect(page).toHaveURL(/\/system\/organizations$/);
-  await expect(page.getByRole('status')).toHaveText('已恢复当前登录会话');
-  await expect(page.getByRole('heading', { name: '集团总部' })).toBeVisible();
+  await page.getByRole('button', { name: '登录系统', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '供应商档案' })).toBeVisible();
+  await expect(page.getByText('华东设备制造')).toBeVisible();
+  await page.getByText('系统管理').click();
+  await expect(page.getByRole('menuitem', { name: '组织管理' })).toBeVisible();
+  await page.getByRole('menuitem', { name: '组织管理' }).click();
+  await expect(page).toHaveURL(/\/coming-soon$/);
+  await page.reload();
+  await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
 });

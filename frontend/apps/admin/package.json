@@ -10,10 +10,14 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@ism/api-client": "workspace:*",
     "@vitejs/plugin-vue": "^6.0.1",
+    "element-plus": "^2.14.6",
+    "pinia": "^4.0.3",
     "vite": "^7.1.5",
-    "vue": "^3.5.21"
+    "vue": "^3.5.21",
+    "vue-router": "^5.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

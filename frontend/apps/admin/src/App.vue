@@ -1,117 +1,15 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
-import { createIsmClient, type components } from '@ism/api-client';
-
-const form = reactive({ tenantCode: '', username: '', password: '' });
-const TOKEN_KEY = 'ism.admin.accessToken';
-const message = ref('');
-const submitting = ref(false);
-const accessToken = ref<string | undefined>(sessionStorage.getItem(TOKEN_KEY) ?? undefined);
-const organizations = ref<components['schemas']['OrganizationNode'][]>([]);
-const currentOrganization = ref<components['schemas']['CurrentOrganization']>();
-const menus = ref<components['schemas']['MenuNode'][]>([]);
-const client = createIsmClient({ getAccessToken: () => accessToken.value });
-const organizationOptions = computed(() => {
-  const result: { id: string; label: string }[] = [];
-  function walk(nodes: components['schemas']['OrganizationNode'][], depth = 0) {
-    nodes.forEach(node => {
-      if (node.status === 'ACTIVE') result.push({ id: node.id, label: `${'—'.repeat(depth)}${node.name}` });
-      walk(node.children, depth + 1);
-    });
-  }
-  walk(organizations.value);
-  return result;
-});
-
-async function login() {
-  submitting.value = true;
-  message.value = '';
-  const { data, error } = await client.POST('/auth/login', {
-    body: { ...form, deviceId: globalThis.crypto.randomUUID() },
-  });
-  if (error) {
-    message.value = error.error.message;
-  } else {
-    accessToken.value = data.data.accessToken;
-    sessionStorage.setItem(TOKEN_KEY, data.data.accessToken);
-    message.value = `欢迎，${data.data.user.displayName}`;
-    await loadWorkspace();
-  }
-  submitting.value = false;
-}
-
-async function loadWorkspace() {
-  const [tree, current, navigation] = await Promise.all([
-    client.GET('/organizations/tree'), client.GET('/organizations/current'), client.GET('/navigation/menus'),
-  ]);
-  if (tree.error || current.error || navigation.error) {
-    logout('登录状态已失效，请重新登录');
-    return;
-  }
-  organizations.value = tree.data?.data ?? [];
-  currentOrganization.value = current.data?.data;
-  menus.value = navigation.data?.data ?? [];
-}
-
-function logout(reason = '') {
-  sessionStorage.removeItem(TOKEN_KEY);
-  accessToken.value = undefined;
-  organizations.value = [];
-  currentOrganization.value = undefined;
-  menus.value = [];
-  message.value = reason;
-}
-
-async function switchOrganization(event: Event) {
-  const organizationId = (event.target as HTMLSelectElement).value;
-  const result = await client.POST('/organizations/switch', { body: { organizationId } });
-  if (result.data) currentOrganization.value = result.data.data;
-}
-
-if (accessToken.value) {
-  message.value = '已恢复当前登录会话';
-  void loadWorkspace();
-}
+import { reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import { Fold, FullScreen, SwitchButton } from '@element-plus/icons-vue';
+import { useSessionStore } from './stores/session';
+const session=useSessionStore();const router=useRouter();const collapsed=ref(false);const submitting=ref(false);const form=reactive({tenantCode:'demo',username:'admin',password:'Admin@123456'});
+async function login(){submitting.value=true;try{await session.login(form);await router.replace('/suppliers/master');ElMessage.success('登录成功');}catch(e){ElMessage.error(e instanceof Error?e.message:'登录失败');}finally{submitting.value=false;}}
+async function logout(){session.logout();await router.replace('/');}
+function route(path:string){return router.resolve(path).matched.some(r=>r.path===path)?path:'/coming-soon';}
 </script>
-
 <template>
-  <main v-if="!accessToken" class="shell">
-    <form class="login-card" @submit.prevent="login">
-      <p class="eyebrow">INDUSTRIAL SUPPLIER MANAGEMENT</p>
-      <h1>供应商管理平台</h1>
-      <p class="hint">请输入租户与账号信息</p>
-      <label>租户编码<input v-model="form.tenantCode" name="tenantCode" required /></label>
-      <label>用户名<input v-model="form.username" name="username" required /></label>
-      <label>密码<input v-model="form.password" name="password" type="password" required /></label>
-      <button :disabled="submitting" type="submit">{{ submitting ? '登录中…' : '登录' }}</button>
-      <p v-if="message" role="status">{{ message }}</p>
-    </form>
-  </main>
-  <main v-else class="workspace">
-    <header>
-      <div><p class="eyebrow">INDUSTRIAL SUPPLIER MANAGEMENT</p><h1>供应商管理平台</h1></div>
-      <div class="organization-switcher">
-        <label>当前组织
-          <select :value="currentOrganization?.id" @change="switchOrganization">
-            <option v-for="item in organizationOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-        </label>
-        <button type="button" @click="logout()">退出登录</button>
-      </div>
-    </header>
-    <div class="workspace-grid">
-      <nav class="navigation" aria-label="主菜单">
-        <section v-for="menu in menus" :key="menu.id">
-          <strong>{{ menu.name }}</strong>
-          <a v-for="child in menu.children" :key="child.id" :href="child.route">{{ child.name }}</a>
-        </section>
-      </nav>
-      <section class="summary-card">
-      <p class="eyebrow">OPERATING CONTEXT</p>
-      <h2>{{ currentOrganization?.name }}</h2>
-      <p>当前数据录入默认归属此组织；实际可见范围仍由后端角色与数据权限决定。</p>
-      <span role="status">{{ message }}</span>
-      </section>
-    </div>
-  </main>
+  <div v-if="!session.accessToken" class="login-page"><section class="brand-panel"><div class="brand-mark">ISM</div><p>INDUSTRIAL SUPPLIER MANAGEMENT</p><h1>工业供应商管理平台</h1><span>面向制造业与化工企业的供应商全生命周期协同平台</span></section><el-card class="login-card" shadow="always"><template #header><div><h2>欢迎登录</h2><p>请输入租户和账号信息</p></div></template><el-form label-position="top" @submit.prevent="login"><el-form-item label="租户编码"><el-input v-model="form.tenantCode" size="large" /></el-form-item><el-form-item label="用户名"><el-input v-model="form.username" size="large" /></el-form-item><el-form-item label="密码"><el-input v-model="form.password" type="password" show-password size="large" @keyup.enter="login" /></el-form-item><el-button type="primary" size="large" :loading="submitting" class="login-button" @click="login">登录系统</el-button></el-form></el-card></div>
+  <el-container v-else class="app-shell"><el-aside :width="collapsed?'68px':'232px'" class="sidebar"><div class="logo"><strong>ISM</strong><span v-if="!collapsed">工业供应链</span></div><el-menu router :collapse="collapsed" :default-active="$route.path" background-color="#102a43" text-color="#b8c7d5" active-text-color="#fff"><el-sub-menu v-for="menu in session.menus" :key="menu.id" :index="menu.route"><template #title><el-icon><FullScreen /></el-icon><span>{{menu.name}}</span></template><el-menu-item v-for="child in menu.children" :key="child.id" :index="route(child.route)">{{child.name}}</el-menu-item></el-sub-menu></el-menu></el-aside><el-container><el-header class="topbar"><div class="topbar-left"><el-button text :icon="Fold" @click="collapsed=!collapsed"/><el-breadcrumb separator="/"><el-breadcrumb-item>供应商管理平台</el-breadcrumb-item><el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><el-select :model-value="session.currentOrganization?.id" style="width:220px" @change="session.switchOrganization"><el-option v-for="item in session.organizationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><span class="user-name">租户管理员</span><el-button text :icon="SwitchButton" @click="logout">退出</el-button></div></el-header><el-main class="content"><router-view /></el-main></el-container></el-container>
 </template>
