@@ -91,6 +91,28 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || { echo "[error] Missing command: $1"; exit 1; }
 }
 
+configure_java() {
+  if [[ "$(uname -s)" == "Darwin" && -x /usr/libexec/java_home ]]; then
+    local detected_home
+    detected_home="$(/usr/libexec/java_home -v '17+' 2>/dev/null || true)"
+    if [[ -z "${detected_home}" ]]; then
+      echo "[error] JDK 17 or newer is required. Install it with: brew install --cask temurin@21"
+      exit 1
+    fi
+    export JAVA_HOME="${detected_home}"
+    export PATH="${JAVA_HOME}/bin:${PATH}"
+  fi
+  require_command java
+  local java_major
+  java_major="$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.specification.version/ {print $2; exit}')"
+  java_major="${java_major#1.}"
+  if [[ ! "${java_major}" =~ ^[0-9]+$ ]] || (( java_major < 17 )); then
+    echo "[error] JDK 17 or newer is required; detected Java ${java_major:-unknown}. Set JAVA_HOME and retry."
+    exit 1
+  fi
+  echo "[java] $(java -version 2>&1 | head -n 1)"
+}
+
 wait_for_backend() {
   echo "[wait] backend health check"
   for _ in {1..120}; do
@@ -115,7 +137,7 @@ up() {
   require_command curl
   require_command corepack
   require_command pgrep
-  require_command java
+  configure_java
   docker info >/dev/null 2>&1 || { echo "[error] Docker Engine is unavailable. Start Docker Desktop first."; exit 1; }
   if [[ ! -f "${ENV_FILE}" ]]; then
     cp "${ENV_EXAMPLE}" "${ENV_FILE}"

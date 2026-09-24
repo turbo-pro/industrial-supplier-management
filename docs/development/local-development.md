@@ -8,6 +8,8 @@
 
 项目使用 Maven Wrapper，执行 `./mvnw` 即可，不要求全局安装 Maven。B0 阶段的默认基础设施只有 MySQL 8.0。
 
+macOS 一键脚本会通过 `/usr/libexec/java_home` 自动选择已安装的 JDK 17+，因此终端原先配置为 JDK 8 也不会影响启动；如果机器上没有合适版本，脚本会提示安装 JDK 21。
+
 ## 2. 启动 MySQL
 
 推荐直接使用一键启动命令，它会依次启动 MySQL、后端、管理后台和 Console，并等待后端健康检查通过：
