@@ -20,7 +20,7 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml up
 ## 3. 启动后端
 
 ```bash
-./mvnw -pl backend/ism-bootstrap -am spring-boot:run
+./mvnw -pl backend/ism-bootstrap -am spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 默认连接参数如下：
@@ -43,7 +43,35 @@ GET http://localhost:8080/actuator/health
 
 验收结果应为 HTTP 200，响应状态为 `UP`。
 
-## 4. 验证命令
+`local` Profile 还会加载仅用于本机的演示数据：
+
+| 入口 | 账号 | 密码 |
+| --- | --- | --- |
+| Console `http://localhost:4174` | `platform-admin` | `Admin@123456` |
+| 管理后台 `http://localhost:4173` | 租户 `demo`、用户 `admin` | `Admin@123456` |
+
+本地数据脚本不在默认 Flyway 路径中，未启用 `local` Profile 时不会创建测试账号。
+
+## 4. 启动前端
+
+环境要求 Node.js 20.19+ 和 pnpm 10.17.1。首次运行：
+
+```bash
+corepack enable
+corepack prepare pnpm@10.17.1 --activate
+pnpm install
+```
+
+分别在两个终端启动租户管理后台和平台 Console：
+
+```bash
+pnpm --filter @ism/admin dev
+pnpm --filter @ism/console dev
+```
+
+Vite 会把 `/api` 转发到 `http://127.0.0.1:8080`，浏览器不需要额外配置跨域。
+
+## 5. 验证命令
 
 普通构建不依赖 Docker：
 
@@ -64,7 +92,7 @@ GET http://localhost:8080/actuator/health
 
 若 Docker Engine 不可用，集成测试会被标记为跳过；CI 环境必须执行且通过该测试。
 
-## 5. 停止环境
+## 6. 停止环境
 
 ```bash
 docker compose --env-file deploy/docker/.env -f deploy/docker/compose.dev.yml down
