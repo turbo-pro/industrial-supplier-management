@@ -7,6 +7,10 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "dev": "./scripts/dev.sh up",
+    "dev:down": "./scripts/dev.sh down",
+    "dev:status": "./scripts/dev.sh status",
+    "dev:logs": "./scripts/dev.sh logs",
     "build": "pnpm --recursive --if-present build",
     "generate:api": "pnpm --filter @ism/api-client generate",
     "check:api": "pnpm --filter @ism/api-client check:generated",
