@@ -777,6 +777,46 @@ paths:
       parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CompleteWorkflowTask' } } } }
       responses: { '200': { description: Task completed, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } } }
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SupplierStatus' } }
+        - { name: organizationId, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses: { '200': { description: Data-scope filtered supplier page, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierPageResponse' } } } } }
+    post:
+      operationId: createSupplier
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveSupplier' } } } }
+      responses: { '200': { description: Supplier created as draft, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Supplier details, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierResponse' } } } } }
+    put:
+      operationId: updateSupplier
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveSupplier' } } } }
+      responses: { '200': { description: Supplier updated, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{id}/status:
+    post:
+      operationId: changeSupplierStatus
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupplierStatus' } } } }
+      responses: { '200': { description: Supplier status changed, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -858,6 +898,102 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SupplierType:
+      type: string
+      enum: [MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER]
+    SupplierStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, SUSPENDED, EXITED]
+    SupplierRiskLevel:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    SupplierContactCommand:
+      type: object
+      required: [name, primary, sortOrder]
+      properties:
+        name: { type: string, maxLength: 100 }
+        position: { type: string, maxLength: 100 }
+        mobile: { type: string, maxLength: 32 }
+        telephone: { type: string, maxLength: 32 }
+        email: { type: string, format: email, maxLength: 200 }
+        primary: { type: boolean }
+        sortOrder: { type: integer, minimum: 0 }
+    SaveSupplier:
+      type: object
+      required: [code, name, type, organizationId, riskLevel, contacts, version]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }
+        name: { type: string, maxLength: 200 }
+        shortName: { type: string, maxLength: 100 }
+        unifiedSocialCreditCode: { type: string, pattern: '^$|^[0-9A-Z]{18}$' }
+        type: { $ref: '#/components/schemas/SupplierType' }
+        industry: { type: string, maxLength: 100 }
+        countryCode: { type: string, default: CN }
+        province: { type: string, maxLength: 100 }
+        city: { type: string, maxLength: 100 }
+        address: { type: string, maxLength: 300 }
+        legalRepresentative: { type: string, maxLength: 100 }
+        registeredCapital: { type: number, minimum: 0 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        establishedDate: { type: string, format: date }
+        website: { type: string, maxLength: 300 }
+        riskLevel: { $ref: '#/components/schemas/SupplierRiskLevel' }
+        remark: { type: string, maxLength: 1000 }
+        organizationId: { type: string }
+        contacts: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/SupplierContactCommand' } }
+        version: { type: integer, minimum: 0 }
+    SupplierContact:
+      allOf:
+        - $ref: '#/components/schemas/SupplierContactCommand'
+        - type: object
+          required: [id]
+          properties: { id: { type: string } }
+    SupplierSummary:
+      type: object
+      required: [id, organizationId, code, name, type, status, riskLevel, version, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        shortName: { type: string }
+        unifiedSocialCreditCode: { type: string }
+        type: { $ref: '#/components/schemas/SupplierType' }
+        status: { $ref: '#/components/schemas/SupplierStatus' }
+        riskLevel: { $ref: '#/components/schemas/SupplierRiskLevel' }
+        version: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    Supplier:
+      allOf:
+        - $ref: '#/components/schemas/SaveSupplier'
+        - type: object
+          required: [id, source, status, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            source: { type: string }
+            status: { $ref: '#/components/schemas/SupplierStatus' }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            contacts: { type: array, items: { $ref: '#/components/schemas/SupplierContact' } }
+    SupplierPage:
+      type: object
+      required: [total, page, size, items]
+      properties:
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/SupplierSummary' } }
+    ChangeSupplierStatus:
+      type: object
+      required: [status, version]
+      properties:
+        status: { $ref: '#/components/schemas/SupplierStatus' }
+        reason: { type: string, maxLength: 500 }
+        version: { type: integer, minimum: 0 }
+    SupplierResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Supplier' } } }]
+    SupplierPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierPage' } } }]
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

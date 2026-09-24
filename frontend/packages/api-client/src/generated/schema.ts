@@ -1114,6 +1114,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSuppliers"];
+        put?: never;
+        post: operations["createSupplier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplier"];
+        put: operations["updateSupplier"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeSupplierStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1182,6 +1230,91 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        SupplierType: "MANUFACTURER" | "TRADER" | "SERVICE_PROVIDER" | "CONTRACTOR" | "OTHER";
+        /** @enum {string} */
+        SupplierStatus: "DRAFT" | "ACTIVE" | "SUSPENDED" | "EXITED";
+        /** @enum {string} */
+        SupplierRiskLevel: "LOW" | "MEDIUM" | "HIGH";
+        SupplierContactCommand: {
+            name: string;
+            position?: string;
+            mobile?: string;
+            telephone?: string;
+            /** Format: email */
+            email?: string;
+            primary: boolean;
+            sortOrder: number;
+        };
+        SaveSupplier: {
+            code: string;
+            name: string;
+            shortName?: string;
+            unifiedSocialCreditCode?: string;
+            type: components["schemas"]["SupplierType"];
+            industry?: string;
+            /** @default CN */
+            countryCode: string;
+            province?: string;
+            city?: string;
+            address?: string;
+            legalRepresentative?: string;
+            registeredCapital?: number;
+            currency?: string;
+            /** Format: date */
+            establishedDate?: string;
+            website?: string;
+            riskLevel: components["schemas"]["SupplierRiskLevel"];
+            remark?: string;
+            organizationId: string;
+            contacts: components["schemas"]["SupplierContactCommand"][];
+            version: number;
+        };
+        SupplierContact: components["schemas"]["SupplierContactCommand"] & {
+            id: string;
+        };
+        SupplierSummary: {
+            id: string;
+            organizationId: string;
+            code: string;
+            name: string;
+            shortName?: string;
+            unifiedSocialCreditCode?: string;
+            type: components["schemas"]["SupplierType"];
+            status: components["schemas"]["SupplierStatus"];
+            riskLevel: components["schemas"]["SupplierRiskLevel"];
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Supplier: components["schemas"]["SaveSupplier"] & {
+            id: string;
+            source: string;
+            status: components["schemas"]["SupplierStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            contacts?: components["schemas"]["SupplierContact"][];
+        };
+        SupplierPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SupplierSummary"][];
+        };
+        ChangeSupplierStatus: {
+            status: components["schemas"]["SupplierStatus"];
+            reason?: string;
+            version: number;
+        };
+        SupplierResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["Supplier"];
+        };
+        SupplierPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SupplierPage"];
+        };
         SaveWorkflowDefinition: {
             code: string;
             name: string;
@@ -3977,6 +4110,133 @@ export interface operations {
                     "application/json": components["schemas"]["EmptyResponse"];
                 };
             };
+        };
+    };
+    listSuppliers: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["SupplierStatus"];
+                organizationId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Data-scope filtered supplier page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierPageResponse"];
+                };
+            };
+        };
+    };
+    createSupplier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSupplier"];
+            };
+        };
+        responses: {
+            /** @description Supplier created as draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supplier details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+        };
+    };
+    updateSupplier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSupplier"];
+            };
+        };
+        responses: {
+            /** @description Supplier updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeSupplierStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSupplierStatus"];
+            };
+        };
+        responses: {
+            /** @description Supplier status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
         };
     };
     refreshToken: {

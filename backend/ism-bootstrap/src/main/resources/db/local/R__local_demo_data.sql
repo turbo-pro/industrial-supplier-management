@@ -27,4 +27,5 @@ INSERT IGNORE INTO iam_role_menu(tenant_id,role_id,menu_id)
 SELECT 9100,9101,id FROM sys_menu WHERE status='ACTIVE';
 INSERT IGNORE INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES
  (9100,9101,'iam:organization','TENANT_ALL'),(9100,9101,'iam:user','TENANT_ALL'),
- (9100,9101,'resource:file','TENANT_ALL'),(9100,9101,'print:template','TENANT_ALL');
+ (9100,9101,'resource:file','TENANT_ALL'),(9100,9101,'print:template','TENANT_ALL'),
+ (9100,9101,'supplier:master','TENANT_ALL');
