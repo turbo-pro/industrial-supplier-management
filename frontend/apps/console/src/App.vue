@@ -3,9 +3,10 @@ import { reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 
 const form = reactive({ username: '', password: '' });
+const TOKEN_KEY = 'ism.console.accessToken';
 const message = ref('');
 const submitting = ref(false);
-const accessToken = ref<string>();
+const accessToken = ref<string | undefined>(sessionStorage.getItem(TOKEN_KEY) ?? undefined);
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
@@ -20,15 +21,36 @@ async function login() {
     message.value = error.error.message;
   } else {
     accessToken.value = data.data.accessToken;
+    sessionStorage.setItem(TOKEN_KEY, data.data.accessToken);
     message.value = `欢迎进入平台控制台，${data.data.user.displayName}`;
-    const [packageResult, tenantResult] = await Promise.all([
-      client.GET('/console/packages'),
-      client.GET('/console/tenants'),
-    ]);
-    packages.value = packageResult.data?.data ?? [];
-    tenants.value = tenantResult.data?.data ?? [];
+    await loadWorkspace();
   }
   submitting.value = false;
+}
+
+async function loadWorkspace() {
+  const [packageResult, tenantResult] = await Promise.all([
+    client.GET('/console/packages'), client.GET('/console/tenants'),
+  ]);
+  if (packageResult.error || tenantResult.error) {
+    logout('登录状态已失效，请重新登录');
+    return;
+  }
+  packages.value = packageResult.data?.data ?? [];
+  tenants.value = tenantResult.data?.data ?? [];
+}
+
+function logout(reason = '') {
+  sessionStorage.removeItem(TOKEN_KEY);
+  accessToken.value = undefined;
+  packages.value = [];
+  tenants.value = [];
+  message.value = reason;
+}
+
+if (accessToken.value) {
+  message.value = '已恢复当前登录会话';
+  void loadWorkspace();
 }
 </script>
 
@@ -49,7 +71,7 @@ async function login() {
     </form>
   </main>
   <main v-else class="workspace">
-    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><span role="status">{{ message }}</span></header>
+    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button type="button" @click="logout()">退出登录</button></div></header>
     <section class="panel">
       <div class="panel-title"><div><h2>套餐版本</h2><p>发布后的版本不可覆盖，变更必须创建新版本。</p></div><button type="button">新建套餐</button></div>
       <table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th></tr></thead>

@@ -34,4 +34,8 @@ test('tenant administrator can log in with the generated API client', async ({ p
   await expect(page.getByRole('heading', { name: '集团总部' })).toBeVisible();
   await expect(page.getByLabel('当前组织')).toHaveValue('100');
   await expect(page.getByRole('link', { name: '组织管理' })).toBeVisible();
+  await page.getByRole('link', { name: '组织管理' }).click();
+  await expect(page).toHaveURL(/\/system\/organizations$/);
+  await expect(page.getByRole('status')).toHaveText('已恢复当前登录会话');
+  await expect(page.getByRole('heading', { name: '集团总部' })).toBeVisible();
 });

@@ -28,4 +28,7 @@ test('platform operator logs in through the isolated Console endpoint', async ({
   await expect(page.getByRole('heading', { name: '套餐与模块' })).toBeVisible();
   await expect(page.getByText('化工企业版')).toBeVisible();
   await expect(page.getByText('华东化工集团')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('status')).toHaveText('已恢复当前登录会话');
+  await expect(page.getByText('化工企业版')).toBeVisible();
 });

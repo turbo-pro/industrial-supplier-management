@@ -16,7 +16,9 @@ button:disabled { opacity: .65; }
 .workspace { min-height: 100vh; padding: 32px; }
 .workspace header { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1180px; margin: 0 auto 28px; }
 .workspace h1 { margin: 4px 0; }
-.organization-switcher { margin: 0; }
+.organization-switcher { display:flex; align-items:flex-end; gap:12px; margin:0; }
+.organization-switcher label { margin:0; }
+.organization-switcher button { width:auto; padding:0 18px; margin:0; }
 .workspace-grid { max-width: 1180px; margin: auto; display: grid; grid-template-columns: 230px 1fr; gap: 24px; }
 .navigation, .summary-card { padding: 28px; border-radius: 10px; background: white; box-shadow: 0 12px 35px #0b1f3314; }
 .navigation section { display: grid; gap: 8px; margin-bottom: 20px; }

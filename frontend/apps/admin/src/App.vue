@@ -3,9 +3,10 @@ import { computed, reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 
 const form = reactive({ tenantCode: '', username: '', password: '' });
+const TOKEN_KEY = 'ism.admin.accessToken';
 const message = ref('');
 const submitting = ref(false);
-const accessToken = ref<string>();
+const accessToken = ref<string | undefined>(sessionStorage.getItem(TOKEN_KEY) ?? undefined);
 const organizations = ref<components['schemas']['OrganizationNode'][]>([]);
 const currentOrganization = ref<components['schemas']['CurrentOrganization']>();
 const menus = ref<components['schemas']['MenuNode'][]>([]);
@@ -32,21 +33,44 @@ async function login() {
     message.value = error.error.message;
   } else {
     accessToken.value = data.data.accessToken;
+    sessionStorage.setItem(TOKEN_KEY, data.data.accessToken);
     message.value = `欢迎，${data.data.user.displayName}`;
-    const [tree, current, navigation] = await Promise.all([
-      client.GET('/organizations/tree'), client.GET('/organizations/current'), client.GET('/navigation/menus'),
-    ]);
-    organizations.value = tree.data?.data ?? [];
-    currentOrganization.value = current.data?.data;
-    menus.value = navigation.data?.data ?? [];
+    await loadWorkspace();
   }
   submitting.value = false;
+}
+
+async function loadWorkspace() {
+  const [tree, current, navigation] = await Promise.all([
+    client.GET('/organizations/tree'), client.GET('/organizations/current'), client.GET('/navigation/menus'),
+  ]);
+  if (tree.error || current.error || navigation.error) {
+    logout('登录状态已失效，请重新登录');
+    return;
+  }
+  organizations.value = tree.data?.data ?? [];
+  currentOrganization.value = current.data?.data;
+  menus.value = navigation.data?.data ?? [];
+}
+
+function logout(reason = '') {
+  sessionStorage.removeItem(TOKEN_KEY);
+  accessToken.value = undefined;
+  organizations.value = [];
+  currentOrganization.value = undefined;
+  menus.value = [];
+  message.value = reason;
 }
 
 async function switchOrganization(event: Event) {
   const organizationId = (event.target as HTMLSelectElement).value;
   const result = await client.POST('/organizations/switch', { body: { organizationId } });
   if (result.data) currentOrganization.value = result.data.data;
+}
+
+if (accessToken.value) {
+  message.value = '已恢复当前登录会话';
+  void loadWorkspace();
 }
 </script>
 
@@ -66,11 +90,14 @@ async function switchOrganization(event: Event) {
   <main v-else class="workspace">
     <header>
       <div><p class="eyebrow">INDUSTRIAL SUPPLIER MANAGEMENT</p><h1>供应商管理平台</h1></div>
-      <label class="organization-switcher">当前组织
-        <select :value="currentOrganization?.id" @change="switchOrganization">
-          <option v-for="item in organizationOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
-        </select>
-      </label>
+      <div class="organization-switcher">
+        <label>当前组织
+          <select :value="currentOrganization?.id" @change="switchOrganization">
+            <option v-for="item in organizationOptions" :key="item.id" :value="item.id">{{ item.label }}</option>
+          </select>
+        </label>
+        <button type="button" @click="logout()">退出登录</button>
+      </div>
     </header>
     <div class="workspace-grid">
       <nav class="navigation" aria-label="主菜单">
