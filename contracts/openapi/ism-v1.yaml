@@ -1282,6 +1282,50 @@ paths:
       parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewImprovement' } } } }
       responses: { '200': { description: Improvement reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist:
+    get:
+      operationId: listSupplierBlacklist
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/BlacklistStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Blacklist cases, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistPageResponse' } } } } }
+    post:
+      operationId: createSupplierBlacklistCase
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateBlacklistCase' } } } }
+      responses: { '200': { description: Draft case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{id}:
+    get:
+      operationId: getSupplierBlacklistCase
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Blacklist case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } } }
+  /supplier-blacklist/{id}/submit:
+    post:
+      operationId: submitSupplierBlacklistCase
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VersionCommand' } } } }
+      responses: { '200': { description: Submitted case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } } }
+  /supplier-blacklist/{id}/review:
+    post:
+      operationId: reviewSupplierBlacklistCase
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewBlacklistCase' } } } }
+      responses: { '200': { description: Reviewed case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } } }
+  /supplier-blacklist/{id}/revoke:
+    post:
+      operationId: revokeSupplierBlacklistCase
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RevokeBlacklistCase' } } } }
+      responses: { '200': { description: Revoked case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1798,6 +1842,19 @@ components:
       required: [id, evaluationId, rootCause, actionPlan, dueDate, status, createdBy, version, createdAt, updatedAt, events]
       properties: { id: { type: string }, evaluationId: { type: string }, rootCause: { type: string }, actionPlan: { type: string }, dueDate: { type: string, format: date }, status: { $ref: '#/components/schemas/ImprovementStatus' }, completionNote: { type: string }, evidenceFileId: { type: string }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/ImprovementEvent' } } }
     ImprovementResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { oneOf: [{ $ref: '#/components/schemas/ImprovementPlan' }, { type: 'null' }] } } }] }
+    BlacklistStatus: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, REVOKED] }
+    CreateBlacklistCase: { type: object, required: [supplierId, reason], properties: { supplierId: { type: string }, reason: { type: string, maxLength: 1000 }, sourceRef: { type: string, maxLength: 200 } } }
+    VersionCommand: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } }
+    ReviewBlacklistCase: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
+    RevokeBlacklistCase: { type: object, required: [reason, version], properties: { reason: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
+    BlacklistEvent: { type: object, required: [id, action, toStatus, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, fromStatus: { type: string }, toStatus: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
+    BlacklistCase:
+      type: object
+      required: [id, supplierId, organizationId, supplierCode, supplierName, reason, status, createdBy, version, createdAt, updatedAt, events]
+      properties: { id: { type: string }, supplierId: { type: string }, organizationId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, reason: { type: string }, sourceRef: { type: string }, status: { $ref: '#/components/schemas/BlacklistStatus' }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, revokedReason: { type: string }, revokedBy: { type: string }, revokedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/BlacklistEvent' } } }
+    BlacklistPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/BlacklistCase' } } } }
+    BlacklistResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/BlacklistCase' } } }] }
+    BlacklistPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/BlacklistPage' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

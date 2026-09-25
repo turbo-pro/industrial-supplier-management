@@ -42,6 +42,7 @@ import io.github.turbopro.ism.quality.QualityNcrMapper;
 import io.github.turbopro.ism.performance.PerformanceMapper;
 import io.github.turbopro.ism.performance.ImprovementMapper;
 import io.github.turbopro.ism.supplier.SupplierReferenceService;
+import io.github.turbopro.ism.supplier.BlacklistMapper;
 import io.github.turbopro.ism.resource.file.FileReferenceService;
 import io.github.turbopro.ism.quality.QualityPerformanceFacts;
 import io.github.turbopro.ism.safety.SafetyPerformanceFacts;
@@ -212,6 +213,7 @@ class B0InfrastructureIT {
     @Autowired private PerformanceMapper performanceMapper;
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
+    @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
     @Autowired private SafetyPerformanceFacts safetyPerformanceFacts;
@@ -383,6 +385,18 @@ class B0InfrastructureIT {
                 assertThat(performanceMapper.updateRule(tenantId, 40, 20, 25, 15, 1, 0)).isOne();
                 assertThat(performanceMapper.updateRule(tenantId, 35, 25, 25, 15, 1, 0)).isZero();
                 assertThat(supplierReferenceService.active(supplierId).name()).isEqualTo("Performance Supplier");
+                long blacklistId = 9950;
+                assertThat(blacklistMapper.insert(blacklistId, tenantId, supplierId, orgId,
+                        "PERFORMANCE_SUP", "Performance Supplier", "重大违约", "CASE-1", 1)).isOne();
+                assertThat(blacklistMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
+                assertThat(blacklistMapper.submit(tenantId, blacklistId, 1, 0)).isOne();
+                assertThat(blacklistMapper.review(tenantId, blacklistId, "APPROVE", "证据充分", 2, 1)).isOne();
+                assertThat(blacklistMapper.active(tenantId, supplierId)).isOne();
+                assertThat(supplierReferenceService.active(supplierId)).isNull();
+                assertThat(blacklistMapper.review(tenantId, blacklistId, "REJECT", "过期", 2, 1)).isZero();
+                assertThat(blacklistMapper.revoke(tenantId, blacklistId, "复核解除", 2, 2)).isOne();
+                assertThat(blacklistMapper.active(tenantId, supplierId)).isZero();
+                assertThat(supplierReferenceService.active(supplierId)).isNotNull();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
                 assertThat(qualityPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
                 assertThat(safetyPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
@@ -425,6 +439,8 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_blacklist_case WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_plan WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_evaluation_event WHERE tenant_id=?", tenantId);

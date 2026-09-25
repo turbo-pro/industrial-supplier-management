@@ -1898,6 +1898,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/supplier-blacklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierBlacklist"];
+        put?: never;
+        post: operations["createSupplierBlacklistCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierBlacklistCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitSupplierBlacklistCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewSupplierBlacklistCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeSupplierBlacklistCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2957,6 +3037,74 @@ export interface components {
         };
         ImprovementResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["ImprovementPlan"] | null;
+        };
+        /** @enum {string} */
+        BlacklistStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVOKED";
+        CreateBlacklistCase: {
+            supplierId: string;
+            reason: string;
+            sourceRef?: string;
+        };
+        VersionCommand: {
+            version: number;
+        };
+        ReviewBlacklistCase: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        RevokeBlacklistCase: {
+            reason: string;
+            version: number;
+        };
+        BlacklistEvent: {
+            id: string;
+            action: string;
+            fromStatus?: string;
+            toStatus: string;
+            comment?: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        BlacklistCase: {
+            id: string;
+            supplierId: string;
+            organizationId: string;
+            supplierCode: string;
+            supplierName: string;
+            reason: string;
+            sourceRef?: string;
+            status: components["schemas"]["BlacklistStatus"];
+            reviewComment?: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            revokedReason?: string;
+            revokedBy?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+            createdBy: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            events: components["schemas"]["BlacklistEvent"][];
+        };
+        BlacklistPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["BlacklistCase"][];
+        };
+        BlacklistResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["BlacklistCase"];
+        };
+        BlacklistPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["BlacklistPage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -7514,6 +7662,156 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierBlacklist: {
+        parameters: {
+            query?: {
+                supplierId?: string;
+                status?: components["schemas"]["BlacklistStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Blacklist cases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistPageResponse"];
+                };
+            };
+        };
+    };
+    createSupplierBlacklistCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBlacklistCase"];
+            };
+        };
+        responses: {
+            /** @description Draft case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierBlacklistCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Blacklist case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistResponse"];
+                };
+            };
+        };
+    };
+    submitSupplierBlacklistCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionCommand"];
+            };
+        };
+        responses: {
+            /** @description Submitted case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistResponse"];
+                };
+            };
+        };
+    };
+    reviewSupplierBlacklistCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewBlacklistCase"];
+            };
+        };
+        responses: {
+            /** @description Reviewed case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistResponse"];
+                };
+            };
+        };
+    };
+    revokeSupplierBlacklistCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeBlacklistCase"];
+            };
+        };
+        responses: {
+            /** @description Revoked case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlacklistResponse"];
+                };
+            };
         };
     };
     refreshToken: {
