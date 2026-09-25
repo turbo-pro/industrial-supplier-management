@@ -40,6 +40,7 @@ import io.github.turbopro.ism.integration.search.SearchService;
 import io.github.turbopro.ism.safety.SafetyCredentialMapper;
 import io.github.turbopro.ism.quality.QualityNcrMapper;
 import io.github.turbopro.ism.performance.PerformanceMapper;
+import io.github.turbopro.ism.performance.ImprovementMapper;
 import io.github.turbopro.ism.supplier.SupplierReferenceService;
 import io.github.turbopro.ism.resource.file.FileReferenceService;
 import io.github.turbopro.ism.quality.QualityPerformanceFacts;
@@ -209,6 +210,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
     @Autowired private QualityNcrMapper qualityNcrMapper;
     @Autowired private PerformanceMapper performanceMapper;
+    @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -409,8 +411,22 @@ class B0InfrastructureIT {
                 assertThat(performanceMapper.review(tenantId, evaluationId, "REJECT", "再次审核", 2, 2)).isZero();
                 assertThat(performanceMapper.get(tenantId, evaluationId).status()).isEqualTo("APPROVED");
                 assertThat(performanceMapper.events(tenantId, evaluationId)).hasSize(1);
+                long planId = 9948;
+                assertThat(improvementMapper.insert(planId, tenantId, evaluationId, "根因", "改进措施",
+                        java.time.LocalDate.now().plusDays(7), 1)).isOne();
+                assertThat(improvementMapper.get(tenantId, evaluationId).status()).isEqualTo("OPEN");
+                assertThat(improvementMapper.submit(tenantId, evaluationId, "已完成", fileId, 1, 0)).isOne();
+                assertThat(improvementMapper.review(tenantId, evaluationId, "REWORK", "证据不足", 2, 1)).isOne();
+                assertThat(improvementMapper.submit(tenantId, evaluationId, "补充证据", fileId, 1, 2)).isOne();
+                assertThat(improvementMapper.review(tenantId, evaluationId, "ACCEPT", "验收通过", 2, 3)).isOne();
+                assertThat(improvementMapper.review(tenantId, evaluationId, "REWORK", "过期版本", 2, 3)).isZero();
+                assertThat(improvementMapper.get(tenantId, evaluationId).status()).isEqualTo("ACCEPTED");
+                assertThat(improvementMapper.event(9949, tenantId, planId, "CREATE", null, "OPEN", null, 1)).isOne();
+                assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM per_improvement_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM per_improvement_plan WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_evaluation_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_evaluation_item WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id=?", tenantId);

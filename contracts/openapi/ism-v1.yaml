@@ -1252,6 +1252,36 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPerformanceEvaluation' } } } }
       responses: { '200': { description: Scorecard reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/PerformanceResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /performance/evaluations/{evaluationId}/improvement:
+    get:
+      operationId: getPerformanceImprovement
+      tags: [Performance]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Improvement plan or null when absent, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: createPerformanceImprovement
+      tags: [Performance]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateImprovement' } } } }
+      responses: { '200': { description: Improvement opened, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /performance/evaluations/{evaluationId}/improvement/submit:
+    post:
+      operationId: submitPerformanceImprovement
+      tags: [Performance]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitImprovement' } } } }
+      responses: { '200': { description: Improvement submitted, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /performance/evaluations/{evaluationId}/improvement/review:
+    post:
+      operationId: reviewPerformanceImprovement
+      tags: [Performance]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewImprovement' } } } }
+      responses: { '200': { description: Improvement reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1758,6 +1788,16 @@ components:
     PerformanceResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PerformanceEvaluation' } } }] }
     PerformancePageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PerformancePage' } } }] }
     PerformanceEventsResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/PerformanceEvent' } } } }] }
+    ImprovementStatus: { type: string, enum: [OPEN, SUBMITTED, ACCEPTED, REWORK] }
+    CreateImprovement: { type: object, required: [rootCause, actionPlan, dueDate], properties: { rootCause: { type: string, maxLength: 1000 }, actionPlan: { type: string, maxLength: 2000 }, dueDate: { type: string, format: date } } }
+    SubmitImprovement: { type: object, required: [completionNote, evidenceFileId, version], properties: { completionNote: { type: string, maxLength: 2000 }, evidenceFileId: { type: string }, version: { type: integer, minimum: 0 } } }
+    ReviewImprovement: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [ACCEPT, REWORK] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
+    ImprovementEvent: { type: object, required: [id, action, toStatus, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, fromStatus: { type: string }, toStatus: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
+    ImprovementPlan:
+      type: object
+      required: [id, evaluationId, rootCause, actionPlan, dueDate, status, createdBy, version, createdAt, updatedAt, events]
+      properties: { id: { type: string }, evaluationId: { type: string }, rootCause: { type: string }, actionPlan: { type: string }, dueDate: { type: string, format: date }, status: { $ref: '#/components/schemas/ImprovementStatus' }, completionNote: { type: string }, evidenceFileId: { type: string }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/ImprovementEvent' } } }
+    ImprovementResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { oneOf: [{ $ref: '#/components/schemas/ImprovementPlan' }, { type: 'null' }] } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

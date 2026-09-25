@@ -1850,6 +1850,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/performance/evaluations/{evaluationId}/improvement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPerformanceImprovement"];
+        put?: never;
+        post: operations["createPerformanceImprovement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{evaluationId}/improvement/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitPerformanceImprovement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{evaluationId}/improvement/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewPerformanceImprovement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2855,6 +2903,60 @@ export interface components {
         };
         PerformanceEventsResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["PerformanceEvent"][];
+        };
+        /** @enum {string} */
+        ImprovementStatus: "OPEN" | "SUBMITTED" | "ACCEPTED" | "REWORK";
+        CreateImprovement: {
+            rootCause: string;
+            actionPlan: string;
+            /** Format: date */
+            dueDate: string;
+        };
+        SubmitImprovement: {
+            completionNote: string;
+            evidenceFileId: string;
+            version: number;
+        };
+        ReviewImprovement: {
+            /** @enum {string} */
+            decision: "ACCEPT" | "REWORK";
+            comment: string;
+            version: number;
+        };
+        ImprovementEvent: {
+            id: string;
+            action: string;
+            fromStatus?: string;
+            toStatus: string;
+            comment?: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ImprovementPlan: {
+            id: string;
+            evaluationId: string;
+            rootCause: string;
+            actionPlan: string;
+            /** Format: date */
+            dueDate: string;
+            status: components["schemas"]["ImprovementStatus"];
+            completionNote?: string;
+            evidenceFileId?: string;
+            reviewComment?: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            createdBy: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            events: components["schemas"]["ImprovementEvent"][];
+        };
+        ImprovementResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ImprovementPlan"] | null;
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -7305,6 +7407,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPerformanceImprovement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Improvement plan or null when absent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImprovementResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    createPerformanceImprovement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateImprovement"];
+            };
+        };
+        responses: {
+            /** @description Improvement opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImprovementResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    submitPerformanceImprovement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitImprovement"];
+            };
+        };
+        responses: {
+            /** @description Improvement submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImprovementResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewPerformanceImprovement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewImprovement"];
+            };
+        };
+        responses: {
+            /** @description Improvement reviewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImprovementResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];
