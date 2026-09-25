@@ -37,6 +37,8 @@ import io.github.turbopro.ism.resource.print.PrintModels;
 import io.github.turbopro.ism.resource.print.PrintService;
 import io.github.turbopro.ism.integration.search.SearchModels;
 import io.github.turbopro.ism.integration.search.SearchService;
+import io.github.turbopro.ism.safety.SafetyCredentialMapper;
+import io.github.turbopro.ism.resource.supplier.SupplierResourceMapper;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
@@ -197,6 +199,8 @@ class B0InfrastructureIT {
     @Autowired private TaskCenterService taskCenterService;
     @Autowired private PrintService printService;
     @Autowired private SearchService searchService;
+    @Autowired private SafetyCredentialMapper safetyCredentialMapper;
+    @Autowired private SupplierResourceMapper supplierResourceMapper;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -215,6 +219,48 @@ class B0InfrastructureIT {
         assertThat(marker.createdAt()).isNotNull();
 
         assertThat(schemaMarkerMapper.deleteByCode(markerCode)).isOne();
+    }
+
+    @Test
+    void shouldPersistCredentialAndRecalculateEntryEligibility() {
+        long tenantId = 9901, orgId = 9902, supplierId = 9903, personId = 9904;
+        long fileId = 9905, credentialId = 9906;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "SAFETY_CRED_IT", "Safety Tenant", "ACTIVE");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",
+                    orgId, tenantId, "SAFETY_SITE", "Safety Site", "SITE", "ACTIVE");
+            jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                    supplierId, tenantId, orgId, "SAFETY_SUP", "Safety Supplier", "SERVICE", "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO res_supplier_person(id,tenant_id,organization_id,supplier_id,person_code,person_name,id_type,id_number_hash,id_number_masked,special_work_type,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    personId, tenantId, orgId, supplierId, "SAFETY_PERSON", "Safety Worker", "OTHER",
+                    "a".repeat(64), "****1234", "WELDING", 1, 1);
+            jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    fileId, tenantId, 1, "training.pdf", "application/pdf", 1, "b".repeat(64), "LOCAL", "it/credential", "ACTIVE");
+
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
+            assertThat(supplierResourceMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
+            assertThat(safetyCredentialMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
+            assertThat(safetyCredentialMapper.activeFile(tenantId, fileId)).isOne();
+            assertThat(safetyCredentialMapper.insert(credentialId, tenantId, orgId, supplierId, personId,
+                    null, "SAFETY_TRAINING", "TRAINING", null, "入场培训", null, true,
+                    java.time.LocalDate.now().minusDays(1), java.time.LocalDate.now().plusDays(30), fileId, 1)).isOne();
+            assertThat(safetyCredentialMapper.get(tenantId, credentialId).status()).isEqualTo("PENDING");
+            assertThat(safetyCredentialMapper.review(tenantId, credentialId, "PENDING", "VERIFIED", null, 2, 0)).isOne();
+            assertThat(safetyCredentialMapper.validTraining(tenantId, personId)).isOne();
+            assertThat(supplierResourceMapper.validTraining(tenantId, personId)).isOne();
+            assertThat(safetyCredentialMapper.validSpecialWork(tenantId, personId, "WELDING")).isZero();
+            assertThat(safetyCredentialMapper.review(tenantId, credentialId, "VERIFIED", "REVOKED", "撤销", 2, 1)).isOne();
+            assertThat(supplierResourceMapper.validTraining(tenantId, personId)).isZero();
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM saf_person_credential WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
+        }
     }
 
     @Test

@@ -1098,6 +1098,34 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifySafetyRectification' } } } }
       responses: { '200': { description: Rectification verified, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyIssueResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/credentials:
+    get:
+      operationId: listSafetyCredentials
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: personId, in: query, schema: { type: string } }, { name: kind, in: query, schema: { $ref: '#/components/schemas/SafetyCredentialKind' } }, { name: status, in: query, schema: { $ref: '#/components/schemas/SafetyCredentialStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Person safety credentials, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyCredentialPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: createSafetyCredential
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateSafetyCredential' } } } }
+      responses: { '200': { description: Credential registered, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyCredentialResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/credentials/{id}/review:
+    post:
+      operationId: reviewSafetyCredential
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewSafetyCredential' } } } }
+      responses: { '200': { description: Credential reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyCredentialResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/persons/{personId}/eligibility:
+    get:
+      operationId: getPersonSafetyEligibility
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: personId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Current entry readiness, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyEligibilityResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1490,14 +1518,15 @@ components:
     ProjectPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ProjectPage' } } }] }
     PersonStatus: { type: string, enum: [PENDING, ACTIVE, SUSPENDED, EXITED] }
     IdType: { type: string, enum: [NATIONAL_ID, PASSPORT, OTHER] }
+    SpecialWorkType: { type: string, enum: [ELECTRICAL, WELDING, WORK_AT_HEIGHT, OTHER] }
     SavePerson:
       type: object
       required: [code, name, supplierId, idType, idNumber, version]
-      properties: { code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }, name: { type: string, maxLength: 100 }, supplierId: { type: string }, projectId: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumber: { type: string, minLength: 1, maxLength: 64, writeOnly: true }, mobile: { type: string }, jobTitle: { type: string, maxLength: 100 }, tradeType: { type: string, maxLength: 100 }, entryDate: { type: string, format: date }, version: { type: integer, minimum: 0 } }
+      properties: { code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }, name: { type: string, maxLength: 100 }, supplierId: { type: string }, projectId: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumber: { type: string, minLength: 1, maxLength: 64, writeOnly: true }, mobile: { type: string }, jobTitle: { type: string, maxLength: 100 }, tradeType: { type: string, maxLength: 100 }, specialWorkType: { $ref: '#/components/schemas/SpecialWorkType' }, entryDate: { type: string, format: date }, version: { type: integer, minimum: 0 } }
     SupplierPerson:
       type: object
       required: [id, organizationId, supplierId, supplierCode, supplierName, code, name, idType, idNumberMasked, status, version, updatedAt]
-      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumberMasked: { type: string }, mobile: { type: string }, jobTitle: { type: string }, tradeType: { type: string }, entryDate: { type: string, format: date }, exitDate: { type: string, format: date }, status: { $ref: '#/components/schemas/PersonStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumberMasked: { type: string }, mobile: { type: string }, jobTitle: { type: string }, tradeType: { type: string }, specialWorkType: { $ref: '#/components/schemas/SpecialWorkType' }, entryDate: { type: string, format: date }, exitDate: { type: string, format: date }, status: { $ref: '#/components/schemas/PersonStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
     PersonPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SupplierPerson' } } } }
     ChangePersonStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/PersonStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
     PersonResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierPerson' } } }] }
@@ -1532,6 +1561,32 @@ components:
     SafetyIssuePage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SafetyIssue' } } } }
     SafetyIssueResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyIssue' } } }] }
     SafetyIssuePageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyIssuePage' } } }] }
+    SafetyCredentialKind: { type: string, enum: [TRAINING, SPECIAL_WORK] }
+    SafetyCredentialStatus: { type: string, enum: [PENDING, VERIFIED, REJECTED, REVOKED] }
+    CreateSafetyCredential:
+      type: object
+      required: [credentialNo, personId, kind, title, effectiveDate, expiryDate, fileId]
+      properties:
+        credentialNo: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }
+        personId: { type: string }
+        kind: { $ref: '#/components/schemas/SafetyCredentialKind' }
+        workType: { $ref: '#/components/schemas/SpecialWorkType' }
+        title: { type: string, maxLength: 200 }
+        examScore: { type: number, minimum: 0, maximum: 100 }
+        passed: { type: boolean }
+        effectiveDate: { type: string, format: date }
+        expiryDate: { type: string, format: date }
+        fileId: { type: string }
+    ReviewSafetyCredential: { type: object, required: [decision, version], properties: { decision: { type: string, enum: [APPROVE, REJECT, REVOKE] }, comment: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    SafetyCredential:
+      type: object
+      required: [id, personId, personCode, personName, credentialNo, kind, title, effectiveDate, expiryDate, fileId, status, currentlyValid, version, updatedAt]
+      properties: { id: { type: string }, personId: { type: string }, personCode: { type: string }, personName: { type: string }, credentialNo: { type: string }, kind: { $ref: '#/components/schemas/SafetyCredentialKind' }, workType: { $ref: '#/components/schemas/SpecialWorkType' }, title: { type: string }, examScore: { type: number }, passed: { type: boolean }, effectiveDate: { type: string, format: date }, expiryDate: { type: string, format: date }, fileId: { type: string }, status: { $ref: '#/components/schemas/SafetyCredentialStatus' }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, currentlyValid: { type: boolean }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+    SafetyCredentialPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SafetyCredential' } } } }
+    SafetyEligibility: { type: object, required: [personId, personName, personStatus, trainingValid, specialWorkValid, eligible], properties: { personId: { type: string }, personName: { type: string }, personStatus: { $ref: '#/components/schemas/PersonStatus' }, requiredWorkType: { $ref: '#/components/schemas/SpecialWorkType' }, trainingValid: { type: boolean }, specialWorkValid: { type: boolean }, eligible: { type: boolean } } }
+    SafetyCredentialResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyCredential' } } }] }
+    SafetyCredentialPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyCredentialPage' } } }] }
+    SafetyEligibilityResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyEligibility' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

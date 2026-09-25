@@ -23,10 +23,10 @@ class SupplierResourceServiceTest {
         when(ids.nextId()).thenReturn(99L);when(mapper.supplierOrg(10,30)).thenReturn(20L);
         when(mapper.person(10,99)).thenReturn(person("PENDING"));
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
-            service.createPerson(new SupplierResourceModels.SavePerson("EMP-001","张三","30",null,SupplierResourceModels.IdType.NATIONAL_ID,"110101199001011234","13800138000",null,null,LocalDate.now(),0));
+            service.createPerson(new SupplierResourceModels.SavePerson("EMP-001","张三","30",null,SupplierResourceModels.IdType.NATIONAL_ID,"110101199001011234","13800138000",null,null,null,LocalDate.now(),0));
         }
         var hash=ArgumentCaptor.forClass(String.class);var masked=ArgumentCaptor.forClass(String.class);
-        verify(mapper).insertPerson(eq(99L),eq(10L),eq(7L),eq(20L),eq(30L),isNull(),eq("EMP-001"),eq("张三"),eq("NATIONAL_ID"),hash.capture(),masked.capture(),eq("13800138000"),isNull(),isNull(),any());
+        verify(mapper).insertPerson(eq(99L),eq(10L),eq(7L),eq(20L),eq(30L),isNull(),eq("EMP-001"),eq("张三"),eq("NATIONAL_ID"),hash.capture(),masked.capture(),eq("13800138000"),isNull(),isNull(),isNull(),any());
         assertEquals(64,hash.getValue().length());assertNotEquals("110101199001011234",hash.getValue());
         assertEquals("**************1234",masked.getValue());assertFalse(masked.getValue().contains("19900101"));
     }
@@ -50,6 +50,19 @@ class SupplierResourceServiceTest {
     }
 
     private AuthorizationContext.Scope auth(){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("resource:person",DataScope.all(),"resource:asset",DataScope.all()),Set.of()));}
-    private SupplierResourceModels.PersonRow person(String status){return new SupplierResourceModels.PersonRow(99,20,30,null,"SUP-001","测试供应商",null,"EMP-001","张三","NATIONAL_ID","110101********1234","13800138000",null,null,LocalDate.now(),null,status,null,7,1,LocalDateTime.now());}
+    @Test void activationNeedsVerifiedTrainingAndMatchingSpecialWork(){
+        when(mapper.person(10,99)).thenReturn(person("PENDING", "WELDING"));
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertThrows(ApiException.class,()->service.personStatus(99,new SupplierResourceModels.PersonStatusCommand(SupplierResourceModels.PersonStatus.ACTIVE,null,1)));
+            when(mapper.validTraining(10,99)).thenReturn(1);
+            assertThrows(ApiException.class,()->service.personStatus(99,new SupplierResourceModels.PersonStatusCommand(SupplierResourceModels.PersonStatus.ACTIVE,null,1)));
+            when(mapper.validSpecialWork(10,99,"WELDING")).thenReturn(1);
+            when(mapper.personStatus(10,7,99,"ACTIVE",null,1)).thenReturn(1);
+            assertEquals(SupplierResourceModels.PersonStatus.PENDING,service.personStatus(99,new SupplierResourceModels.PersonStatusCommand(SupplierResourceModels.PersonStatus.ACTIVE,null,1)).status());
+        }
+        verify(mapper,times(1)).personStatus(10,7,99,"ACTIVE",null,1);
+    }
+    private SupplierResourceModels.PersonRow person(String status){return person(status,null);}
+    private SupplierResourceModels.PersonRow person(String status,String workType){return new SupplierResourceModels.PersonRow(99,20,30,null,"SUP-001","测试供应商",null,"EMP-001","张三","NATIONAL_ID","110101********1234","13800138000",null,null,workType,LocalDate.now(),null,status,null,7,1,LocalDateTime.now());}
     private SupplierResourceModels.AssetRow asset(String status){return new SupplierResourceModels.AssetRow(88,20,30,null,"SUP-001","测试供应商",null,"VEH-001","运输车辆","VEHICLE","沪A12345",null,null,null,null,null,status,null,7,1,LocalDateTime.now());}
 }

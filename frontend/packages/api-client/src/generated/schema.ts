@@ -1578,6 +1578,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/safety/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSafetyCredentials"];
+        put?: never;
+        post: operations["createSafetyCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/credentials/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewSafetyCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/persons/{personId}/eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPersonSafetyEligibility"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2051,6 +2099,8 @@ export interface components {
         PersonStatus: "PENDING" | "ACTIVE" | "SUSPENDED" | "EXITED";
         /** @enum {string} */
         IdType: "NATIONAL_ID" | "PASSPORT" | "OTHER";
+        /** @enum {string} */
+        SpecialWorkType: "ELECTRICAL" | "WELDING" | "WORK_AT_HEIGHT" | "OTHER";
         SavePerson: {
             code: string;
             name: string;
@@ -2061,6 +2111,7 @@ export interface components {
             mobile?: string;
             jobTitle?: string;
             tradeType?: string;
+            specialWorkType?: components["schemas"]["SpecialWorkType"];
             /** Format: date */
             entryDate?: string;
             version: number;
@@ -2080,6 +2131,7 @@ export interface components {
             mobile?: string;
             jobTitle?: string;
             tradeType?: string;
+            specialWorkType?: components["schemas"]["SpecialWorkType"];
             /** Format: date */
             entryDate?: string;
             /** Format: date */
@@ -2250,6 +2302,81 @@ export interface components {
         };
         SafetyIssuePageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["SafetyIssuePage"];
+        };
+        /** @enum {string} */
+        SafetyCredentialKind: "TRAINING" | "SPECIAL_WORK";
+        /** @enum {string} */
+        SafetyCredentialStatus: "PENDING" | "VERIFIED" | "REJECTED" | "REVOKED";
+        CreateSafetyCredential: {
+            credentialNo: string;
+            personId: string;
+            kind: components["schemas"]["SafetyCredentialKind"];
+            workType?: components["schemas"]["SpecialWorkType"];
+            title: string;
+            examScore?: number;
+            passed?: boolean;
+            /** Format: date */
+            effectiveDate: string;
+            /** Format: date */
+            expiryDate: string;
+            fileId: string;
+        };
+        ReviewSafetyCredential: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT" | "REVOKE";
+            comment?: string;
+            version: number;
+        };
+        SafetyCredential: {
+            id: string;
+            personId: string;
+            personCode: string;
+            personName: string;
+            credentialNo: string;
+            kind: components["schemas"]["SafetyCredentialKind"];
+            workType?: components["schemas"]["SpecialWorkType"];
+            title: string;
+            examScore?: number;
+            passed?: boolean;
+            /** Format: date */
+            effectiveDate: string;
+            /** Format: date */
+            expiryDate: string;
+            fileId: string;
+            status: components["schemas"]["SafetyCredentialStatus"];
+            reviewComment?: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            currentlyValid: boolean;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SafetyCredentialPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SafetyCredential"][];
+        };
+        SafetyEligibility: {
+            personId: string;
+            personName: string;
+            personStatus: components["schemas"]["PersonStatus"];
+            requiredWorkType?: components["schemas"]["SpecialWorkType"];
+            trainingValid: boolean;
+            specialWorkValid: boolean;
+            eligible: boolean;
+        };
+        SafetyCredentialResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyCredential"];
+        };
+        SafetyCredentialPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyCredentialPage"];
+        };
+        SafetyEligibilityResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyEligibility"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -6148,6 +6275,109 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSafetyCredentials: {
+        parameters: {
+            query?: {
+                personId?: string;
+                kind?: components["schemas"]["SafetyCredentialKind"];
+                status?: components["schemas"]["SafetyCredentialStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Person safety credentials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyCredentialPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    createSafetyCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSafetyCredential"];
+            };
+        };
+        responses: {
+            /** @description Credential registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyCredentialResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewSafetyCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSafetyCredential"];
+            };
+        };
+        responses: {
+            /** @description Credential reviewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyCredentialResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPersonSafetyEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current entry readiness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyEligibilityResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
         };
     };
     refreshToken: {
