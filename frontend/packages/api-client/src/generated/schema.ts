@@ -1674,6 +1674,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/quality/nonconformances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQualityNonconformances"];
+        put?: never;
+        post: operations["createQualityNonconformance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/quality/nonconformances/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getQualityNonconformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/quality/nonconformances/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getQualityNonconformanceEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/quality/nonconformances/{id}/rectification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rectifyQualityNonconformance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/quality/nonconformances/{id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifyQualityNonconformance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2466,6 +2546,111 @@ export interface components {
         };
         SafetyAttendancePageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["SafetyAttendancePage"];
+        };
+        /** @enum {string} */
+        QualityNcrCategory: "MATERIAL" | "PROCESS" | "DELIVERY" | "DOCUMENT" | "OTHER";
+        /** @enum {string} */
+        QualityNcrSeverity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+        /** @enum {string} */
+        QualityNcrStatus: "OPEN" | "PENDING_REVIEW" | "CLOSED";
+        CreateQualityNcr: {
+            ncrNo: string;
+            projectId: string;
+            title: string;
+            category: components["schemas"]["QualityNcrCategory"];
+            severity: components["schemas"]["QualityNcrSeverity"];
+            description: string;
+            /** Format: date */
+            inspectionDate: string;
+            inspectedQuantity: number;
+            defectiveQuantity: number;
+            unit: string;
+            evidenceFileId: string;
+            /** Format: date */
+            deadline: string;
+            responsibleUserId: string;
+        };
+        RectifyQualityNcr: {
+            rootCause: string;
+            correction: string;
+            preventiveAction: string;
+            fileId: string;
+            version: number;
+        };
+        VerifyQualityNcr: {
+            /** @enum {string} */
+            decision: "PASS" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        QualityNcr: {
+            id: string;
+            organizationId: string;
+            projectId: string;
+            supplierId: string;
+            projectCode: string;
+            projectName: string;
+            supplierCode: string;
+            supplierName: string;
+            ncrNo: string;
+            title: string;
+            category: components["schemas"]["QualityNcrCategory"];
+            severity: components["schemas"]["QualityNcrSeverity"];
+            description: string;
+            /** Format: date */
+            inspectionDate: string;
+            inspectedQuantity: number;
+            defectiveQuantity: number;
+            unit: string;
+            evidenceFileId: string;
+            /** Format: date */
+            deadline: string;
+            responsibleUserId: string;
+            status: components["schemas"]["QualityNcrStatus"];
+            rootCause?: string;
+            correction?: string;
+            preventiveAction?: string;
+            actionFileId?: string;
+            /** Format: date-time */
+            submittedAt?: string;
+            verificationResult?: string;
+            verificationComment?: string;
+            verifiedBy?: string;
+            /** Format: date-time */
+            verifiedAt?: string;
+            overdue: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        QualityNcrPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["QualityNcr"][];
+        };
+        QualityNcrEvent: {
+            id: string;
+            action: string;
+            fromStatus?: string;
+            toStatus: string;
+            note?: string;
+            fileId?: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        QualityNcrResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualityNcr"];
+        };
+        QualityNcrPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualityNcrPage"];
+        };
+        QualityNcrEventsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualityNcrEvent"][];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -6542,6 +6727,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SafetyAttendanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listQualityNonconformances: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["QualityNcrStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quality nonconformances */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    createQualityNonconformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateQualityNcr"];
+            };
+        };
+        responses: {
+            /** @description Nonconformance registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getQualityNonconformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nonconformance detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    getQualityNonconformanceEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nonconformance history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrEventsResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    rectifyQualityNonconformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RectifyQualityNcr"];
+            };
+        };
+        responses: {
+            /** @description Corrective action submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    verifyQualityNonconformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyQualityNcr"];
+            };
+        };
+        responses: {
+            /** @description Corrective action verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityNcrResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];

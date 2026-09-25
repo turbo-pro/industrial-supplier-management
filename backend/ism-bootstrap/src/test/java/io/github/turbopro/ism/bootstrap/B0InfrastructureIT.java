@@ -38,6 +38,7 @@ import io.github.turbopro.ism.resource.print.PrintService;
 import io.github.turbopro.ism.integration.search.SearchModels;
 import io.github.turbopro.ism.integration.search.SearchService;
 import io.github.turbopro.ism.safety.SafetyCredentialMapper;
+import io.github.turbopro.ism.quality.QualityNcrMapper;
 import io.github.turbopro.ism.resource.supplier.SupplierResourceMapper;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
@@ -201,6 +202,7 @@ class B0InfrastructureIT {
     @Autowired private SearchService searchService;
     @Autowired private SafetyCredentialMapper safetyCredentialMapper;
     @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
+    @Autowired private QualityNcrMapper qualityNcrMapper;
     @Autowired private SupplierResourceMapper supplierResourceMapper;
 
     @Autowired
@@ -295,6 +297,55 @@ class B0InfrastructureIT {
         } finally {
             jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
+        }
+    }
+
+    @Test
+    void shouldPersistQualityCorrectionVerificationAndHistory() {
+        long tenantId = 9931, orgId = 9932, supplierId = 9933, projectId = 9934;
+        long fileId = 9935, ncrId = 9936;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "QUALITY_IT", "Quality Tenant", "ACTIVE");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",
+                    orgId, tenantId, "QUALITY_SITE", "Quality Site", "SITE", "ACTIVE");
+            jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                    supplierId, tenantId, orgId, "QUALITY_SUP", "Quality Supplier", "SERVICE", "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    projectId, tenantId, orgId, supplierId, "QUALITY_PRJ", "Quality Project", "SERVICE",
+                    java.time.LocalDate.now().minusDays(1), java.time.LocalDate.now().plusDays(30), 1, "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    fileId, tenantId, 1, "quality.pdf", "application/pdf", 1, "d".repeat(64), "LOCAL", "it/quality", "ACTIVE");
+            jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,?)",
+                    9938, tenantId, "quality_it", "Quality Tester", "unused", "ACTIVE");
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
+                assertThat(qualityNcrMapper.activeProject(tenantId, projectId).supplierId()).isEqualTo(supplierId);
+                assertThat(qualityNcrMapper.activeFile(tenantId, fileId)).isOne();
+                assertThat(qualityNcrMapper.activeUser(tenantId, 9938)).isOne();
+                assertThat(qualityNcrMapper.insert(ncrId, tenantId, orgId, projectId, supplierId,
+                        "NCR-IT", "焊缝缺陷", "PROCESS", "HIGH", "抽样不合格",
+                        java.time.LocalDate.now(), new java.math.BigDecimal("10.000"), new java.math.BigDecimal("2.000"),
+                        "件", fileId, java.time.LocalDate.now().plusDays(7), 1, 1)).isOne();
+                assertThat(qualityNcrMapper.insertEvent(9937, tenantId, ncrId, "CREATE", null, "OPEN", "抽样不合格", fileId, 1)).isOne();
+                assertThat(qualityNcrMapper.get(tenantId, ncrId).status()).isEqualTo("OPEN");
+                assertThat(qualityNcrMapper.count(tenantId, null, "OPEN", "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1)).isOne();
+                assertThat(qualityNcrMapper.rectify(tenantId, ncrId, "焊接参数错误", "返工", "校准设备", fileId, 1, 0)).isOne();
+                assertThat(qualityNcrMapper.verify(tenantId, ncrId, "REJECT", "仍不合格", 1, 1)).isOne();
+                assertThat(qualityNcrMapper.rectify(tenantId, ncrId, "焊接参数错误", "再次返工", "校准设备", fileId, 1, 2)).isOne();
+                assertThat(qualityNcrMapper.verify(tenantId, ncrId, "PASS", "合格", 1, 3)).isOne();
+                assertThat(qualityNcrMapper.verify(tenantId, ncrId, "REJECT", "重复复验", 1, 4)).isZero();
+                assertThat(qualityNcrMapper.get(tenantId, ncrId).status()).isEqualTo("CLOSED");
+                assertThat(qualityNcrMapper.events(tenantId, ncrId)).hasSize(1);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM qua_ncr_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM qua_nonconformance WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
