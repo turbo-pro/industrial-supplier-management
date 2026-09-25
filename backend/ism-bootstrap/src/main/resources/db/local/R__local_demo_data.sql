@@ -29,4 +29,4 @@ INSERT IGNORE INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_typ
  (9100,9101,'iam:organization','TENANT_ALL'),(9100,9101,'iam:user','TENANT_ALL'),
  (9100,9101,'resource:file','TENANT_ALL'),(9100,9101,'print:template','TENANT_ALL'),
  (9100,9101,'supplier:master','TENANT_ALL'),(9100,9101,'supplier:admission','TENANT_ALL'),
- (9100,9101,'supplier:qualification','TENANT_ALL');
+ (9100,9101,'supplier:qualification','TENANT_ALL'),(9100,9101,'contract','TENANT_ALL'),(9100,9101,'project','TENANT_ALL');

@@ -941,6 +941,76 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualification' } } } }
       responses: { '200': { description: Renewal draft created, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /contracts:
+    get:
+      operationId: listContracts
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/ContractStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Contract page, content: { application/json: { schema: { $ref: '#/components/schemas/ContractPageResponse' } } } } }
+    post:
+      operationId: createContract
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveContract' } } } }
+      responses: { '200': { description: Contract created, content: { application/json: { schema: { $ref: '#/components/schemas/ContractResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /contracts/{id}:
+    get:
+      operationId: getContract
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Contract detail, content: { application/json: { schema: { $ref: '#/components/schemas/ContractResponse' } } } } }
+    put:
+      operationId: updateContract
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveContract' } } } }
+      responses: { '200': { description: Contract updated, content: { application/json: { schema: { $ref: '#/components/schemas/ContractResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /contracts/{id}/status:
+    post:
+      operationId: changeContractStatus
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeContractStatus' } } } }
+      responses: { '200': { description: Contract status changed, content: { application/json: { schema: { $ref: '#/components/schemas/ContractResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/ProjectStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Project page, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectPageResponse' } } } } }
+    post:
+      operationId: createProject
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveProject' } } } }
+      responses: { '200': { description: Project created, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Project detail, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } } }
+    put:
+      operationId: updateProject
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveProject' } } } }
+      responses: { '200': { description: Project updated, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /projects/{id}/status:
+    post:
+      operationId: changeProjectStatus
+      tags: [ContractProject]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeProjectStatus' } } } }
+      responses: { '200': { description: Project status changed, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1279,6 +1349,58 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Qualification' } } }]
     QualificationPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/QualificationPage' } } }]
+    ContractType: { type: string, enum: [PURCHASE, SERVICE, ENGINEERING, FRAMEWORK, OTHER] }
+    ContractStatus: { type: string, enum: [DRAFT, ACTIVE, COMPLETED, TERMINATED, EXPIRED] }
+    SaveContract:
+      type: object
+      required: [contractNo, name, supplierId, type, amount, currency, startDate, endDate, ownerId, fileId, version]
+      properties:
+        contractNo: { type: string }
+        name: { type: string, maxLength: 200 }
+        supplierId: { type: string }
+        type: { $ref: '#/components/schemas/ContractType' }
+        amount: { type: number, minimum: 0 }
+        currency: { type: string }
+        signedDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        ownerId: { type: string }
+        fileId: { type: string }
+        version: { type: integer, minimum: 0 }
+    ContractSummary:
+      type: object
+      required: [id, organizationId, supplierId, supplierCode, supplierName, contractNo, name, type, amount, currency, startDate, endDate, status, version, updatedAt]
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, contractNo: { type: string }, name: { type: string }, type: { $ref: '#/components/schemas/ContractType' }, amount: { type: number }, currency: { type: string }, startDate: { type: string, format: date }, endDate: { type: string, format: date }, status: { $ref: '#/components/schemas/ContractStatus' }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+    Contract:
+      allOf:
+        - $ref: '#/components/schemas/ContractSummary'
+        - type: object
+          required: [ownerId, fileId, createdAt]
+          properties: { signedDate: { type: string, format: date }, ownerId: { type: string }, fileId: { type: string }, terminationReason: { type: string }, createdAt: { type: string, format: date-time } }
+    ContractPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/ContractSummary' } } } }
+    ChangeContractStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/ContractStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    ContractResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Contract' } } }] }
+    ContractPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ContractPage' } } }] }
+    ProjectType: { type: string, enum: [CONSTRUCTION, MAINTENANCE, TECHNICAL_SERVICE, LOGISTICS, OTHER] }
+    ProjectStatus: { type: string, enum: [PLANNED, ACTIVE, SUSPENDED, COMPLETED, CANCELLED] }
+    SaveProject:
+      type: object
+      required: [projectCode, name, supplierId, type, plannedStartDate, plannedEndDate, managerId, version]
+      properties: { projectCode: { type: string }, name: { type: string, maxLength: 200 }, supplierId: { type: string }, contractId: { type: string }, type: { $ref: '#/components/schemas/ProjectType' }, siteAddress: { type: string, maxLength: 300 }, plannedStartDate: { type: string, format: date }, plannedEndDate: { type: string, format: date }, managerId: { type: string }, budgetAmount: { type: number, minimum: 0 }, currency: { type: string }, version: { type: integer, minimum: 0 } }
+    ProjectSummary:
+      type: object
+      required: [id, organizationId, supplierId, supplierCode, supplierName, projectCode, name, type, plannedStartDate, plannedEndDate, status, version, updatedAt]
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, contractId: { type: string }, contractNo: { type: string }, projectCode: { type: string }, name: { type: string }, type: { $ref: '#/components/schemas/ProjectType' }, plannedStartDate: { type: string, format: date }, plannedEndDate: { type: string, format: date }, status: { $ref: '#/components/schemas/ProjectStatus' }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+    Project:
+      allOf:
+        - $ref: '#/components/schemas/ProjectSummary'
+        - type: object
+          required: [managerId, createdAt]
+          properties: { siteAddress: { type: string }, actualStartDate: { type: string, format: date }, actualEndDate: { type: string, format: date }, managerId: { type: string }, budgetAmount: { type: number }, currency: { type: string }, statusReason: { type: string }, createdAt: { type: string, format: date-time } }
+    ProjectPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/ProjectSummary' } } } }
+    ChangeProjectStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/ProjectStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    ProjectResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Project' } } }] }
+    ProjectPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ProjectPage' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

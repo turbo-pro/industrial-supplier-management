@@ -1338,6 +1338,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listContracts"];
+        put?: never;
+        post: operations["createContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContract"];
+        put: operations["updateContract"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeContractStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProjects"];
+        put?: never;
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getProject"];
+        put: operations["updateProject"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeProjectStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1667,6 +1763,145 @@ export interface components {
         };
         QualificationPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["QualificationPage"];
+        };
+        /** @enum {string} */
+        ContractType: "PURCHASE" | "SERVICE" | "ENGINEERING" | "FRAMEWORK" | "OTHER";
+        /** @enum {string} */
+        ContractStatus: "DRAFT" | "ACTIVE" | "COMPLETED" | "TERMINATED" | "EXPIRED";
+        SaveContract: {
+            contractNo: string;
+            name: string;
+            supplierId: string;
+            type: components["schemas"]["ContractType"];
+            amount: number;
+            currency: string;
+            /** Format: date */
+            signedDate?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate: string;
+            ownerId: string;
+            fileId: string;
+            version: number;
+        };
+        ContractSummary: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            contractNo: string;
+            name: string;
+            type: components["schemas"]["ContractType"];
+            amount: number;
+            currency: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate: string;
+            status: components["schemas"]["ContractStatus"];
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Contract: components["schemas"]["ContractSummary"] & {
+            /** Format: date */
+            signedDate?: string;
+            ownerId: string;
+            fileId: string;
+            terminationReason?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ContractPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["ContractSummary"][];
+        };
+        ChangeContractStatus: {
+            status: components["schemas"]["ContractStatus"];
+            reason?: string;
+            version: number;
+        };
+        ContractResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["Contract"];
+        };
+        ContractPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ContractPage"];
+        };
+        /** @enum {string} */
+        ProjectType: "CONSTRUCTION" | "MAINTENANCE" | "TECHNICAL_SERVICE" | "LOGISTICS" | "OTHER";
+        /** @enum {string} */
+        ProjectStatus: "PLANNED" | "ACTIVE" | "SUSPENDED" | "COMPLETED" | "CANCELLED";
+        SaveProject: {
+            projectCode: string;
+            name: string;
+            supplierId: string;
+            contractId?: string;
+            type: components["schemas"]["ProjectType"];
+            siteAddress?: string;
+            /** Format: date */
+            plannedStartDate: string;
+            /** Format: date */
+            plannedEndDate: string;
+            managerId: string;
+            budgetAmount?: number;
+            currency?: string;
+            version: number;
+        };
+        ProjectSummary: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            contractId?: string;
+            contractNo?: string;
+            projectCode: string;
+            name: string;
+            type: components["schemas"]["ProjectType"];
+            /** Format: date */
+            plannedStartDate: string;
+            /** Format: date */
+            plannedEndDate: string;
+            status: components["schemas"]["ProjectStatus"];
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Project: components["schemas"]["ProjectSummary"] & {
+            siteAddress?: string;
+            /** Format: date */
+            actualStartDate?: string;
+            /** Format: date */
+            actualEndDate?: string;
+            managerId: string;
+            budgetAmount?: number;
+            currency?: string;
+            statusReason?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ProjectPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["ProjectSummary"][];
+        };
+        ChangeProjectStatus: {
+            status: components["schemas"]["ProjectStatus"];
+            reason?: string;
+            version: number;
+        };
+        ProjectResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["Project"];
+        };
+        ProjectPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ProjectPage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -4993,6 +5228,260 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listContracts: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["ContractStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contract page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractPageResponse"];
+                };
+            };
+        };
+    };
+    createContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveContract"];
+            };
+        };
+        responses: {
+            /** @description Contract created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contract detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractResponse"];
+                };
+            };
+        };
+    };
+    updateContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveContract"];
+            };
+        };
+        responses: {
+            /** @description Contract updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeContractStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeContractStatus"];
+            };
+        };
+        responses: {
+            /** @description Contract status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["ProjectStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPageResponse"];
+                };
+            };
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProject"];
+            };
+        };
+        responses: {
+            /** @description Project created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProject"];
+            };
+        };
+        responses: {
+            /** @description Project updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeProjectStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeProjectStatus"];
+            };
+        };
+        responses: {
+            /** @description Project status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];
