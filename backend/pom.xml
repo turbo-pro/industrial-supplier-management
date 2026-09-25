@@ -22,6 +22,7 @@
     <module>ism-resource</module>
     <module>ism-safety</module>
     <module>ism-quality</module>
+    <module>ism-performance</module>
     <module>ism-restriction</module>
     <module>ism-workflow</module>
     <module>ism-operation</module>

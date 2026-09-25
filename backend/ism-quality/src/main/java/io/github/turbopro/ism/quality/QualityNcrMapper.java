@@ -21,6 +21,10 @@ public interface QualityNcrMapper extends TenantScopedMapper {
     String JOINS = " FROM qua_nonconformance x JOIN prj_project p ON p.id=x.project_id AND p.tenant_id=x.tenant_id JOIN sup_supplier s ON s.id=x.supplier_id AND s.tenant_id=x.tenant_id";
     String FIELDS = "x.id,x.organization_id,x.project_id,x.supplier_id,p.project_code,p.project_name,s.supplier_code,s.supplier_name,x.ncr_no,x.title,x.category,x.severity,x.description,x.inspection_date,x.inspected_quantity,x.defective_quantity,x.unit,x.evidence_file_id,x.deadline,x.responsible_user_id,x.status,x.root_cause,x.correction,x.preventive_action,x.action_file_id,x.submitted_at,x.verification_result,x.verification_comment,x.verified_by,x.verified_at,x.created_by,x.version,x.created_at,x.updated_at";
 
+    @Select("SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN status<>'CLOSED' THEN 1 ELSE 0 END),0) open_count FROM qua_nonconformance WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND inspection_date BETWEEN #{start} AND #{end}")
+    FactRow performanceFacts(long tenantId, long supplierId, LocalDate start, LocalDate end);
+    record FactRow(int total, int openCount) {}
+
     @Select("SELECT p.organization_id,p.supplier_id FROM prj_project p JOIN sup_supplier s ON s.id=p.supplier_id AND s.tenant_id=p.tenant_id WHERE p.tenant_id=#{tenantId} AND p.id=#{projectId} AND p.status='ACTIVE' AND s.status='ACTIVE' AND s.deleted=0")
     QualityNcrModels.ProjectRef activeProject(long tenantId, long projectId);
 

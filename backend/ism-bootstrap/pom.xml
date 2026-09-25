@@ -64,6 +64,11 @@
     </dependency>
     <dependency>
       <groupId>io.github.turbo-pro</groupId>
+      <artifactId>ism-performance</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.turbo-pro</groupId>
       <artifactId>ism-restriction</artifactId>
       <version>${project.version}</version>
     </dependency>

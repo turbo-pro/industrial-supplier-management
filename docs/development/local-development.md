@@ -69,6 +69,7 @@ GET http://localhost:18080/actuator/health
 | --- | --- | --- |
 | Console `http://localhost:4174` | `platform-admin` | `Admin@123456` |
 | 管理后台 `http://localhost:4173` | 租户 `demo`、用户 `admin` | `Admin@123456` |
+| 管理后台（绩效复核） | 租户 `demo`、用户 `reviewer` | `Admin@123456` |
 
 本地数据脚本不在默认 Flyway 路径中，未启用 `local` Profile 时不会创建测试账号。
 

@@ -1754,6 +1754,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/performance/rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPerformanceRule"];
+        put: operations["savePerformanceRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPerformanceEvaluations"];
+        put?: never;
+        post: operations["createPerformanceEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPerformanceEvaluation"];
+        put: operations["updatePerformanceEvaluation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPerformanceEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitPerformanceEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/performance/evaluations/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewPerformanceEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2651,6 +2747,114 @@ export interface components {
         };
         QualityNcrEventsResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["QualityNcrEvent"][];
+        };
+        /** @enum {string} */
+        PerformanceDimension: "QUALITY" | "DELIVERY" | "SAFETY" | "SERVICE";
+        /** @enum {string} */
+        PerformanceStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+        PerformanceRule: {
+            qualityWeight: number;
+            deliveryWeight: number;
+            safetyWeight: number;
+            serviceWeight: number;
+            version: number;
+            customized: boolean;
+        };
+        SavePerformanceRule: {
+            qualityWeight: number;
+            deliveryWeight: number;
+            safetyWeight: number;
+            serviceWeight: number;
+            version: number;
+        };
+        PerformanceScoreInput: {
+            dimension: components["schemas"]["PerformanceDimension"];
+            score: number;
+            comment: string;
+            evidenceFileId: string;
+        };
+        SavePerformanceEvaluation: {
+            supplierId: string;
+            /** Format: date */
+            periodStart: string;
+            /** Format: date */
+            periodEnd: string;
+            items: components["schemas"]["PerformanceScoreInput"][];
+            version: number;
+        };
+        ReviewPerformanceEvaluation: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment?: string;
+            version: number;
+        };
+        PerformanceScore: {
+            dimension: components["schemas"]["PerformanceDimension"];
+            weight: number;
+            score: number;
+            comment: string;
+            evidenceFileId: string;
+        };
+        PerformanceEvaluation: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            /** Format: date */
+            periodStart: string;
+            /** Format: date */
+            periodEnd: string;
+            totalScore: number;
+            /** @enum {string} */
+            grade: "A" | "B" | "C" | "D";
+            status: components["schemas"]["PerformanceStatus"];
+            qualityNcrTotal: number;
+            qualityNcrOpen: number;
+            safetyIssueTotal: number;
+            safetyIssueOpen: number;
+            /** Format: date-time */
+            submittedAt?: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            reviewComment?: string;
+            createdBy: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            items: components["schemas"]["PerformanceScore"][];
+        };
+        PerformancePage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["PerformanceEvaluation"][];
+        };
+        PerformanceEvent: {
+            id: string;
+            action: string;
+            fromStatus?: string;
+            toStatus: string;
+            comment?: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PerformanceRuleResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PerformanceRule"];
+        };
+        PerformanceResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PerformanceEvaluation"];
+        };
+        PerformancePageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PerformancePage"];
+        };
+        PerformanceEventsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PerformanceEvent"][];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -6879,6 +7083,228 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QualityNcrResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPerformanceRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant performance weights */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceRuleResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    savePerformanceRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePerformanceRule"];
+            };
+        };
+        responses: {
+            /** @description Rule saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceRuleResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listPerformanceEvaluations: {
+        parameters: {
+            query?: {
+                supplierId?: string;
+                status?: components["schemas"]["PerformanceStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supplier scorecards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformancePageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    createPerformanceEvaluation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePerformanceEvaluation"];
+            };
+        };
+        responses: {
+            /** @description Scorecard created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPerformanceEvaluation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scorecard detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    updatePerformanceEvaluation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePerformanceEvaluation"];
+            };
+        };
+        responses: {
+            /** @description Scorecard updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPerformanceEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scorecard audit history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceEventsResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    submitPerformanceEvaluation: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scorecard submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewPerformanceEvaluation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPerformanceEvaluation"];
+            };
+        };
+        responses: {
+            /** @description Scorecard reviewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];

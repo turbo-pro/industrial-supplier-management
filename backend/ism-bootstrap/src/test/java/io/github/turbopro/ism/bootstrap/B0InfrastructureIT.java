@@ -39,6 +39,11 @@ import io.github.turbopro.ism.integration.search.SearchModels;
 import io.github.turbopro.ism.integration.search.SearchService;
 import io.github.turbopro.ism.safety.SafetyCredentialMapper;
 import io.github.turbopro.ism.quality.QualityNcrMapper;
+import io.github.turbopro.ism.performance.PerformanceMapper;
+import io.github.turbopro.ism.supplier.SupplierReferenceService;
+import io.github.turbopro.ism.resource.file.FileReferenceService;
+import io.github.turbopro.ism.quality.QualityPerformanceFacts;
+import io.github.turbopro.ism.safety.SafetyPerformanceFacts;
 import io.github.turbopro.ism.resource.supplier.SupplierResourceMapper;
 import io.github.turbopro.ism.operation.AsyncTaskService;
 import io.github.turbopro.ism.operation.AuditService;
@@ -203,6 +208,11 @@ class B0InfrastructureIT {
     @Autowired private SafetyCredentialMapper safetyCredentialMapper;
     @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
     @Autowired private QualityNcrMapper qualityNcrMapper;
+    @Autowired private PerformanceMapper performanceMapper;
+    @Autowired private SupplierReferenceService supplierReferenceService;
+    @Autowired private FileReferenceService fileReferenceService;
+    @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
+    @Autowired private SafetyPerformanceFacts safetyPerformanceFacts;
     @Autowired private SupplierResourceMapper supplierResourceMapper;
 
     @Autowired
@@ -347,6 +357,65 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_user WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
+        }
+    }
+
+    @Test
+    void shouldPersistPerformanceRuleScorecardAndReview() {
+        long tenantId = 9941, orgId = 9942, supplierId = 9943, fileId = 9944, evaluationId = 9945;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "PERFORMANCE_IT", "Performance Tenant", "ACTIVE");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",
+                    orgId, tenantId, "PERFORMANCE_ORG", "Performance Organization", "SITE", "ACTIVE");
+            jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                    supplierId, tenantId, orgId, "PERFORMANCE_SUP", "Performance Supplier", "SERVICE", "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    fileId, tenantId, 1, "performance.pdf", "application/pdf", 1, "e".repeat(64), "LOCAL", "it/performance", "ACTIVE");
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
+                assertThat(performanceMapper.insertRule(tenantId, 35, 25, 25, 15, 1)).isOne();
+                assertThat(performanceMapper.rule(tenantId).qualityWeight()).isEqualTo(35);
+                assertThat(performanceMapper.updateRule(tenantId, 40, 20, 25, 15, 1, 0)).isOne();
+                assertThat(performanceMapper.updateRule(tenantId, 35, 25, 25, 15, 1, 0)).isZero();
+                assertThat(supplierReferenceService.active(supplierId).name()).isEqualTo("Performance Supplier");
+                assertThat(fileReferenceService.active(fileId)).isTrue();
+                assertThat(qualityPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
+                assertThat(safetyPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
+                assertThat(performanceMapper.insert(evaluationId, tenantId, orgId, supplierId,
+                        "PERFORMANCE_SUP", "Performance Supplier",
+                        java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now().minusDays(1),
+                        new java.math.BigDecimal("78.00"), "C", 0, 0, 0, 0, 1)).isOne();
+                assertThat(performanceMapper.insertItem(evaluationId, tenantId, "QUALITY", 35,
+                        new java.math.BigDecimal("90.00"), "质量证据", fileId)).isOne();
+                assertThat(performanceMapper.insertItem(evaluationId, tenantId, "DELIVERY", 25,
+                        new java.math.BigDecimal("80.00"), "交付证据", fileId)).isOne();
+                assertThat(performanceMapper.insertItem(evaluationId, tenantId, "SAFETY", 25,
+                        new java.math.BigDecimal("70.00"), "安全证据", fileId)).isOne();
+                assertThat(performanceMapper.insertItem(evaluationId, tenantId, "SERVICE", 15,
+                        new java.math.BigDecimal("60.00"), "服务证据", fileId)).isOne();
+                assertThat(performanceMapper.insertEvent(9946, tenantId, evaluationId, "CREATE", null, "DRAFT", null, 1)).isOne();
+                assertThat(performanceMapper.items(tenantId, evaluationId)).hasSize(4);
+                assertThat(performanceMapper.count(tenantId, supplierId, "DRAFT", "TENANT_ALL", java.util.Set.of(), 1)).isOne();
+                assertThatThrownBy(() -> performanceMapper.insert(9947, tenantId, orgId, supplierId,
+                        "PERFORMANCE_SUP", "Performance Supplier",
+                        java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now().minusDays(1),
+                        new java.math.BigDecimal("78.00"), "C", 0, 0, 0, 0, 1))
+                        .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+                assertThat(performanceMapper.submit(tenantId, evaluationId, 1, 0)).isOne();
+                assertThat(performanceMapper.review(tenantId, evaluationId, "APPROVE", "批准", 2, 1)).isOne();
+                assertThat(performanceMapper.review(tenantId, evaluationId, "REJECT", "再次审核", 2, 2)).isZero();
+                assertThat(performanceMapper.get(tenantId, evaluationId).status()).isEqualTo("APPROVED");
+                assertThat(performanceMapper.events(tenantId, evaluationId)).hasSize(1);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM per_evaluation_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM per_evaluation_item WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM per_score_rule WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
