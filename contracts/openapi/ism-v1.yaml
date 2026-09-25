@@ -1011,6 +1011,64 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeProjectStatus' } } } }
       responses: { '200': { description: Project status changed, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/persons:
+    get:
+      operationId: listSupplierPersons
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/PersonStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Supplier person page, content: { application/json: { schema: { $ref: '#/components/schemas/PersonPageResponse' } } } } }
+    post:
+      operationId: createSupplierPerson
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePerson' } } } }
+      responses: { '200': { description: Supplier person created, content: { application/json: { schema: { $ref: '#/components/schemas/PersonResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/persons/{id}:
+    put:
+      operationId: updateSupplierPerson
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePerson' } } } }
+      responses: { '200': { description: Supplier person updated, content: { application/json: { schema: { $ref: '#/components/schemas/PersonResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/persons/{id}/status:
+    post:
+      operationId: changeSupplierPersonStatus
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangePersonStatus' } } } }
+      responses: { '200': { description: Supplier person status changed, content: { application/json: { schema: { $ref: '#/components/schemas/PersonResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/assets:
+    get:
+      operationId: listSupplierAssets
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/AssetStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Supplier asset page, content: { application/json: { schema: { $ref: '#/components/schemas/AssetPageResponse' } } } } }
+    post:
+      operationId: createSupplierAsset
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveAsset' } } } }
+      responses: { '200': { description: Supplier asset created, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/assets/{id}:
+    put:
+      operationId: updateSupplierAsset
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveAsset' } } } }
+      responses: { '200': { description: Supplier asset updated, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/assets/{id}/status:
+    post:
+      operationId: changeSupplierAssetStatus
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeAssetStatus' } } } }
+      responses: { '200': { description: Supplier asset status changed, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1401,6 +1459,34 @@ components:
     ChangeProjectStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/ProjectStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
     ProjectResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Project' } } }] }
     ProjectPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ProjectPage' } } }] }
+    PersonStatus: { type: string, enum: [PENDING, ACTIVE, SUSPENDED, EXITED] }
+    IdType: { type: string, enum: [NATIONAL_ID, PASSPORT, OTHER] }
+    SavePerson:
+      type: object
+      required: [code, name, supplierId, idType, idNumber, version]
+      properties: { code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }, name: { type: string, maxLength: 100 }, supplierId: { type: string }, projectId: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumber: { type: string, minLength: 1, maxLength: 64, writeOnly: true }, mobile: { type: string }, jobTitle: { type: string, maxLength: 100 }, tradeType: { type: string, maxLength: 100 }, entryDate: { type: string, format: date }, version: { type: integer, minimum: 0 } }
+    SupplierPerson:
+      type: object
+      required: [id, organizationId, supplierId, supplierCode, supplierName, code, name, idType, idNumberMasked, status, version, updatedAt]
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, idType: { $ref: '#/components/schemas/IdType' }, idNumberMasked: { type: string }, mobile: { type: string }, jobTitle: { type: string }, tradeType: { type: string }, entryDate: { type: string, format: date }, exitDate: { type: string, format: date }, status: { $ref: '#/components/schemas/PersonStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+    PersonPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SupplierPerson' } } } }
+    ChangePersonStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/PersonStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    PersonResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierPerson' } } }] }
+    PersonPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PersonPage' } } }] }
+    AssetType: { type: string, enum: [VEHICLE, EQUIPMENT, TOOL] }
+    AssetStatus: { type: string, enum: [PENDING, AVAILABLE, IN_USE, MAINTENANCE, RETIRED] }
+    SaveAsset:
+      type: object
+      required: [code, name, supplierId, type, version]
+      properties: { code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }, name: { type: string, maxLength: 150 }, supplierId: { type: string }, projectId: { type: string }, type: { $ref: '#/components/schemas/AssetType' }, plateNo: { type: string, maxLength: 32 }, serialNo: { type: string, maxLength: 100 }, brand: { type: string, maxLength: 100 }, model: { type: string, maxLength: 100 }, inspectionExpiryDate: { type: string, format: date }, fileId: { type: string }, version: { type: integer, minimum: 0 } }
+    SupplierAsset:
+      type: object
+      required: [id, organizationId, supplierId, supplierCode, supplierName, code, name, type, status, version, updatedAt]
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, type: { $ref: '#/components/schemas/AssetType' }, plateNo: { type: string }, serialNo: { type: string }, brand: { type: string }, model: { type: string }, inspectionExpiryDate: { type: string, format: date }, fileId: { type: string }, status: { $ref: '#/components/schemas/AssetStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+    AssetPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SupplierAsset' } } } }
+    ChangeAssetStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/AssetStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    AssetResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierAsset' } } }] }
+    AssetPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AssetPage' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

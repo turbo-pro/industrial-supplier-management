@@ -1434,6 +1434,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resources/persons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierPersons"];
+        put?: never;
+        post: operations["createSupplierPerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resources/persons/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateSupplierPerson"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resources/persons/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeSupplierPersonStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resources/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierAssets"];
+        put?: never;
+        post: operations["createSupplierAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resources/assets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateSupplierAsset"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resources/assets/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changeSupplierAssetStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1902,6 +1998,128 @@ export interface components {
         };
         ProjectPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["ProjectPage"];
+        };
+        /** @enum {string} */
+        PersonStatus: "PENDING" | "ACTIVE" | "SUSPENDED" | "EXITED";
+        /** @enum {string} */
+        IdType: "NATIONAL_ID" | "PASSPORT" | "OTHER";
+        SavePerson: {
+            code: string;
+            name: string;
+            supplierId: string;
+            projectId?: string;
+            idType: components["schemas"]["IdType"];
+            idNumber: string;
+            mobile?: string;
+            jobTitle?: string;
+            tradeType?: string;
+            /** Format: date */
+            entryDate?: string;
+            version: number;
+        };
+        SupplierPerson: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            projectId?: string;
+            supplierCode: string;
+            supplierName: string;
+            projectCode?: string;
+            code: string;
+            name: string;
+            idType: components["schemas"]["IdType"];
+            idNumberMasked: string;
+            mobile?: string;
+            jobTitle?: string;
+            tradeType?: string;
+            /** Format: date */
+            entryDate?: string;
+            /** Format: date */
+            exitDate?: string;
+            status: components["schemas"]["PersonStatus"];
+            statusReason?: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SupplierPerson"][];
+        };
+        ChangePersonStatus: {
+            status: components["schemas"]["PersonStatus"];
+            reason?: string;
+            version: number;
+        };
+        PersonResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SupplierPerson"];
+        };
+        PersonPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PersonPage"];
+        };
+        /** @enum {string} */
+        AssetType: "VEHICLE" | "EQUIPMENT" | "TOOL";
+        /** @enum {string} */
+        AssetStatus: "PENDING" | "AVAILABLE" | "IN_USE" | "MAINTENANCE" | "RETIRED";
+        SaveAsset: {
+            code: string;
+            name: string;
+            supplierId: string;
+            projectId?: string;
+            type: components["schemas"]["AssetType"];
+            plateNo?: string;
+            serialNo?: string;
+            brand?: string;
+            model?: string;
+            /** Format: date */
+            inspectionExpiryDate?: string;
+            fileId?: string;
+            version: number;
+        };
+        SupplierAsset: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            projectId?: string;
+            supplierCode: string;
+            supplierName: string;
+            projectCode?: string;
+            code: string;
+            name: string;
+            type: components["schemas"]["AssetType"];
+            plateNo?: string;
+            serialNo?: string;
+            brand?: string;
+            model?: string;
+            /** Format: date */
+            inspectionExpiryDate?: string;
+            fileId?: string;
+            status: components["schemas"]["AssetStatus"];
+            statusReason?: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AssetPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SupplierAsset"][];
+        };
+        ChangeAssetStatus: {
+            status: components["schemas"]["AssetStatus"];
+            reason?: string;
+            version: number;
+        };
+        AssetResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SupplierAsset"];
+        };
+        AssetPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["AssetPage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -5482,6 +5700,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierPersons: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["PersonStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supplier person page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonPageResponse"];
+                };
+            };
+        };
+    };
+    createSupplierPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePerson"];
+            };
+        };
+        responses: {
+            /** @description Supplier person created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateSupplierPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePerson"];
+            };
+        };
+        responses: {
+            /** @description Supplier person updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeSupplierPersonStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePersonStatus"];
+            };
+        };
+        responses: {
+            /** @description Supplier person status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierAssets: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["AssetStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supplier asset page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetPageResponse"];
+                };
+            };
+        };
+    };
+    createSupplierAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAsset"];
+            };
+        };
+        responses: {
+            /** @description Supplier asset created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateSupplierAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAsset"];
+            };
+        };
+        responses: {
+            /** @description Supplier asset updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeSupplierAssetStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeAssetStatus"];
+            };
+        };
+        responses: {
+            /** @description Supplier asset status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];
