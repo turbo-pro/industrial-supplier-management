@@ -11,7 +11,7 @@ public class SupplierReferenceService {
 
     public Reference active(long supplierId) {
         var row = mapper.find(TenantContext.require().tenantId(), supplierId);
-        if (row == null || !"ACTIVE".equals(row.status()) || blacklist.active(TenantContext.require().tenantId(),supplierId)>0) return null;
+        if (row == null || !"ACTIVE".equals(row.status()) || blacklist.active(TenantContext.require().tenantId(),supplierId,RestrictionBusinessDate.today())>0) return null;
         return new Reference(row.organizationId(), row.supplierCode(), row.supplierName());
     }
     public Reference activeForNewBusiness(long supplierId) {

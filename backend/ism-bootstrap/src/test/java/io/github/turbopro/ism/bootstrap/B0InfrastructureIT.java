@@ -387,16 +387,31 @@ class B0InfrastructureIT {
                 assertThat(supplierReferenceService.active(supplierId).name()).isEqualTo("Performance Supplier");
                 long blacklistId = 9950;
                 assertThat(blacklistMapper.insert(blacklistId, tenantId, supplierId, orgId,
-                        "PERFORMANCE_SUP", "Performance Supplier", "重大违约", "CASE-1", 1)).isOne();
+                        "PERFORMANCE_SUP", "Performance Supplier", "BLACKLIST", null, null, "重大违约", "CASE-1", 1)).isOne();
+                assertThat(blacklistMapper.get(tenantId, blacklistId).restrictionType())
+                        .isEqualTo(io.github.turbopro.ism.supplier.BlacklistModels.RestrictionType.BLACKLIST);
                 assertThat(blacklistMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
                 assertThat(blacklistMapper.submit(tenantId, blacklistId, 1, 0)).isOne();
                 assertThat(blacklistMapper.review(tenantId, blacklistId, "APPROVE", "证据充分", 2, 1)).isOne();
-                assertThat(blacklistMapper.active(tenantId, supplierId)).isOne();
+                assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.active(supplierId)).isNull();
                 assertThat(blacklistMapper.review(tenantId, blacklistId, "REJECT", "过期", 2, 1)).isZero();
                 assertThat(blacklistMapper.revoke(tenantId, blacklistId, "复核解除", 2, 2)).isOne();
-                assertThat(blacklistMapper.active(tenantId, supplierId)).isZero();
+                assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
                 assertThat(supplierReferenceService.active(supplierId)).isNotNull();
+                long temporaryId = 9951;
+                assertThat(blacklistMapper.insert(temporaryId, tenantId, supplierId, orgId,
+                        "PERFORMANCE_SUP", "Performance Supplier", "TEMPORARY", java.time.LocalDate.now(),
+                        java.time.LocalDate.now().plusDays(2), "限期限制", "CASE-2", 1)).isOne();
+                assertThat(blacklistMapper.get(tenantId, temporaryId).restrictionType())
+                        .isEqualTo(io.github.turbopro.ism.supplier.BlacklistModels.RestrictionType.TEMPORARY);
+                assertThat(blacklistMapper.submit(tenantId, temporaryId, 1, 0)).isOne();
+                assertThat(blacklistMapper.review(tenantId, temporaryId, "APPROVE", "批准", 2, 1)).isOne();
+                assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isOne();
+                jdbcTemplate.update("UPDATE sup_blacklist_case SET effective_until=? WHERE id=?",
+                        java.time.LocalDate.now().minusDays(1), temporaryId);
+                assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
+                assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now())).isZero();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
                 assertThat(qualityPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
                 assertThat(safetyPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();

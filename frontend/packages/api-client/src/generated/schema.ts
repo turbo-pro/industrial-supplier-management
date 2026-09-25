@@ -3040,10 +3040,17 @@ export interface components {
         };
         /** @enum {string} */
         BlacklistStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVOKED";
+        /** @enum {string} */
+        RestrictionType: "BLACKLIST" | "TEMPORARY";
         CreateBlacklistCase: {
             supplierId: string;
             reason: string;
             sourceRef?: string;
+            restrictionType: components["schemas"]["RestrictionType"];
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveUntil?: string;
         };
         VersionCommand: {
             version: number;
@@ -3074,6 +3081,12 @@ export interface components {
             organizationId: string;
             supplierCode: string;
             supplierName: string;
+            restrictionType: components["schemas"]["RestrictionType"];
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveUntil?: string;
+            effective: boolean;
             reason: string;
             sourceRef?: string;
             status: components["schemas"]["BlacklistStatus"];
