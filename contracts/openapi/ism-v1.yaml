@@ -1069,6 +1069,35 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeAssetStatus' } } } }
       responses: { '200': { description: Supplier asset status changed, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/issues:
+    get:
+      operationId: listSafetyIssues
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/SafetyIssueStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Safety issue page, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyIssuePageResponse' } } } } }
+    post:
+      operationId: createSafetyIssue
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateSafetyIssue' } } } }
+      responses: { '200': { description: Safety issue created, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyIssueResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/issues/{id}/rectification:
+    post:
+      operationId: submitSafetyRectification
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitSafetyRectification' } } } }
+      responses: { '200': { description: Rectification submitted, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyIssueResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/issues/{id}/verification:
+    post:
+      operationId: verifySafetyRectification
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifySafetyRectification' } } } }
+      responses: { '200': { description: Rectification verified, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyIssueResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1487,6 +1516,22 @@ components:
     ChangeAssetStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/AssetStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
     AssetResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierAsset' } } }] }
     AssetPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AssetPage' } } }] }
+    SafetyIssueCategory: { type: string, enum: [BEHAVIOR, EQUIPMENT, ENVIRONMENT, MANAGEMENT, OTHER] }
+    SafetyIssueSeverity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+    SafetyIssueStatus: { type: string, enum: [OPEN, PENDING_REVIEW, CLOSED] }
+    CreateSafetyIssue:
+      type: object
+      required: [issueNo, title, projectId, category, severity, description, discoveredAt, deadline, responsibleUserId, version]
+      properties: { issueNo: { type: string }, title: { type: string, maxLength: 200 }, projectId: { type: string }, category: { $ref: '#/components/schemas/SafetyIssueCategory' }, severity: { $ref: '#/components/schemas/SafetyIssueSeverity' }, description: { type: string, maxLength: 2000 }, location: { type: string, maxLength: 300 }, discoveredAt: { type: string, format: date-time }, deadline: { type: string, format: date }, responsibleUserId: { type: string }, version: { type: integer, minimum: 0 } }
+    SubmitSafetyRectification: { type: object, required: [note, fileId, version], properties: { note: { type: string, maxLength: 2000 }, fileId: { type: string }, version: { type: integer, minimum: 0 } } }
+    VerifySafetyRectification: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [PASS, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
+    SafetyIssue:
+      type: object
+      required: [id, organizationId, projectId, supplierId, projectCode, projectName, supplierCode, supplierName, issueNo, title, category, severity, description, discoveredAt, deadline, responsibleUserId, status, overdue, version, createdAt, updatedAt]
+      properties: { id: { type: string }, organizationId: { type: string }, projectId: { type: string }, supplierId: { type: string }, projectCode: { type: string }, projectName: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, issueNo: { type: string }, title: { type: string }, category: { $ref: '#/components/schemas/SafetyIssueCategory' }, severity: { $ref: '#/components/schemas/SafetyIssueSeverity' }, description: { type: string }, location: { type: string }, discoveredAt: { type: string, format: date-time }, deadline: { type: string, format: date }, responsibleUserId: { type: string }, status: { $ref: '#/components/schemas/SafetyIssueStatus' }, rectificationNote: { type: string }, rectificationFileId: { type: string }, submittedAt: { type: string, format: date-time }, verificationResult: { type: string }, verificationComment: { type: string }, verifiedBy: { type: string }, verifiedAt: { type: string, format: date-time }, overdue: { type: boolean }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time } }
+    SafetyIssuePage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SafetyIssue' } } } }
+    SafetyIssueResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyIssue' } } }] }
+    SafetyIssuePageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyIssuePage' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

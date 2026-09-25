@@ -1530,6 +1530,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/safety/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSafetyIssues"];
+        put?: never;
+        post: operations["createSafetyIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/issues/{id}/rectification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitSafetyRectification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/issues/{id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifySafetyRectification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2120,6 +2168,88 @@ export interface components {
         };
         AssetPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["AssetPage"];
+        };
+        /** @enum {string} */
+        SafetyIssueCategory: "BEHAVIOR" | "EQUIPMENT" | "ENVIRONMENT" | "MANAGEMENT" | "OTHER";
+        /** @enum {string} */
+        SafetyIssueSeverity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+        /** @enum {string} */
+        SafetyIssueStatus: "OPEN" | "PENDING_REVIEW" | "CLOSED";
+        CreateSafetyIssue: {
+            issueNo: string;
+            title: string;
+            projectId: string;
+            category: components["schemas"]["SafetyIssueCategory"];
+            severity: components["schemas"]["SafetyIssueSeverity"];
+            description: string;
+            location?: string;
+            /** Format: date-time */
+            discoveredAt: string;
+            /** Format: date */
+            deadline: string;
+            responsibleUserId: string;
+            version: number;
+        };
+        SubmitSafetyRectification: {
+            note: string;
+            fileId: string;
+            version: number;
+        };
+        VerifySafetyRectification: {
+            /** @enum {string} */
+            decision: "PASS" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        SafetyIssue: {
+            id: string;
+            organizationId: string;
+            projectId: string;
+            supplierId: string;
+            projectCode: string;
+            projectName: string;
+            supplierCode: string;
+            supplierName: string;
+            issueNo: string;
+            title: string;
+            category: components["schemas"]["SafetyIssueCategory"];
+            severity: components["schemas"]["SafetyIssueSeverity"];
+            description: string;
+            location?: string;
+            /** Format: date-time */
+            discoveredAt: string;
+            /** Format: date */
+            deadline: string;
+            responsibleUserId: string;
+            status: components["schemas"]["SafetyIssueStatus"];
+            rectificationNote?: string;
+            rectificationFileId?: string;
+            /** Format: date-time */
+            submittedAt?: string;
+            verificationResult?: string;
+            verificationComment?: string;
+            verifiedBy?: string;
+            /** Format: date-time */
+            verifiedAt?: string;
+            overdue: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SafetyIssuePage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SafetyIssue"][];
+        };
+        SafetyIssueResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyIssue"];
+        };
+        SafetyIssuePageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyIssuePage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -5910,6 +6040,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSafetyIssues: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["SafetyIssueStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Safety issue page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyIssuePageResponse"];
+                };
+            };
+        };
+    };
+    createSafetyIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSafetyIssue"];
+            };
+        };
+        responses: {
+            /** @description Safety issue created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyIssueResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    submitSafetyRectification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitSafetyRectification"];
+            };
+        };
+        responses: {
+            /** @description Rectification submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyIssueResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    verifySafetyRectification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifySafetyRectification"];
+            };
+        };
+        responses: {
+            /** @description Rectification verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyIssueResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];
