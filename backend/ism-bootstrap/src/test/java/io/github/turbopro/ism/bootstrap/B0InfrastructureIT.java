@@ -200,6 +200,7 @@ class B0InfrastructureIT {
     @Autowired private PrintService printService;
     @Autowired private SearchService searchService;
     @Autowired private SafetyCredentialMapper safetyCredentialMapper;
+    @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
     @Autowired private SupplierResourceMapper supplierResourceMapper;
 
     @Autowired
@@ -257,6 +258,44 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM saf_person_credential WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
+        }
+    }
+
+    @Test
+    void shouldPersistOneOpenAttendanceAndAllowSecondAfterCheckout() {
+        long tenantId = 9911, orgId = 9912, supplierId = 9913, personId = 9914, projectId = 9915;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantId, "ATTEND_IT", "Attendance Tenant", "ACTIVE");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",
+                    orgId, tenantId, "ATTEND_SITE", "Attendance Site", "SITE", "ACTIVE");
+            jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",
+                    supplierId, tenantId, orgId, "ATTEND_SUP", "Attendance Supplier", "SERVICE", "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    projectId, tenantId, orgId, supplierId, "ATTEND_PRJ", "Attendance Project", "SERVICE",
+                    java.time.LocalDate.now().minusDays(1), java.time.LocalDate.now().plusDays(30), 1, "ACTIVE", 1, 1);
+            jdbcTemplate.update("INSERT INTO res_supplier_person(id,tenant_id,organization_id,supplier_id,project_id,person_code,person_name,id_type,id_number_hash,id_number_masked,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    personId, tenantId, orgId, supplierId, projectId, "ATTEND_PERSON", "Attendance Worker", "OTHER",
+                    "c".repeat(64), "****5678", "ACTIVE", 1, 1);
+            try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
+                assertThat(safetyAttendanceMapper.activeProject(tenantId, projectId, supplierId)).isOne();
+                assertThat(safetyAttendanceMapper.checkIn(9916, tenantId, orgId, projectId, supplierId, personId, "一号厂区", 1)).isOne();
+                assertThat(safetyAttendanceMapper.get(tenantId, 9916).personName()).isEqualTo("Attendance Worker");
+                assertThat(safetyAttendanceMapper.count(tenantId, personId, true, "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1)).isOne();
+                assertThatThrownBy(() -> safetyAttendanceMapper.checkIn(9917, tenantId, orgId, projectId, supplierId, personId, "二号厂区", 1))
+                        .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+                assertThat(safetyAttendanceMapper.checkOut(tenantId, 9916, 1, "离场", 0)).isOne();
+                assertThat(safetyAttendanceMapper.checkOut(tenantId, 9916, 1, "重复签退", 1)).isZero();
+                assertThat(safetyAttendanceMapper.checkIn(9917, tenantId, orgId, projectId, supplierId, personId, "二号厂区", 1)).isOne();
+                assertThat(safetyAttendanceMapper.list(tenantId, personId, true, "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1, 0, 20)).hasSize(1);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);

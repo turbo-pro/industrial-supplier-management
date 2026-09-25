@@ -1126,6 +1126,28 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: personId, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: Current entry readiness, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyEligibilityResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/attendance:
+    get:
+      operationId: listSafetyAttendance
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: personId, in: query, schema: { type: string } }, { name: openOnly, in: query, schema: { type: boolean, default: false } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
+      responses: { '200': { description: Site attendance records, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyAttendancePageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/attendance/check-in:
+    post:
+      operationId: checkInSitePerson
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInSitePerson' } } } }
+      responses: { '200': { description: Person checked in, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyAttendanceResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/attendance/{id}/check-out:
+    post:
+      operationId: checkOutSitePerson
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CheckOutSitePerson' } } } }
+      responses: { '200': { description: Person checked out, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyAttendanceResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1587,6 +1609,15 @@ components:
     SafetyCredentialResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyCredential' } } }] }
     SafetyCredentialPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyCredentialPage' } } }] }
     SafetyEligibilityResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyEligibility' } } }] }
+    CheckInSitePerson: { type: object, required: [personId, siteName], properties: { personId: { type: string }, siteName: { type: string, maxLength: 200 } } }
+    CheckOutSitePerson: { type: object, required: [version], properties: { note: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
+    SafetyAttendance:
+      type: object
+      required: [id, organizationId, projectId, supplierId, personId, personCode, personName, supplierName, projectName, siteName, checkInAt, checkInBy, version]
+      properties: { id: { type: string }, organizationId: { type: string }, projectId: { type: string }, supplierId: { type: string }, personId: { type: string }, personCode: { type: string }, personName: { type: string }, supplierName: { type: string }, projectName: { type: string }, siteName: { type: string }, checkInAt: { type: string, format: date-time }, checkOutAt: { type: string, format: date-time }, checkInBy: { type: string }, checkOutBy: { type: string }, checkOutNote: { type: string }, version: { type: integer } }
+    SafetyAttendancePage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SafetyAttendance' } } } }
+    SafetyAttendanceResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyAttendance' } } }] }
+    SafetyAttendancePageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SafetyAttendancePage' } } }] }
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

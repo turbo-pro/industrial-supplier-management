@@ -1626,6 +1626,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/safety/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSafetyAttendance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/attendance/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkInSitePerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/safety/attendance/{id}/check-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkOutSitePerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -2377,6 +2425,47 @@ export interface components {
         };
         SafetyEligibilityResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["SafetyEligibility"];
+        };
+        CheckInSitePerson: {
+            personId: string;
+            siteName: string;
+        };
+        CheckOutSitePerson: {
+            note?: string;
+            version: number;
+        };
+        SafetyAttendance: {
+            id: string;
+            organizationId: string;
+            projectId: string;
+            supplierId: string;
+            personId: string;
+            personCode: string;
+            personName: string;
+            supplierName: string;
+            projectName: string;
+            siteName: string;
+            /** Format: date-time */
+            checkInAt: string;
+            /** Format: date-time */
+            checkOutAt?: string;
+            checkInBy: string;
+            checkOutBy?: string;
+            checkOutNote?: string;
+            version: number;
+        };
+        SafetyAttendancePage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SafetyAttendance"][];
+        };
+        SafetyAttendanceResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyAttendance"];
+        };
+        SafetyAttendancePageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SafetyAttendancePage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -6378,6 +6467,84 @@ export interface operations {
                 };
             };
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    listSafetyAttendance: {
+        parameters: {
+            query?: {
+                personId?: string;
+                openOnly?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Site attendance records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyAttendancePageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    checkInSitePerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckInSitePerson"];
+            };
+        };
+        responses: {
+            /** @description Person checked in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyAttendanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    checkOutSitePerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckOutSitePerson"];
+            };
+        };
+        responses: {
+            /** @description Person checked out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyAttendanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
         };
     };
     refreshToken: {
