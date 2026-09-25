@@ -1162,6 +1162,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdmissionApplications"];
+        put?: never;
+        post: operations["createAdmissionApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAdmissionApplication"];
+        put: operations["updateAdmissionApplication"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitAdmissionApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewAdmissionApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1314,6 +1378,83 @@ export interface components {
         };
         SupplierPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["SupplierPage"];
+        };
+        /** @enum {string} */
+        AdmissionStatus: "DRAFT" | "SUBMITTED" | "REVISION_REQUIRED" | "APPROVED" | "REJECTED" | "CANCELLED";
+        AdmissionMaterialCommand: {
+            type: string;
+            name: string;
+            fileId?: string;
+            required: boolean;
+            provided: boolean;
+            remark?: string;
+            sortOrder: number;
+        };
+        SaveAdmissionApplication: {
+            supplierId: string;
+            purchaseCategory: string;
+            reason: string;
+            expectedAnnualAmount?: number;
+            currency?: string;
+            materials: components["schemas"]["AdmissionMaterialCommand"][];
+            version: number;
+        };
+        AdmissionSummary: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            applicationNo: string;
+            supplierCode: string;
+            supplierName: string;
+            purchaseCategory: string;
+            status: components["schemas"]["AdmissionStatus"];
+            version: number;
+            /** Format: date-time */
+            submittedAt?: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdmissionApplication: components["schemas"]["AdmissionSummary"] & {
+            reason: string;
+            expectedAnnualAmount?: number;
+            currency?: string;
+            workflowInstanceId?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            materials: (components["schemas"]["AdmissionMaterialCommand"] & {
+                id: string;
+            })[];
+            reviews: {
+                id: string;
+                action: string;
+                fromStatus: components["schemas"]["AdmissionStatus"];
+                toStatus: components["schemas"]["AdmissionStatus"];
+                comment?: string;
+                operatorId: string;
+                /** Format: date-time */
+                operatedAt: string;
+            }[];
+        };
+        AdmissionPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["AdmissionSummary"][];
+        };
+        ReviewAdmissionApplication: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REQUIRE_REVISION" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        AdmissionResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["AdmissionApplication"];
+        };
+        AdmissionPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["AdmissionPage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -4234,6 +4375,157 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listAdmissionApplications: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["AdmissionStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admission application page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionPageResponse"];
+                };
+            };
+        };
+    };
+    createAdmissionApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAdmissionApplication"];
+            };
+        };
+        responses: {
+            /** @description Admission draft created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+        };
+    };
+    getAdmissionApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admission details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResponse"];
+                };
+            };
+        };
+    };
+    updateAdmissionApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAdmissionApplication"];
+            };
+        };
+        responses: {
+            /** @description Admission draft updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    submitAdmissionApplication: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admission submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewAdmissionApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAdmissionApplication"];
+            };
+        };
+        responses: {
+            /** @description Admission reviewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];

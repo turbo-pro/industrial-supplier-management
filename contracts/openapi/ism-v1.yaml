@@ -817,6 +817,54 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupplierStatus' } } } }
       responses: { '200': { description: Supplier status changed, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /admissions:
+    get:
+      operationId: listAdmissionApplications
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AdmissionStatus' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses: { '200': { description: Admission application page, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionPageResponse' } } } } }
+    post:
+      operationId: createAdmissionApplication
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveAdmissionApplication' } } } }
+      responses: { '200': { description: Admission draft created, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' } }
+  /admissions/{id}:
+    get:
+      operationId: getAdmissionApplication
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Admission details, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } } }
+    put:
+      operationId: updateAdmissionApplication
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveAdmissionApplication' } } } }
+      responses: { '200': { description: Admission draft updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /admissions/{id}/submit:
+    post:
+      operationId: submitAdmissionApplication
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses: { '200': { description: Admission submitted, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /admissions/{id}/review:
+    post:
+      operationId: reviewAdmissionApplication
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAdmissionApplication' } } } }
+      responses: { '200': { description: Admission reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -994,6 +1042,72 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Supplier' } } }]
     SupplierPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierPage' } } }]
+    AdmissionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, REVISION_REQUIRED, APPROVED, REJECTED, CANCELLED]
+    AdmissionMaterialCommand:
+      type: object
+      required: [type, name, required, provided, sortOrder]
+      properties:
+        type: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        name: { type: string, maxLength: 100 }
+        fileId: { type: string }
+        required: { type: boolean }
+        provided: { type: boolean }
+        remark: { type: string, maxLength: 300 }
+        sortOrder: { type: integer, minimum: 0 }
+    SaveAdmissionApplication:
+      type: object
+      required: [supplierId, purchaseCategory, reason, materials, version]
+      properties:
+        supplierId: { type: string }
+        purchaseCategory: { type: string, maxLength: 100 }
+        reason: { type: string, maxLength: 500 }
+        expectedAnnualAmount: { type: number, minimum: 0 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        materials: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/AdmissionMaterialCommand' } }
+        version: { type: integer, minimum: 0 }
+    AdmissionSummary:
+      type: object
+      required: [id, organizationId, supplierId, applicationNo, supplierCode, supplierName, purchaseCategory, status, version, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        supplierId: { type: string }
+        applicationNo: { type: string }
+        supplierCode: { type: string }
+        supplierName: { type: string }
+        purchaseCategory: { type: string }
+        status: { $ref: '#/components/schemas/AdmissionStatus' }
+        version: { type: integer }
+        submittedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdmissionApplication:
+      allOf:
+        - $ref: '#/components/schemas/AdmissionSummary'
+        - type: object
+          required: [reason, materials, reviews, createdAt]
+          properties:
+            reason: { type: string }
+            expectedAnnualAmount: { type: number }
+            currency: { type: string }
+            workflowInstanceId: { type: string }
+            decidedAt: { type: string, format: date-time }
+            createdAt: { type: string, format: date-time }
+            materials: { type: array, items: { allOf: [{ $ref: '#/components/schemas/AdmissionMaterialCommand' }, { type: object, required: [id], properties: { id: { type: string } } }] } }
+            reviews: { type: array, items: { type: object, required: [id, action, fromStatus, toStatus, operatorId, operatedAt], properties: { id: { type: string }, action: { type: string }, fromStatus: { $ref: '#/components/schemas/AdmissionStatus' }, toStatus: { $ref: '#/components/schemas/AdmissionStatus' }, comment: { type: string }, operatorId: { type: string }, operatedAt: { type: string, format: date-time } } } }
+    AdmissionPage:
+      type: object
+      required: [total, page, size, items]
+      properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionSummary' } } }
+    ReviewAdmissionApplication:
+      type: object
+      required: [decision, comment, version]
+      properties: { decision: { type: string, enum: [APPROVE, REQUIRE_REVISION, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
+    AdmissionResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdmissionApplication' } } }]
+    AdmissionPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdmissionPage' } } }]
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]

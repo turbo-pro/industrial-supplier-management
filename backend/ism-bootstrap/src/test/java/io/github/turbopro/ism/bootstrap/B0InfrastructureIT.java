@@ -380,7 +380,7 @@ class B0InfrastructureIT {
                     .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
                     .singleElement().satisfies(menu -> assertThat(menu.children())
-                            .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER", "PRINT_TEMPLATE"));
+                            .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER", "PRINT_TEMPLATE", "ADVANCED_SEARCH"));
             assertThat(configurationService.dictionary("SUPPLIER_TYPE").items())
                     .extracting(ConfigurationModels.DictionaryItemView::code)
                     .contains("MATERIAL", "SERVICE", "CONTRACTOR");
