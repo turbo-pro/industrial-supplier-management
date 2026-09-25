@@ -1226,6 +1226,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/qualifications/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQualificationTypes"];
+        put?: never;
+        post: operations["createQualificationType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateQualificationType"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQualifications"];
+        put?: never;
+        post: operations["createQualification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getQualification"];
+        put: operations["updateQualification"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifyQualification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeQualification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["renewQualification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1455,6 +1567,106 @@ export interface components {
         };
         AdmissionPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["AdmissionPage"];
+        };
+        /** @enum {string} */
+        QualificationTypeStatus: "ACTIVE" | "DISABLED";
+        /** @enum {string} */
+        QualificationStatus: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED";
+        SaveQualificationType: {
+            code: string;
+            name: string;
+            category: string;
+            validityRequired: boolean;
+            defaultWarningDays: number;
+            description?: string;
+            status: components["schemas"]["QualificationTypeStatus"];
+            version: number;
+        };
+        QualificationType: components["schemas"]["SaveQualificationType"] & {
+            id: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SaveQualification: {
+            supplierId: string;
+            typeId: string;
+            certificateNo: string;
+            issuingAuthority?: string;
+            /** Format: date */
+            issueDate?: string;
+            /** Format: date */
+            effectiveDate?: string;
+            /** Format: date */
+            expiryDate?: string;
+            permanent: boolean;
+            warningDays?: number;
+            fileId: string;
+            version: number;
+        };
+        QualificationSummary: {
+            id: string;
+            organizationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            typeId: string;
+            typeCode: string;
+            typeName: string;
+            certificateNo: string;
+            /** Format: date */
+            expiryDate?: string;
+            permanent: boolean;
+            status: components["schemas"]["QualificationStatus"];
+            daysUntilExpiry: number;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Qualification: components["schemas"]["QualificationSummary"] & {
+            parentQualificationId?: string;
+            issuingAuthority?: string;
+            /** Format: date */
+            issueDate?: string;
+            /** Format: date */
+            effectiveDate?: string;
+            warningDays: number;
+            fileId: string;
+            verificationComment?: string;
+            verifiedBy?: string;
+            /** Format: date-time */
+            verifiedAt?: string;
+            revokedReason?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        QualificationPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["QualificationSummary"][];
+        };
+        VerifyQualification: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        RevokeQualification: {
+            reason: string;
+            version: number;
+        };
+        QualificationTypeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualificationType"];
+        };
+        QualificationTypeListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualificationType"][];
+        };
+        QualificationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["Qualification"];
+        };
+        QualificationPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["QualificationPage"];
         };
         SaveWorkflowDefinition: {
             code: string;
@@ -4526,6 +4738,261 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdmissionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listQualificationTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Qualification types */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationTypeListResponse"];
+                };
+            };
+        };
+    };
+    createQualificationType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQualificationType"];
+            };
+        };
+        responses: {
+            /** @description Type created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationTypeResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateQualificationType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQualificationType"];
+            };
+        };
+        responses: {
+            /** @description Type updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationTypeResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listQualifications: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: components["schemas"]["QualificationStatus"];
+                supplierId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Qualification page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationPageResponse"];
+                };
+            };
+        };
+    };
+    createQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQualification"];
+            };
+        };
+        responses: {
+            /** @description Qualification draft created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Qualification detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+        };
+    };
+    updateQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQualification"];
+            };
+        };
+        responses: {
+            /** @description Qualification updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    verifyQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyQualification"];
+            };
+        };
+        responses: {
+            /** @description Qualification verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    revokeQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeQualification"];
+            };
+        };
+        responses: {
+            /** @description Qualification revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    renewQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQualification"];
+            };
+        };
+        responses: {
+            /** @description Renewal draft created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualificationResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];

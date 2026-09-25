@@ -375,7 +375,7 @@ class B0InfrastructureIT {
                     .load(tenantId, administratorId);
             assertThat(grants.actions()).contains("iam:organization:view", "iam:organization:manage",
                     "iam:user:manage", "iam:role:manage");
-            assertThat(grants.dataScope("organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
+            assertThat(grants.dataScope("iam:organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("SYSTEM_MANAGEMENT"))
                     .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
@@ -475,14 +475,14 @@ class B0InfrastructureIT {
             var siteManager = accessService.createRole(new AccessModels.CreateRole("SITE_MANAGER", "场站管理员"));
             accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
                     Set.of("iam:organization:view", "iam:menu:view"), Set.of("ORGANIZATION_MANAGEMENT"),
-                    List.of(new AccessModels.DataScopeGrant("organization", "ORGANIZATION_SET",
+                    List.of(new AccessModels.DataScopeGrant("iam:organization", "ORGANIZATION_SET",
                             Set.of(subsidiary.id())))));
             var siteUser = accessService.createUser(new AccessModels.CreateUser("site-manager", "场站管理员",
                     "Initial#Site123", site.id(), Set.of(siteManager.id())));
             var siteGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
                     .load(tenantId, Long.parseLong(siteUser.id()));
             assertThat(siteGrants.actions()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
-            assertThat(siteGrants.dataScope("organization").organizationIds())
+            assertThat(siteGrants.dataScope("iam:organization").organizationIds())
                     .contains(Long.parseLong(subsidiary.id()), Long.parseLong(site.id()));
         }
 

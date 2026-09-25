@@ -865,6 +865,82 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAdmissionApplication' } } } }
       responses: { '200': { description: Admission reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/types:
+    get:
+      operationId: listQualificationTypes
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Qualification types, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationTypeListResponse' } } } } }
+    post:
+      operationId: createQualificationType
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualificationType' } } } }
+      responses: { '200': { description: Type created, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationTypeResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/types/{id}:
+    put:
+      operationId: updateQualificationType
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualificationType' } } } }
+      responses: { '200': { description: Type updated, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationTypeResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications:
+    get:
+      operationId: listQualifications
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/QualificationStatus' } }
+        - { name: supplierId, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses: { '200': { description: Qualification page, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationPageResponse' } } } } }
+    post:
+      operationId: createQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualification' } } } }
+      responses: { '200': { description: Qualification draft created, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/{id}:
+    get:
+      operationId: getQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Qualification detail, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } } }
+    put:
+      operationId: updateQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualification' } } } }
+      responses: { '200': { description: Qualification updated, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/{id}/verify:
+    post:
+      operationId: verifyQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyQualification' } } } }
+      responses: { '200': { description: Qualification verified, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/{id}/revoke:
+    post:
+      operationId: revokeQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RevokeQualification' } } } }
+      responses: { '200': { description: Qualification revoked, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /qualifications/{id}/renew:
+    post:
+      operationId: renewQualification
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveQualification' } } } }
+      responses: { '200': { description: Renewal draft created, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1108,6 +1184,101 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdmissionApplication' } } }]
     AdmissionPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdmissionPage' } } }]
+    QualificationTypeStatus:
+      type: string
+      enum: [ACTIVE, DISABLED]
+    QualificationStatus:
+      type: string
+      enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED]
+    SaveQualificationType:
+      type: object
+      required: [code, name, category, validityRequired, defaultWarningDays, status, version]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        name: { type: string, maxLength: 100 }
+        category: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        validityRequired: { type: boolean }
+        defaultWarningDays: { type: integer, minimum: 0, maximum: 3650 }
+        description: { type: string, maxLength: 500 }
+        status: { $ref: '#/components/schemas/QualificationTypeStatus' }
+        version: { type: integer, minimum: 0 }
+    QualificationType:
+      allOf:
+        - $ref: '#/components/schemas/SaveQualificationType'
+        - type: object
+          required: [id, updatedAt]
+          properties: { id: { type: string }, updatedAt: { type: string, format: date-time } }
+    SaveQualification:
+      type: object
+      required: [supplierId, typeId, certificateNo, permanent, fileId, version]
+      properties:
+        supplierId: { type: string }
+        typeId: { type: string }
+        certificateNo: { type: string, maxLength: 100 }
+        issuingAuthority: { type: string, maxLength: 200 }
+        issueDate: { type: string, format: date }
+        effectiveDate: { type: string, format: date }
+        expiryDate: { type: string, format: date }
+        permanent: { type: boolean }
+        warningDays: { type: integer, minimum: 0, maximum: 3650 }
+        fileId: { type: string }
+        version: { type: integer, minimum: 0 }
+    QualificationSummary:
+      type: object
+      required: [id, organizationId, supplierId, supplierCode, supplierName, typeId, typeCode, typeName, certificateNo, permanent, status, daysUntilExpiry, version, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        supplierId: { type: string }
+        supplierCode: { type: string }
+        supplierName: { type: string }
+        typeId: { type: string }
+        typeCode: { type: string }
+        typeName: { type: string }
+        certificateNo: { type: string }
+        expiryDate: { type: string, format: date }
+        permanent: { type: boolean }
+        status: { $ref: '#/components/schemas/QualificationStatus' }
+        daysUntilExpiry: { type: integer }
+        version: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    Qualification:
+      allOf:
+        - $ref: '#/components/schemas/QualificationSummary'
+        - type: object
+          required: [fileId, warningDays, createdAt]
+          properties:
+            parentQualificationId: { type: string }
+            issuingAuthority: { type: string }
+            issueDate: { type: string, format: date }
+            effectiveDate: { type: string, format: date }
+            warningDays: { type: integer }
+            fileId: { type: string }
+            verificationComment: { type: string }
+            verifiedBy: { type: string }
+            verifiedAt: { type: string, format: date-time }
+            revokedReason: { type: string }
+            createdAt: { type: string, format: date-time }
+    QualificationPage:
+      type: object
+      required: [total, page, size, items]
+      properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/QualificationSummary' } } }
+    VerifyQualification:
+      type: object
+      required: [decision, comment, version]
+      properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
+    RevokeQualification:
+      type: object
+      required: [reason, version]
+      properties: { reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } }
+    QualificationTypeResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/QualificationType' } } }]
+    QualificationTypeListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/QualificationType' } } } }]
+    QualificationResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/Qualification' } } }]
+    QualificationPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/QualificationPage' } } }]
     SaveWorkflowDefinition:
       type: object
       required: [code, name, businessType, bpmnXml, version]
