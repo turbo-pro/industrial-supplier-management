@@ -1319,6 +1319,35 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: Exit blockers, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierExitReadinessResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{caseId}/lift-applications:
+    get:
+      operationId: listRestrictionLifts
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }, { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }, { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }]
+      responses: { '200': { description: Restriction lifting result, content: { application/json: { schema: { $ref: '#/components/schemas/LiftPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: createRestrictionLift
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateLift' } } } }
+      responses: { '200': { description: Restriction lifting result, content: { application/json: { schema: { $ref: '#/components/schemas/LiftResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{caseId}/lift-applications/readiness:
+    get:
+      operationId: restrictionLiftReadiness
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Restriction lifting result, content: { application/json: { schema: { $ref: '#/components/schemas/LiftReadinessResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{caseId}/lift-applications/{id}/review:
+    post:
+      operationId: reviewRestrictionLift
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewLift' } } } }
+      responses: { '200': { description: Restriction lifting result, content: { application/json: { schema: { $ref: '#/components/schemas/LiftResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /supplier-blacklist/{caseId}/appeals:
     get:
       operationId: listRestrictionAppeals
@@ -1380,11 +1409,13 @@ paths:
   /supplier-blacklist/{id}/revoke:
     post:
       operationId: revokeSupplierBlacklistCase
+      deprecated: true
+      description: Direct revocation is disabled and returns validation failure; use independent lift applications.
       tags: [Supplier]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RevokeBlacklistCase' } } } }
-      responses: { '200': { description: Revoked case, content: { application/json: { schema: { $ref: '#/components/schemas/BlacklistResponse' } } } } }
+      responses: { '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
   /auth/refresh:
     post:
       operationId: refreshToken
@@ -1466,6 +1497,14 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    CreateLift: { type: object, required: [reason, evidenceFileId], properties: { reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
+    ReviewLift: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
+    RestrictionLift: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
+    LiftPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/RestrictionLift' } } } }
+    LiftReadiness: { type: object, required: [ready, blockers], properties: { ready: { type: boolean }, observationEndsAt: { type: string, format: date-time, nullable: true }, blockers: { type: array, items: { type: object, required: [code, label, count, route], properties: { code: { type: string }, label: { type: string }, count: { type: integer }, route: { type: string } } } } } }
+    LiftResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/RestrictionLift' } } }] }
+    LiftPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/LiftPage' } } }] }
+    LiftReadinessResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/LiftReadiness' } } }] }
     CreateAppeal: { type: object, required: [reason, evidenceFileId], properties: { reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
     ReviewAppeal: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [ACCEPT, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
     RestrictionAppeal: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, ACCEPTED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
@@ -1926,8 +1965,8 @@ components:
     BlacklistEvent: { type: object, required: [id, action, toStatus, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, fromStatus: { type: string }, toStatus: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
     BlacklistCase:
       type: object
-      required: [id, supplierId, organizationId, supplierCode, supplierName, restrictionType, effective, reason, status, createdBy, version, createdAt, updatedAt, events]
-      properties: { id: { type: string }, supplierId: { type: string }, organizationId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, restrictionType: { $ref: '#/components/schemas/RestrictionType' }, effectiveFrom: { type: string, format: date }, effectiveUntil: { type: string, format: date }, effective: { type: boolean }, reason: { type: string }, sourceRef: { type: string }, status: { $ref: '#/components/schemas/BlacklistStatus' }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, revokedReason: { type: string }, revokedBy: { type: string }, revokedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/BlacklistEvent' } } }
+      required: [id, supplierId, organizationId, supplierCode, supplierName, restrictionType, effective, lifted, reason, status, createdBy, version, createdAt, updatedAt, events]
+      properties: { id: { type: string }, supplierId: { type: string }, organizationId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, restrictionType: { $ref: '#/components/schemas/RestrictionType' }, effectiveFrom: { type: string, format: date }, effectiveUntil: { type: string, format: date }, effective: { type: boolean }, lifted: { type: boolean }, reason: { type: string }, sourceRef: { type: string }, status: { $ref: '#/components/schemas/BlacklistStatus' }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, revokedReason: { type: string }, revokedBy: { type: string }, revokedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/BlacklistEvent' } } }
     BlacklistPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/BlacklistCase' } } } }
     BlacklistResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/BlacklistCase' } } }] }
     BlacklistPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/BlacklistPage' } } }] }

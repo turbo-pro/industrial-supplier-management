@@ -28,7 +28,7 @@ public class AppealService {
     }
     @Transactional public AppealModels.View create(long caseId,AppealModels.Create command){
         var restriction=lockCase(caseId);
-        if(!restriction.status().equals("APPROVED"))throw invalid("只能对已批准的限制记录申诉");
+        if(!restriction.status().equals("APPROVED")||restrictions.lifted(TenantContext.require().tenantId(),caseId)>0)throw invalid("只能对已批准且未解除的限制记录申诉");
         long fileId=parseId(command.evidenceFileId());
         if(!evidence.available(fileId))throw invalid("申诉证据不存在或不可用");
         var i=TenantContext.require();long id=ids.nextId();

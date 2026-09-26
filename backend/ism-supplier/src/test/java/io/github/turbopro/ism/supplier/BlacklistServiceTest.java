@@ -35,6 +35,16 @@ class BlacklistServiceTest {
             assertThrows(ApiException.class,()->service.revoke(90,new BlacklistModels.Revoke("解除",0)));
         }
     }
+    @Test void approvedCaseCannotBypassIndependentLifting(){
+        when(mapper.get(10,90)).thenReturn(row("APPROVED",7));
+        try(var tenant=TenantContext.open(10,8);var auth=auth()){
+            assertThrows(ApiException.class,()->service.revoke(90,new BlacklistModels.Revoke("直接解除",0)));
+            when(mapper.lifted(10,90)).thenReturn(1);
+            assertFalse(service.get(90).effective());
+            assertTrue(service.get(90).lifted());
+        }
+        verify(mapper,never()).revoke(anyLong(),anyLong(),anyString(),anyLong(),anyInt());
+    }
     @Test void temporaryRestrictionRequiresValidDates(){
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
             assertThrows(ApiException.class,()->service.create(new BlacklistModels.Create("30","限期限制",null,

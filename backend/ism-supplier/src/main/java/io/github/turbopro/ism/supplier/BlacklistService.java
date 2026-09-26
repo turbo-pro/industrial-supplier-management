@@ -51,16 +51,16 @@ public class BlacklistService {
         if(mapper.review(i.tenantId(),caseId,command.decision().name(),command.comment().trim(),i.actorId(),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
         event(caseId,"REVIEW_"+command.decision(),"SUBMITTED",next,command.comment().trim());audit("SUPPLIER_BLACKLIST_REVIEW",caseId,next);return view(mapper.get(i.tenantId(),caseId));
     }
-    @Transactional public BlacklistModels.View revoke(long caseId,BlacklistModels.Revoke command){
-        var before=require(caseId);if(!before.status().equals("APPROVED"))throw invalid("只有生效中的黑名单可以撤销");var i=TenantContext.require();
-        if(mapper.revoke(i.tenantId(),caseId,command.reason().trim(),i.actorId(),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
-        event(caseId,"REVOKE","APPROVED","REVOKED",command.reason().trim());audit("SUPPLIER_BLACKLIST_REVOKE",caseId,"REVOKED");return view(mapper.get(i.tenantId(),caseId));
+    @Deprecated
+    public BlacklistModels.View revoke(long caseId,BlacklistModels.Revoke command){
+        require(caseId);
+        throw invalid("直接撤销入口已停用，请发起独立解除申请");
     }
     private BlacklistModels.Row require(long id){var i=TenantContext.require();var row=mapper.get(i.tenantId(),id);
         if(row==null||!scope().allows(new DataTarget(row.organizationId(),null,null,row.createdBy()),i.actorId()))throw new ApiException(CommonErrorCode.NOT_FOUND);return row;}
     private DataScope scope(){return AuthorizationContext.require().dataScope("supplier:master");}
-    private BlacklistModels.View view(BlacklistModels.Row r){var i=TenantContext.require();return new BlacklistModels.View(Long.toString(r.id()),Long.toString(r.supplierId()),Long.toString(r.organizationId()),r.supplierCode(),r.supplierName(),r.restrictionType(),r.effectiveFrom(),r.effectiveUntil(),effective(r),r.reason(),r.sourceRef(),BlacklistModels.Status.valueOf(r.status()),r.reviewComment(),str(r.reviewedBy()),r.reviewedAt(),r.revokedReason(),str(r.revokedBy()),r.revokedAt(),Long.toString(r.createdBy()),r.version(),r.createdAt(),r.updatedAt(),mapper.events(i.tenantId(),r.id()).stream().map(e->new BlacklistModels.Event(Long.toString(e.id()),e.action(),e.fromStatus(),e.toStatus(),e.comment(),Long.toString(e.actorId()),e.createdAt())).toList());}
-    private boolean effective(BlacklistModels.Row row){if(!"APPROVED".equals(row.status()))return false;if(row.restrictionType()!=BlacklistModels.RestrictionType.TEMPORARY)return true;var today=RestrictionBusinessDate.today();return !today.isBefore(row.effectiveFrom())&&!today.isAfter(row.effectiveUntil());}
+    private BlacklistModels.View view(BlacklistModels.Row r){var i=TenantContext.require();return new BlacklistModels.View(Long.toString(r.id()),Long.toString(r.supplierId()),Long.toString(r.organizationId()),r.supplierCode(),r.supplierName(),r.restrictionType(),r.effectiveFrom(),r.effectiveUntil(),effective(r),mapper.lifted(i.tenantId(),r.id())>0,r.reason(),r.sourceRef(),BlacklistModels.Status.valueOf(r.status()),r.reviewComment(),str(r.reviewedBy()),r.reviewedAt(),r.revokedReason(),str(r.revokedBy()),r.revokedAt(),Long.toString(r.createdBy()),r.version(),r.createdAt(),r.updatedAt(),mapper.events(i.tenantId(),r.id()).stream().map(e->new BlacklistModels.Event(Long.toString(e.id()),e.action(),e.fromStatus(),e.toStatus(),e.comment(),Long.toString(e.actorId()),e.createdAt())).toList());}
+    private boolean effective(BlacklistModels.Row row){if(mapper.lifted(TenantContext.require().tenantId(),row.id())>0 || !"APPROVED".equals(row.status()))return false;if(row.restrictionType()!=BlacklistModels.RestrictionType.TEMPORARY)return true;var today=RestrictionBusinessDate.today();return !today.isBefore(row.effectiveFrom())&&!today.isAfter(row.effectiveUntil());}
     private void validateDates(BlacklistModels.Create command){
         if(command.restrictionType()!=BlacklistModels.RestrictionType.TEMPORARY){
             if(command.effectiveFrom()!=null||command.effectiveUntil()!=null)throw invalid("长期黑名单和观察名单不填写生效日期");

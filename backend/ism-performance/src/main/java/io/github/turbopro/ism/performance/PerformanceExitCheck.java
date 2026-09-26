@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-public class PerformanceExitCheck implements SupplierExitCheck {
+public class PerformanceExitCheck implements SupplierExitCheck, io.github.turbopro.ism.supplier.SupplierLiftCheck {
     private final ExitMapper mapper;
     public PerformanceExitCheck(ExitMapper mapper) { this.mapper = mapper; }
 

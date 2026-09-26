@@ -22,7 +22,7 @@ public final class BlacklistModels {
                       LocalDateTime reviewedAt,String revokedReason,Long revokedBy,LocalDateTime revokedAt,
                       long createdBy,int version,LocalDateTime createdAt,LocalDateTime updatedAt) {}
     public record View(String id,String supplierId,String organizationId,String supplierCode,String supplierName,
-                       RestrictionType restrictionType,LocalDate effectiveFrom,LocalDate effectiveUntil,boolean effective,
+                       RestrictionType restrictionType,LocalDate effectiveFrom,LocalDate effectiveUntil,boolean effective,boolean lifted,
                        String reason,String sourceRef,Status status,String reviewComment,String reviewedBy,
                        LocalDateTime reviewedAt,String revokedReason,String revokedBy,LocalDateTime revokedAt,
                        String createdBy,int version,LocalDateTime createdAt,LocalDateTime updatedAt,List<Event> events) {}

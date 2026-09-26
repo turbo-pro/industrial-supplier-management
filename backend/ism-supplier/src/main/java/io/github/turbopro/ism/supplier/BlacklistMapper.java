@@ -8,7 +8,11 @@ import java.util.*;
 
 @Mapper
 public interface BlacklistMapper extends TenantScopedMapper {
-    @Select("SELECT id FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until)) FOR UPDATE")
+    @Select("SELECT COUNT(*) FROM sup_lift_result WHERE tenant_id=#{tenantId} AND case_id=#{caseId}")
+    int lifted(long tenantId,long caseId);
+    @Select("SELECT CAST(UNIX_TIMESTAMP(reviewed_at)*1000 AS UNSIGNED) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND id=#{caseId}")
+    Long approvedAtMillis(long tenantId,long caseId);
+    @Select("SELECT id FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND NOT EXISTS(SELECT 1 FROM sup_lift_result lr WHERE lr.tenant_id=#{tenantId} AND lr.case_id=sup_blacklist_case.id) AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until)) FOR UPDATE")
     List<Long> currentActive(long tenantId,long supplierId,LocalDate today);
     String FIELDS="id,supplier_id,organization_id,supplier_code,supplier_name,restriction_type,effective_from,effective_until,reason,source_ref,status,review_comment,reviewed_by,reviewed_at,revoked_reason,revoked_by,revoked_at,created_by,version,created_at,updated_at";
     @Select("SELECT "+FIELDS+" FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND id=#{id} FOR UPDATE")
@@ -20,13 +24,13 @@ public interface BlacklistMapper extends TenantScopedMapper {
     List<BlacklistModels.Row> list(long tenantId,Long supplierId,String status,String scopeType,Set<Long> organizationIds,long actorId,int offset,int size);
     @Select("SELECT "+FIELDS+" FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND id=#{id}")
     BlacklistModels.Row get(long tenantId,long id);
-    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND (status IN ('DRAFT','SUBMITTED') OR (status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND effective_until>=#{today}) OR (restriction_type='WATCH' AND #{type}='WATCH'))))")
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND (status IN ('DRAFT','SUBMITTED') OR (status='APPROVED' AND NOT EXISTS(SELECT 1 FROM sup_lift_result lr WHERE lr.tenant_id=#{tenantId} AND lr.case_id=sup_blacklist_case.id) AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND effective_until>=#{today}) OR (restriction_type='WATCH' AND #{type}='WATCH'))))")
     int openCase(long tenantId,long supplierId,LocalDate today,String type);
     @Select("SELECT id FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{supplierId} FOR UPDATE")
     Long lockSupplier(long tenantId,long supplierId);
-    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until))")
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND NOT EXISTS(SELECT 1 FROM sup_lift_result lr WHERE lr.tenant_id=#{tenantId} AND lr.case_id=sup_blacklist_case.id) AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until))")
     int active(long tenantId,long supplierId,LocalDate today);
-    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND restriction_type='WATCH'")
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND NOT EXISTS(SELECT 1 FROM sup_lift_result lr WHERE lr.tenant_id=#{tenantId} AND lr.case_id=sup_blacklist_case.id) AND restriction_type='WATCH'")
     int observed(long tenantId,long supplierId);
     @Insert("INSERT INTO sup_blacklist_case(id,tenant_id,supplier_id,organization_id,supplier_code,supplier_name,restriction_type,effective_from,effective_until,reason,source_ref,created_by,updated_by) VALUES(#{id},#{tenantId},#{supplierId},#{org},#{code},#{name},#{restrictionType},#{effectiveFrom},#{effectiveUntil},#{reason},#{sourceRef},#{actorId},#{actorId})")
     int insert(long id,long tenantId,long supplierId,long org,String code,String name,String restrictionType,LocalDate effectiveFrom,LocalDate effectiveUntil,String reason,String sourceRef,long actorId);

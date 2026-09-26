@@ -222,6 +222,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.performance.PerformanceExitCheck performanceExitCheck;
     @Autowired private io.github.turbopro.ism.integration.finance.ManualClearanceMapper manualClearanceMapper;
     @Autowired private BlacklistMapper blacklistMapper;
+    @Autowired private io.github.turbopro.ism.supplier.LiftService liftService;
     @Autowired private io.github.turbopro.ism.supplier.AppealService appealService;
     @Autowired private io.github.turbopro.ism.supplier.AppealMapper appealMapper;
     @Autowired private org.springframework.transaction.PlatformTransactionManager b7TransactionManager;
@@ -521,6 +522,31 @@ class B0InfrastructureIT {
                     assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
                 });
                 assertThat(blacklistMapper.revoke(tenantId,9980,"测试解除",2,2)).isOne();
+                for(long restrictionId:new long[]{9981,9982}){
+                    String type=restrictionId==9981?"BLACKLIST":"TEMPORARY";
+                    var start=restrictionId==9981?null:java.time.LocalDate.now();
+                    var end=restrictionId==9981?null:java.time.LocalDate.now().plusDays(2);
+                    assertThat(blacklistMapper.insert(restrictionId,tenantId,supplierId,orgId,"PERFORMANCE_SUP","Performance Supplier",type,start,end,"解除验收","LIFT-IT",1)).isOne();
+                    assertThat(blacklistMapper.submit(tenantId,restrictionId,1,0)).isOne();
+                    assertThat(blacklistMapper.review(tenantId,restrictionId,"APPROVE","批准",2,1)).isOne();
+                }
+                String liftId;
+                var liftPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(liftPermissions)){
+                    liftId=liftService.create(9981,new io.github.turbopro.ism.supplier.LiftModels.Create("整改完成",Long.toString(fileId))).id();
+                    org.junit.jupiter.api.Assertions.assertThrows(io.github.turbopro.ism.common.api.error.ApiException.class,()->liftService.create(9981,new io.github.turbopro.ism.supplier.LiftModels.Create("重复",Long.toString(fileId))));
+                    org.junit.jupiter.api.Assertions.assertThrows(io.github.turbopro.ism.common.api.error.ApiException.class,()->liftService.review(9981,Long.parseLong(liftId),new io.github.turbopro.ism.supplier.LiftModels.Review(io.github.turbopro.ism.supplier.LiftModels.Decision.APPROVE,"自审",0)));
+                }
+                try(var reviewer=TenantContext.open(tenantId,4);var authorization=AuthorizationContext.open(liftPermissions)){
+                    assertThat(liftService.readiness(9981).ready()).isTrue();
+                    assertThat(liftService.review(9981,Long.parseLong(liftId),new io.github.turbopro.ism.supplier.LiftModels.Review(io.github.turbopro.ism.supplier.LiftModels.Decision.APPROVE,"核验通过",0)).status()).isEqualTo("APPROVED");
+                }
+                assertThat(blacklistMapper.currentCase(tenantId,9981).status()).isEqualTo("APPROVED");
+                assertThat(blacklistMapper.lifted(tenantId,9981)).isOne();
+                assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isOne();
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
+                assertThat(blacklistMapper.revoke(tenantId,9982,"测试清理",2,2)).isOne();
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
                 jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(9953,?,?,?,'EXIT-C','退出测试','SERVICE',10,CURRENT_DATE,CURRENT_DATE,1,?,1,1)",tenantId,orgId,supplierId,fileId);
                 jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(9954,?,?,?,'EXIT-P','退出测试','MAINTENANCE',CURRENT_DATE,CURRENT_DATE,1,1,1)",tenantId,orgId,supplierId);
@@ -579,6 +605,8 @@ class B0InfrastructureIT {
             }
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_lift_result WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_lift_application WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_restriction_appeal WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_case WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_event WHERE tenant_id=?", tenantId);

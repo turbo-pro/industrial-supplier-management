@@ -1962,6 +1962,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/supplier-blacklist/{caseId}/lift-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRestrictionLifts"];
+        put?: never;
+        post: operations["createRestrictionLift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{caseId}/lift-applications/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["restrictionLiftReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-blacklist/{caseId}/lift-applications/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewRestrictionLift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/supplier-blacklist/{caseId}/appeals": {
         parameters: {
             query?: never;
@@ -2067,6 +2115,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @deprecated
+         * @description Direct revocation is disabled and returns validation failure; use independent lift applications.
+         */
         post: operations["revokeSupplierBlacklistCase"];
         delete?: never;
         options?: never;
@@ -2142,6 +2194,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateLift: {
+            reason: string;
+            evidenceFileId: string;
+        };
+        ReviewLift: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        RestrictionLift: {
+            id: string;
+            caseId: string;
+            reason: string;
+            evidenceFileId: string;
+            /** @enum {string} */
+            status: "SUBMITTED" | "APPROVED" | "REJECTED";
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            reviewComment?: string;
+            version: number;
+        };
+        LiftPage: {
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["RestrictionLift"][];
+        };
+        LiftReadiness: {
+            ready: boolean;
+            /** Format: date-time */
+            observationEndsAt?: string | null;
+            blockers: {
+                code: string;
+                label: string;
+                count: number;
+                route: string;
+            }[];
+        };
+        LiftResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["RestrictionLift"];
+        };
+        LiftPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["LiftPage"];
+        };
+        LiftReadinessResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["LiftReadiness"];
+        };
         CreateAppeal: {
             reason: string;
             evidenceFileId: string;
@@ -3278,6 +3382,7 @@ export interface components {
             /** Format: date */
             effectiveUntil?: string;
             effective: boolean;
+            lifted: boolean;
             reason: string;
             sourceRef?: string;
             status: components["schemas"]["BlacklistStatus"];
@@ -7996,6 +8101,122 @@ export interface operations {
             404: components["responses"]["ApiFailure"];
         };
     };
+    listRestrictionLifts: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restriction lifting result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiftPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    createRestrictionLift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLift"];
+            };
+        };
+        responses: {
+            /** @description Restriction lifting result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiftResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    restrictionLiftReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restriction lifting result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiftReadinessResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewRestrictionLift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewLift"];
+            };
+        };
+        responses: {
+            /** @description Restriction lifting result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiftResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     listRestrictionAppeals: {
         parameters: {
             query?: {
@@ -8222,15 +8443,9 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Revoked case */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlacklistResponse"];
-                };
-            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     refreshToken: {

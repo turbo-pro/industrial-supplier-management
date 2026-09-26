@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-public class QualityExitCheck implements SupplierExitCheck {
+public class QualityExitCheck implements SupplierExitCheck, io.github.turbopro.ism.supplier.SupplierLiftCheck {
     private final ExitMapper mapper;
     public QualityExitCheck(ExitMapper mapper) { this.mapper=mapper; }
     @Override public List<Blocker> blockers(long supplierId) {
