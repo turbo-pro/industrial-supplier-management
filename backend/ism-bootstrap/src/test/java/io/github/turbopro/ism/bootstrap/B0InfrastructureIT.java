@@ -506,6 +506,27 @@ class B0InfrastructureIT {
                         .anySatisfy(supplier -> { assertThat(supplier.id()).isEqualTo(Long.toString(supplierId)); assertThat(supplier.observed()).isTrue(); });
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "WATCH")).isOne();
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
+                var observationPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                String observationApplication;
+                try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(observationPermissions)){
+                    configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("30",0));
+                    assertThatThrownBy(()->configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("0",0))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("3651",0))).isInstanceOf(ApiException.class);
+                    var application=liftService.create(watchId,new io.github.turbopro.ism.supplier.LiftModels.Create("观察解除",Long.toString(fileId)));
+                    assertThat(application.observationSeconds()).isEqualTo(java.time.Duration.ofDays(30).getSeconds());
+                    observationApplication=application.id();
+                    configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("7",0));
+                    assertThatThrownBy(()->configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("15",0))).isInstanceOf(ApiException.class);
+                }
+                jdbcTemplate.update("UPDATE sup_blacklist_case SET reviewed_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 10 DAY) WHERE tenant_id=? AND id=?",tenantId,watchId);
+                try(var reviewer=TenantContext.open(tenantId,4);var authorization=AuthorizationContext.open(observationPermissions)){
+                    assertThat(liftService.readiness(watchId).ready()).isFalse();
+                    assertThatThrownBy(()->liftService.review(watchId,Long.parseLong(observationApplication),new io.github.turbopro.ism.supplier.LiftModels.Review(io.github.turbopro.ism.supplier.LiftModels.Decision.APPROVE,"提前解除",0))).isInstanceOf(ApiException.class);
+                    jdbcTemplate.update("UPDATE sup_blacklist_case SET reviewed_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 40 DAY) WHERE tenant_id=? AND id=?",tenantId,watchId);
+                    assertThat(liftService.readiness(watchId).ready()).isTrue();
+                    assertThat(liftService.review(watchId,Long.parseLong(observationApplication),new io.github.turbopro.ism.supplier.LiftModels.Review(io.github.turbopro.ism.supplier.LiftModels.Decision.APPROVE,"观察完成",0)).status()).isEqualTo("APPROVED");
+                }
+                assertThat(blacklistMapper.observed(tenantId,supplierId)).isZero();
                 assertThat(blacklistMapper.revoke(tenantId, watchId, "观察期结束", 2, 2)).isOne();
                 assertThat(blacklistMapper.observed(tenantId, supplierId)).isZero();
                 assertThat(blacklistMapper.insert(9980,tenantId,supplierId,orgId,"PERFORMANCE_SUP","Performance Supplier","BLACKLIST",null,null,"并发限制","SNAPSHOT-IT",1)).isOne();
@@ -607,6 +628,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_lift_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_lift_application WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM cfg_tenant_setting WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_restriction_appeal WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_case WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_event WHERE tenant_id=?", tenantId);

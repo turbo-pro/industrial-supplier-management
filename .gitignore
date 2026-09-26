@@ -12,6 +12,8 @@ dist/
 .pnpm-store/
 test-results/
 playwright-report/
+.playwright-cli/
+output/playwright/
 
 .env
 .env.*

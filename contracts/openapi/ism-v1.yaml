@@ -447,6 +447,8 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Effective tenant settings, content: { application/json: { schema: { $ref: '#/components/schemas/SettingListResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /configuration/settings/{settingKey}:
     put:
       operationId: updateTenantSetting
@@ -458,6 +460,9 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTenantSetting' } } } }
       responses:
         '200': { description: Tenant setting saved, content: { application/json: { schema: { $ref: '#/components/schemas/SettingResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
   /files/uploads:
@@ -1499,7 +1504,7 @@ components:
   schemas:
     CreateLift: { type: object, required: [reason, evidenceFileId], properties: { reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
     ReviewLift: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
-    RestrictionLift: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
+    RestrictionLift: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version, observationSeconds], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer }, observationSeconds: { type: integer, format: int64, minimum: 0 } } }
     LiftPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/RestrictionLift' } } } }
     LiftReadiness: { type: object, required: [ready, blockers], properties: { ready: { type: boolean }, observationEndsAt: { type: string, format: date-time, nullable: true }, blockers: { type: array, items: { type: object, required: [code, label, count, route], properties: { code: { type: string }, label: { type: string }, count: { type: integer }, route: { type: string } } } } } }
     LiftResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/RestrictionLift' } } }] }

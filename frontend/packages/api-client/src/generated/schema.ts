@@ -2219,6 +2219,8 @@ export interface components {
             reviewedAt?: string;
             reviewComment?: string;
             version: number;
+            /** Format: int64 */
+            observationSeconds: number;
         };
         LiftPage: {
             total: number;
@@ -5206,6 +5208,8 @@ export interface operations {
                     "application/json": components["schemas"]["SettingListResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     updateTenantSetting: {
@@ -5235,6 +5239,9 @@ export interface operations {
                     "application/json": components["schemas"]["SettingResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };

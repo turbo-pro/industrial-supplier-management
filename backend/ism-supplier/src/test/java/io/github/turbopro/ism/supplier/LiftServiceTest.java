@@ -17,7 +17,8 @@ class LiftServiceTest {
     final AppealEvidenceVerifier evidence=mock(AppealEvidenceVerifier.class);
     final OperationIdGenerator ids=mock(OperationIdGenerator.class);
     final BlacklistModels.Row restriction=mock(BlacklistModels.Row.class);
-    LiftService service(List<SupplierLiftCheck> checks){return new LiftService(mapper,restrictions,cases,evidence,checks,ids,mock(AuditService.class),Duration.ofDays(7));}
+    LiftService service(List<SupplierLiftCheck> checks){return service(checks,()->Duration.ofDays(7));}
+    LiftService service(List<SupplierLiftCheck> checks,ObservationPolicy policy){return new LiftService(mapper,restrictions,cases,evidence,checks,ids,mock(AuditService.class),Duration.ofDays(7),policy);}
     List<SupplierLiftCheck> checks(long quality){return List.of(id->List.of(
         new SupplierExitCheck.Blocker("OPEN_QUALITY","质量整改",quality,"/quality"),
         new SupplierExitCheck.Blocker("OPEN_SAFETY","安全整改",0,"/safety"),
@@ -27,7 +28,7 @@ class LiftServiceTest {
         when(restrictions.currentCase(10,80)).thenReturn(restriction);when(restriction.id()).thenReturn(80L);
         when(restriction.supplierId()).thenReturn(30L);when(restriction.status()).thenReturn("APPROVED");
         when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.BLACKLIST);
-        when(mapper.get(10,80,90)).thenReturn(new LiftModels.Row(90,80,"整改完成",50,"SUBMITTED",7,LocalDateTime.now(),null,null,null,0));
+        when(mapper.get(10,80,90)).thenReturn(new LiftModels.Row(90,80,"整改完成",50,"SUBMITTED",7,LocalDateTime.now(),null,null,null,0,604800));
         when(evidence.available(50)).thenReturn(true);
     }
     @Test void applicantCannotApprove(){setup();try(var t=TenantContext.open(10,7)){
@@ -68,5 +69,30 @@ class LiftServiceTest {
     @Test void hiddenCaseNeverLeaksHistory(){when(cases.get(80)).thenThrow(new ApiException(io.github.turbopro.ism.common.api.error.CommonErrorCode.NOT_FOUND));
         try(var t=TenantContext.open(11,8)){assertThrows(ApiException.class,()->service(checks(0)).list(80,0,20));}
         verifyNoInteractions(mapper);
+    }
+    @Test void pendingSnapshotCannotBeShortened(){setup();when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        when(restrictions.approvedAtMillis(10,80)).thenReturn(Instant.now().minus(Duration.ofDays(10)).toEpochMilli());
+        when(mapper.pendingObservationSeconds(10,80)).thenReturn(Duration.ofDays(30).getSeconds());
+        try(var t=TenantContext.open(10,8)){assertFalse(service(checks(0),()->Duration.ofDays(1)).readiness(80).ready());}
+    }
+    @Test void tenantCannotReduceDeploymentFloor(){setup();when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        when(restrictions.approvedAtMillis(10,80)).thenReturn(Instant.now().minus(Duration.ofDays(3)).toEpochMilli());
+        try(var t=TenantContext.open(10,8)){assertFalse(service(checks(0),()->Duration.ofDays(1)).readiness(80).ready());}
+    }
+    @Test void raisedTenantPolicyAppliesAtReview(){setup();when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        when(restrictions.approvedAtMillis(10,80)).thenReturn(Instant.now().minus(Duration.ofDays(10)).toEpochMilli());
+        when(mapper.pendingObservationSeconds(10,80)).thenReturn(Duration.ofDays(7).getSeconds());
+        try(var t=TenantContext.open(10,8)){
+            assertThrows(ApiException.class,()->service(checks(0),()->Duration.ofDays(30)).review(80,90,new LiftModels.Review(LiftModels.Decision.APPROVE,"批准",0)));
+        }
+        verify(mapper,never()).result(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString());
+    }
+    @Test void invalidPolicyFailsClosed(){setup();when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        try(var t=TenantContext.open(10,8)){assertThrows(ApiException.class,()->service(checks(0),()->null).readiness(80));}
+    }
+    @Test void submissionStoresPolicySnapshot(){setup();when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        when(ids.nextId()).thenReturn(90L);
+        try(var t=TenantContext.open(10,7)){service(checks(0),()->Duration.ofDays(30)).create(80,new LiftModels.Create("完成","50"));}
+        verify(mapper).insert(90,10,80,"完成",50,7,Duration.ofDays(30).getSeconds());
     }
 }

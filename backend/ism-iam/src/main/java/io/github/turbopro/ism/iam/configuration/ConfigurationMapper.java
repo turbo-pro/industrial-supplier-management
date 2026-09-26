@@ -7,6 +7,8 @@ import java.util.List;
 
 @Mapper
 public interface ConfigurationMapper extends TenantScopedMapper {
+    @Select("SELECT setting_value FROM cfg_tenant_setting WHERE tenant_id=#{tenantId} AND setting_key=#{key} FOR UPDATE")
+    String currentSettingValue(long tenantId,String key);
     @Select("""
         SELECT COALESCE(t.id,s.id) id,s.item_code,COALESCE(t.item_label,s.item_label) item_label,
           COALESCE(t.item_value,s.item_value) item_value,COALESCE(t.sort_order,s.sort_order) sort_order,

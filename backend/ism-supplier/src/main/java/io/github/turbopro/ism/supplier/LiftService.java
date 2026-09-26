@@ -16,12 +16,14 @@ public class LiftService {
     private final LiftMapper mapper;private final BlacklistMapper restrictions;private final BlacklistService cases;
     private final AppealEvidenceVerifier evidence;private final List<SupplierLiftCheck> checks;
     private final OperationIdGenerator ids;private final AuditService audit;private final Duration watchPeriod;
+    private final ObservationPolicy policy;
     public LiftService(LiftMapper mapper,BlacklistMapper restrictions,BlacklistService cases,AppealEvidenceVerifier evidence,
         List<SupplierLiftCheck> checks,OperationIdGenerator ids,AuditService audit,
-        @Value("${ism.restriction.lift.watch-period:P7D}") Duration watchPeriod){
+        @Value("${ism.restriction.lift.watch-period:P7D}") Duration watchPeriod,ObservationPolicy policy){
         if(watchPeriod.isNegative())throw new IllegalArgumentException("Observation period cannot be negative");
         this.mapper=mapper;this.restrictions=restrictions;this.cases=cases;this.evidence=evidence;
         this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.watchPeriod=watchPeriod;
+        this.policy=policy;
     }
     public LiftModels.Page list(long caseId,int page,int size){
         cases.get(caseId);var i=TenantContext.require();
@@ -34,9 +36,10 @@ public class LiftService {
             throw invalid("限制未批准或已解除，不能新增解除申请");
         long fileId=parseId(command.evidenceFileId());if(!evidence.available(fileId))throw invalid("解除证据不存在或不可用");
         var i=TenantContext.require();long id=ids.nextId();
-        try{mapper.insert(id,i.tenantId(),caseId,command.reason().trim(),fileId,i.actorId());}
+        long seconds=row.restrictionType()==BlacklistModels.RestrictionType.WATCH?period().getSeconds():0;
+        try{mapper.insert(id,i.tenantId(),caseId,command.reason().trim(),fileId,i.actorId(),seconds);}
         catch(DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"已有待处理解除申请");}
-        audit("RESTRICTION_LIFT_SUBMIT",id,Map.of("caseId",caseId,"evidenceFileId",fileId,"reason",command.reason().trim()));
+        audit("RESTRICTION_LIFT_SUBMIT",id,Map.of("caseId",caseId,"evidenceFileId",fileId,"reason",command.reason().trim(),"observationSeconds",seconds));
         return view(mapper.get(i.tenantId(),caseId,id));
     }
     @Transactional public LiftModels.View review(long caseId,long id,LiftModels.Review command){
@@ -62,9 +65,15 @@ public class LiftService {
             blockers.add(new SupplierExitCheck.Blocker("LIFT_STATE","限制未批准或已解除",1,"/suppliers/blacklist"));
         Instant ends=null;
         if(row.restrictionType()==BlacklistModels.RestrictionType.WATCH){
+            Duration required=period();
+            Long snapshot=mapper.pendingObservationSeconds(i.tenantId(),row.id());
+            if(snapshot!=null){
+                if(snapshot<0)throw invalid("观察期快照无效");
+                Duration submitted=Duration.ofSeconds(snapshot);if(submitted.compareTo(required)>0)required=submitted;
+            }
             Long approved=restrictions.approvedAtMillis(i.tenantId(),row.id());
             if(approved==null)blockers.add(new SupplierExitCheck.Blocker("OBSERVATION_UNKNOWN","观察期起点无法核验",1,"/suppliers/blacklist"));
-            else{ends=Instant.ofEpochMilli(approved).plus(watchPeriod);if(Instant.now().isBefore(ends))
+            else{ends=Instant.ofEpochMilli(approved).plus(required);if(Instant.now().isBefore(ends))
                 blockers.add(new SupplierExitCheck.Blocker("OBSERVATION_OPEN","观察期尚未结束",1,"/suppliers/blacklist"));}
         }
         var found=new HashSet<String>();
@@ -82,7 +91,11 @@ public class LiftService {
     }
     private LiftModels.View view(LiftModels.Row row){return new LiftModels.View(Long.toString(row.id()),Long.toString(row.caseId()),row.reason(),
         Long.toString(row.evidenceFileId()),row.status(),Long.toString(row.createdBy()),row.createdAt(),
-        row.reviewedBy()==null?null:row.reviewedBy().toString(),row.reviewedAt(),row.reviewComment(),row.version());}
+        row.reviewedBy()==null?null:row.reviewedBy().toString(),row.reviewedAt(),row.reviewComment(),row.version(),row.observationSeconds());}
+    private Duration period(){
+        Duration tenant=policy.period();if(tenant==null||tenant.isNegative()||tenant.compareTo(Duration.ofDays(3650))>0)throw invalid("观察期核验能力配置无效");
+        return tenant.compareTo(watchPeriod)>0?tenant:watchPeriod;
+    }
     private ApiException invalid(String message){return new ApiException(CommonErrorCode.VALIDATION_FAILED,message);}
     private long parseId(String value){try{long id=Long.parseLong(value);if(id>0)return id;}catch(NumberFormatException ignored){}throw invalid("证据文件 ID 无效");}
     private void audit(String action,long id,Map<String,Object> after){audit.append(new AuditService.AuditCommand(action,"RESTRICTION_LIFT",id,null,Map.of(),after,null,null));}
