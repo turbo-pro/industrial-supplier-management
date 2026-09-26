@@ -1319,6 +1319,28 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: Exit blockers, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierExitReadinessResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{caseId}/appeals:
+    get:
+      operationId: listRestrictionAppeals
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }, { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }, { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }]
+      responses: { '200': { description: Appeal history, content: { application/json: { schema: { $ref: '#/components/schemas/AppealPageResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: submitRestrictionAppeal
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateAppeal' } } } }
+      responses: { '200': { description: Appeal submitted without suspending restriction, content: { application/json: { schema: { $ref: '#/components/schemas/AppealResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-blacklist/{caseId}/appeals/{id}/review:
+    post:
+      operationId: reviewRestrictionAppeal
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: caseId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAppeal' } } } }
+      responses: { '200': { description: Appeal conclusion recorded without lifting restriction, content: { application/json: { schema: { $ref: '#/components/schemas/AppealResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /supplier-blacklist:
     get:
       operationId: listSupplierBlacklist
@@ -1444,6 +1466,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    CreateAppeal: { type: object, required: [reason, evidenceFileId], properties: { reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
+    ReviewAppeal: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [ACCEPT, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
+    RestrictionAppeal: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, ACCEPTED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
+    AppealPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/RestrictionAppeal' } } } }
+    AppealResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/RestrictionAppeal' } } }] }
+    AppealPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AppealPage' } } }] }
     SubmitManualClearance: { type: object, required: [evidenceFileId, statement, version], properties: { evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }, statement: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
     ReviewManualClearance: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT, REVOKE] }, comment: { type: string, minLength: 1, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
     ManualClearanceRecord: { type: object, required: [status, evidenceFileId, statement, submittedBy, submittedAt, version], properties: { status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED, REVOKED] }, evidenceFileId: { type: string }, statement: { type: string }, submittedBy: { type: string }, submittedAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }

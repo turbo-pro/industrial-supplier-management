@@ -222,6 +222,8 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.performance.PerformanceExitCheck performanceExitCheck;
     @Autowired private io.github.turbopro.ism.integration.finance.ManualClearanceMapper manualClearanceMapper;
     @Autowired private BlacklistMapper blacklistMapper;
+    @Autowired private io.github.turbopro.ism.supplier.AppealService appealService;
+    @Autowired private io.github.turbopro.ism.supplier.AppealMapper appealMapper;
     @Autowired private org.springframework.transaction.PlatformTransactionManager b7TransactionManager;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -452,6 +454,26 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.active(supplierId)).isNull();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
+                long appealId;
+                try(var applicant=TenantContext.open(tenantId,3L);var authorization=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of()))){
+                    var appeal=appealService.create(blacklistId,new io.github.turbopro.ism.supplier.AppealModels.Create("提出新证据",Long.toString(fileId)));
+                    appealId=Long.parseLong(appeal.id());
+                    assertThat(appealService.list(blacklistId,0,20).total()).isOne();
+                    assertThatThrownBy(()->appealService.create(blacklistId,new io.github.turbopro.ism.supplier.AppealModels.Create("重复申诉",Long.toString(fileId)))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                }
+                assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isOne();
+                assertThat(appealMapper.review(tenantId,blacklistId,appealId,"ACCEPTED","过期版本",4,1)).isZero();
+                try(var originalApprover=TenantContext.open(tenantId,2L);var authorization=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of()))){
+                    assertThatThrownBy(()->appealService.review(blacklistId,appealId,new io.github.turbopro.ism.supplier.AppealModels.Review(io.github.turbopro.ism.supplier.AppealModels.Decision.ACCEPT,"自审",0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                }
+                try(var reviewer=TenantContext.open(tenantId,4L);var authorization=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of()))){
+                    assertThat(appealService.review(blacklistId,appealId,new io.github.turbopro.ism.supplier.AppealModels.Review(io.github.turbopro.ism.supplier.AppealModels.Decision.ACCEPT,"申诉成立，另行解除审批",0)).status()).isEqualTo("ACCEPTED");
+                    assertThatThrownBy(()->appealService.review(blacklistId,appealId,new io.github.turbopro.ism.supplier.AppealModels.Review(io.github.turbopro.ism.supplier.AppealModels.Decision.REJECT,"重复",1))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                }
+                try(var otherTenant=TenantContext.open(tenantId+100000,4L);var authorization=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of()))){
+                    assertThatThrownBy(()->appealService.list(blacklistId,0,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                }
+                assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isOne();
                 assertThat(blacklistMapper.review(tenantId, blacklistId, "REJECT", "过期", 2, 1)).isZero();
                 assertThat(blacklistMapper.revoke(tenantId, blacklistId, "复核解除", 2, 2)).isOne();
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
@@ -557,6 +579,7 @@ class B0InfrastructureIT {
             }
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_restriction_appeal WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_case WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_improvement_plan WHERE tenant_id=?", tenantId);
