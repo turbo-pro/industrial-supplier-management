@@ -15,11 +15,13 @@ public class SafetyAttendanceService {
     private final SafetyCredentialMapper credentialMapper;
     private final OperationIdGenerator ids;
     private final AuditService audit;
+    private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers;
 
     public SafetyAttendanceService(SafetyAttendanceMapper mapper, SafetyCredentialMapper credentialMapper,
-                                   OperationIdGenerator ids, AuditService audit) {
+                                   OperationIdGenerator ids, AuditService audit,io.github.turbopro.ism.supplier.SupplierReferenceService suppliers) {
         this.mapper = mapper; this.credentialMapper = credentialMapper;
         this.ids = ids; this.audit = audit;
+        this.suppliers=suppliers;
     }
 
     public SafetyAttendanceModels.Page list(String personId, boolean openOnly, int page, int size) {
@@ -38,6 +40,12 @@ public class SafetyAttendanceService {
         var person = credentialMapper.person(identity.tenantId(), personId);
         if (person == null || person.projectId() == null || !scope().allows(
                 new DataTarget(person.organizationId(), person.projectId(), null, person.createdBy()), identity.actorId()))
+            throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(suppliers.activeForNewBusiness(person.supplierId())==null)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"供应商无效或存在生效限制，不能入场");
+        person=credentialMapper.personForEntry(identity.tenantId(),personId);
+        if(person==null || person.projectId()==null || !scope().allows(
+                new DataTarget(person.organizationId(),person.projectId(),null,person.createdBy()),identity.actorId()))
             throw new ApiException(CommonErrorCode.NOT_FOUND);
         if (mapper.activeProject(identity.tenantId(), person.projectId(), person.supplierId()) == 0)
             throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "所属项目不是进行中状态");

@@ -9,6 +9,8 @@ import java.util.Set;
 
 @Mapper
 public interface SafetyCredentialMapper extends TenantScopedMapper {
+    @Select("SELECT id,organization_id,supplier_id,project_id,person_code,person_name,special_work_type,status,created_by FROM res_supplier_person WHERE tenant_id=#{tenantId} AND id=#{personId} FOR UPDATE")
+    SafetyCredentialModels.PersonRef personForEntry(long tenantId,long personId);
     String SCOPE = "<choose>"
             + "<when test=\"scopeType == 'TENANT_ALL'\"></when>"
             + "<when test=\"scopeType == 'ORGANIZATION_SET'\"> AND p.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when>"

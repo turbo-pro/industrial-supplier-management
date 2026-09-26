@@ -222,6 +222,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.performance.PerformanceExitCheck performanceExitCheck;
     @Autowired private io.github.turbopro.ism.integration.finance.ManualClearanceMapper manualClearanceMapper;
     @Autowired private BlacklistMapper blacklistMapper;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager b7TransactionManager;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
     @Autowired private SafetyPerformanceFacts safetyPerformanceFacts;
@@ -450,10 +451,12 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.review(tenantId, blacklistId, "APPROVE", "证据充分", 2, 1)).isOne();
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.active(supplierId)).isNull();
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
                 assertThat(blacklistMapper.review(tenantId, blacklistId, "REJECT", "过期", 2, 1)).isZero();
                 assertThat(blacklistMapper.revoke(tenantId, blacklistId, "复核解除", 2, 2)).isOne();
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
                 assertThat(supplierReferenceService.active(supplierId)).isNotNull();
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
                 long temporaryId = 9951;
                 assertThat(blacklistMapper.insert(temporaryId, tenantId, supplierId, orgId,
                         "PERFORMANCE_SUP", "Performance Supplier", "TEMPORARY", java.time.LocalDate.now(),
@@ -482,6 +485,20 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
                 assertThat(blacklistMapper.revoke(tenantId, watchId, "观察期结束", 2, 2)).isOne();
                 assertThat(blacklistMapper.observed(tenantId, supplierId)).isZero();
+                assertThat(blacklistMapper.insert(9980,tenantId,supplierId,orgId,"PERFORMANCE_SUP","Performance Supplier","BLACKLIST",null,null,"并发限制","SNAPSHOT-IT",1)).isOne();
+                var oldTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
+                var approvalTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
+                approvalTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                oldTransaction.executeWithoutResult(tx -> {
+                    assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isZero();
+                    approvalTransaction.executeWithoutResult(approval -> {
+                        blacklistMapper.lockSupplier(tenantId,supplierId);
+                        assertThat(blacklistMapper.submit(tenantId,9980,1,0)).isOne();
+                        assertThat(blacklistMapper.review(tenantId,9980,"APPROVE","批准",2,1)).isOne();
+                    });
+                    assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
+                });
+                assertThat(blacklistMapper.revoke(tenantId,9980,"测试解除",2,2)).isOne();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
                 jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(9953,?,?,?,'EXIT-C','退出测试','SERVICE',10,CURRENT_DATE,CURRENT_DATE,1,?,1,1)",tenantId,orgId,supplierId,fileId);
                 jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(9954,?,?,?,'EXIT-P','退出测试','MAINTENANCE',CURRENT_DATE,CURRENT_DATE,1,1,1)",tenantId,orgId,supplierId);

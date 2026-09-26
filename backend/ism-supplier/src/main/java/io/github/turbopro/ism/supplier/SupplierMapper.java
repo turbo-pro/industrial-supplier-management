@@ -6,6 +6,8 @@ import java.util.*;
 
 @Mapper
 public interface SupplierMapper extends TenantScopedMapper {
+    @Select("SELECT id,organization_id,supplier_code,supplier_name,short_name,unified_social_credit_code,supplier_type,industry,country_code,province,city,address,legal_representative,registered_capital,currency,established_date,website,source,status,risk_level,remark,created_by,version,created_at,updated_at FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 FOR UPDATE")
+    SupplierModels.SupplierRow findForNewBusiness(long tenantId,long id);
     @Select("SELECT status FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 FOR UPDATE")
     String currentStatusForExit(long tenantId,long id);
     String SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'CREATED'\"> AND created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";

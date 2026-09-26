@@ -8,6 +8,8 @@ import java.util.*;
 
 @Mapper
 public interface BlacklistMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until)) FOR UPDATE")
+    List<Long> currentActive(long tenantId,long supplierId,LocalDate today);
     String FIELDS="id,supplier_id,organization_id,supplier_code,supplier_name,restriction_type,effective_from,effective_until,reason,source_ref,status,review_comment,reviewed_by,reviewed_at,revoked_reason,revoked_by,revoked_at,created_by,version,created_at,updated_at";
     String SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'CREATED' or scopeType == 'OWNED'\"> AND created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";
     @Select("<script>SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId}"+SCOPE+"<if test='supplierId != null'> AND supplier_id=#{supplierId}</if><if test='status != null'> AND status=#{status}</if></script>")

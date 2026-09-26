@@ -17,7 +17,29 @@ import static org.mockito.Mockito.*;
 class SupplierResourceServiceTest {
     private final SupplierResourceMapper mapper=mock(SupplierResourceMapper.class);
     private final OperationIdGenerator ids=mock(OperationIdGenerator.class);
-    private final SupplierResourceService service=new SupplierResourceService(mapper,ids,mock(AuditService.class));
+    private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
+    private final SupplierResourceService service=new SupplierResourceService(mapper,ids,mock(AuditService.class),suppliers);
+    @org.junit.jupiter.api.BeforeEach void validSupplier(){when(suppliers.activeForNewBusiness(30)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));}
+    @Test void restrictedSupplierCannotActivatePeopleOrUseAssets(){
+        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(mapper.person(10,99)).thenReturn(person("PENDING"));
+        when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertThrows(ApiException.class,()->service.personStatus(99,new SupplierResourceModels.PersonStatusCommand(SupplierResourceModels.PersonStatus.ACTIVE,null,1)));
+            assertThrows(ApiException.class,()->service.assetStatus(88,new SupplierResourceModels.AssetStatusCommand(SupplierResourceModels.AssetStatus.IN_USE,null,1)));
+        }
+        verify(mapper,never()).personStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
+        verify(mapper,never()).assetStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
+    }
+    @Test void restrictedSupplierCanStillHandOverAssets(){
+        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
+        when(mapper.handoverAsset(10,7,88,"接收人","交接",1)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertNotNull(service.handoverAsset(88,new SupplierResourceModels.AssetHandoverCommand("交接","接收人",1)));
+        }
+        verify(suppliers,never()).activeForNewBusiness(anyLong());
+    }
 
     @Test void rawIdentityNumberIsNeverPersisted(){
         when(ids.nextId()).thenReturn(99L);when(mapper.supplierOrg(10,30)).thenReturn(20L);

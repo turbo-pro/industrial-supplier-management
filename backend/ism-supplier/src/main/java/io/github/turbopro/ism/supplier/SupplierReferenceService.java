@@ -15,8 +15,18 @@ public class SupplierReferenceService {
         return new Reference(row.organizationId(), row.supplierCode(), row.supplierName());
     }
     public Reference activeForNewBusiness(long supplierId) {
-        blacklist.lockSupplier(TenantContext.require().tenantId(), supplierId);
-        return active(supplierId);
+        return eligibleForAction(supplierId,java.util.Set.of("ACTIVE"));
+    }
+    public Reference eligibleForAdmission(long supplierId) {
+        return eligibleForAction(supplierId,java.util.Set.of("DRAFT","ACTIVE","SUSPENDED"));
+    }
+    private Reference eligibleForAction(long supplierId,java.util.Set<String> allowedStatuses) {
+        long tenant=TenantContext.require().tenantId();
+        blacklist.lockSupplier(tenant, supplierId);
+        var row=mapper.findForNewBusiness(tenant,supplierId);
+        if(row==null || !allowedStatuses.contains(row.status())
+                || !blacklist.currentActive(tenant,supplierId,RestrictionBusinessDate.today()).isEmpty())return null;
+        return new Reference(row.organizationId(),row.supplierCode(),row.supplierName());
     }
     public record Reference(long organizationId, String code, String name) {}
     public boolean lockForExitVerification(long supplierId) {

@@ -18,7 +18,30 @@ class SafetyAttendanceServiceTest {
     private final SafetyCredentialMapper credentials = mock(SafetyCredentialMapper.class);
     private final OperationIdGenerator ids = mock(OperationIdGenerator.class);
     private final AuditService audit = mock(AuditService.class);
-    private final SafetyAttendanceService service = new SafetyAttendanceService(mapper, credentials, ids, audit);
+    private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
+    private final SafetyAttendanceService service = new SafetyAttendanceService(mapper, credentials, ids, audit,suppliers);
+    @org.junit.jupiter.api.BeforeEach void validSupplier(){
+        when(suppliers.activeForNewBusiness(30)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","供应商"));
+        when(credentials.personForEntry(10,99)).thenReturn(person("ACTIVE"));
+    }
+    @Test void restrictionBlocksCheckInBeforeInsert(){
+        when(credentials.person(10,99)).thenReturn(person("ACTIVE"));
+        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        try(var tenant=TenantContext.open(10,7);var authorization=auth()){
+            assertThrows(ApiException.class,()->service.checkIn(new SafetyAttendanceModels.CheckIn("99","厂区")));
+        }
+        verify(mapper,never()).checkIn(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString(),anyLong());
+    }
+    @Test void currentExitedPersonBlocksEntryDespiteEarlierActiveRead(){
+        when(credentials.person(10,99)).thenReturn(person("ACTIVE"));
+        when(credentials.personForEntry(10,99)).thenReturn(person("EXITED"));
+        when(mapper.activeProject(10,40,30)).thenReturn(1);
+        when(credentials.validTraining(10,99)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var authorization=auth()){
+            assertThrows(ApiException.class,()->service.checkIn(new SafetyAttendanceModels.CheckIn("99","厂区")));
+        }
+        verify(mapper,never()).checkIn(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString(),anyLong());
+    }
 
     @Test void expiredTrainingBlocksCheckIn() {
         when(credentials.person(10, 99)).thenReturn(person("ACTIVE"));
@@ -65,6 +88,15 @@ class SafetyAttendanceServiceTest {
 
     private SafetyCredentialModels.PersonRef person(String status) {
         return new SafetyCredentialModels.PersonRef(99, 20, 30, 40L, "P-1", "张三", null, status, 7);
+    }
+    @Test void restrictionDoesNotBlockCheckOut(){
+        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(mapper.get(10,100)).thenReturn(new SafetyAttendanceModels.Row(100,20,40,30,99,"P-1","张三","供应商","项目","厂区",LocalDateTime.now(),null,7,null,null,7,0));
+        when(mapper.checkOut(10,100,7,"离场",0)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var authorization=auth()){
+            assertNotNull(service.checkOut(100,new SafetyAttendanceModels.CheckOut("离场",0)));
+        }
+        verify(suppliers,never()).activeForNewBusiness(anyLong());
     }
     private AuthorizationContext.Scope auth() {
         return AuthorizationContext.open(new PermissionSnapshot(Set.of(),
