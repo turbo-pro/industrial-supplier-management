@@ -1914,6 +1914,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{id}/financial-clearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManualFinancialClearance"];
+        put?: never;
+        post: operations["submitManualFinancialClearance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{id}/financial-clearance/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewManualFinancialClearance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{id}/exit-readiness": {
         parameters: {
             query?: never;
@@ -2078,6 +2110,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SubmitManualClearance: {
+            evidenceFileId: string;
+            statement: string;
+            version: number;
+        };
+        ReviewManualClearance: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT" | "REVOKE";
+            comment: string;
+            version: number;
+        };
+        ManualClearanceRecord: {
+            /** @enum {string} */
+            status: "SUBMITTED" | "APPROVED" | "REJECTED" | "REVOKED";
+            evidenceFileId: string;
+            statement: string;
+            submittedBy: string;
+            /** Format: date-time */
+            submittedAt: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            reviewComment?: string;
+            version: number;
+        };
+        ManualClearanceView: {
+            manualEnabled: boolean;
+            record?: components["schemas"]["ManualClearanceRecord"] | null;
+        };
+        ManualClearanceResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ManualClearanceView"];
+        };
         /** @enum {string} */
         SupplierType: "MANUFACTURER" | "TRADER" | "SERVICE_PROVIDER" | "CONTRACTOR" | "OTHER";
         /** @enum {string} */
@@ -7755,6 +7819,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImprovementResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getManualFinancialClearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Manual financial verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualClearanceResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    submitManualFinancialClearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitManualClearance"];
+            };
+        };
+        responses: {
+            /** @description Submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualClearanceResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewManualFinancialClearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewManualClearance"];
+            };
+        };
+        responses: {
+            /** @description Reviewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualClearanceResponse"];
                 };
             };
             409: components["responses"]["ApiFailure"];

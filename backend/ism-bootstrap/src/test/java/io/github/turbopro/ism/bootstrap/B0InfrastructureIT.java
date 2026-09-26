@@ -220,6 +220,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.quality.QualityExitCheck qualityExitCheck;
     @Autowired private io.github.turbopro.ism.safety.SafetyExitCheck safetyExitCheck;
     @Autowired private io.github.turbopro.ism.performance.PerformanceExitCheck performanceExitCheck;
+    @Autowired private io.github.turbopro.ism.integration.finance.ManualClearanceMapper manualClearanceMapper;
     @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -421,6 +422,20 @@ class B0InfrastructureIT {
                     fileId, tenantId, 1, "performance.pdf", "application/pdf", 1, "e".repeat(64), "LOCAL", "it/performance", "ACTIVE");
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
                 assertThat(performanceMapper.insertRule(tenantId, 35, 25, 25, 15, 1)).isOne();
+                assertThat(manualClearanceMapper.insert(tenantId,supplierId,fileId,"核验证据",1)).isOne();
+                assertThat(manualClearanceMapper.get(tenantId,supplierId).status()).isEqualTo("SUBMITTED");
+                var manualGateway=new io.github.turbopro.ism.integration.finance.ManualClearanceGateway(manualClearanceMapper,fileReferenceService);
+                assertThat(manualGateway.check(tenantId,supplierId).status()).isEqualTo(io.github.turbopro.ism.integration.finance.FinancialClearanceGateway.Status.UNKNOWN);
+                assertThat(manualClearanceMapper.review(tenantId,supplierId,"APPROVED","确认",2,0)).isOne();
+                assertThat(manualGateway.check(tenantId,supplierId).status()).isEqualTo(io.github.turbopro.ism.integration.finance.FinancialClearanceGateway.Status.CLEAR);
+                var manualExitCheck=new io.github.turbopro.ism.integration.finance.FinancialExitCheck(java.util.List.of(manualGateway),java.time.Duration.ofMinutes(15));
+                assertThat(manualExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+                try (TenantContext.Scope other = TenantContext.open(tenantId+100000,1L)) {
+                    assertThat(manualClearanceMapper.get(tenantId+100000,supplierId)).isNull();
+                }
+                assertThat(manualClearanceMapper.review(tenantId,supplierId,"REVOKED","撤销",2,0)).isZero();
+                assertThat(manualClearanceMapper.review(tenantId,supplierId,"REVOKED","撤销",2,1)).isOne();
+                assertThat(manualExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
                 assertThat(performanceMapper.rule(tenantId).qualityWeight()).isEqualTo(35);
                 assertThat(performanceMapper.updateRule(tenantId, 40, 20, 25, 15, 1, 0)).isOne();
                 assertThat(performanceMapper.updateRule(tenantId, 35, 25, 25, 15, 1, 0)).isZero();
@@ -532,6 +547,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM per_evaluation_item WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_score_rule WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM int_financial_clearance WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM prj_contract WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);

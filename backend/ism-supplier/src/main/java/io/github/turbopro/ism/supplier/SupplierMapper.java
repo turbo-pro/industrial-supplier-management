@@ -6,6 +6,8 @@ import java.util.*;
 
 @Mapper
 public interface SupplierMapper extends TenantScopedMapper {
+    @Select("SELECT status FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 FOR UPDATE")
+    String currentStatusForExit(long tenantId,long id);
     String SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'CREATED'\"> AND created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";
     String FILTER="<if test='keyword != null and keyword != &quot;&quot;'> AND (supplier_code LIKE #{keyword} ESCAPE '=' OR supplier_name LIKE #{keyword} ESCAPE '=' OR unified_social_credit_code LIKE #{keyword} ESCAPE '=')</if><if test='status != null and status != &quot;&quot;'> AND status=#{status}</if><if test='organizationId != null'> AND organization_id=#{organizationId}</if>";
     @Select("<script>SELECT COUNT(*) FROM sup_supplier WHERE tenant_id=#{tenantId} AND deleted=0"+SCOPE+FILTER+"</script>")

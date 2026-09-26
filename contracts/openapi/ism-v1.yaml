@@ -1290,6 +1290,28 @@ paths:
       parameters: [{ name: evaluationId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewImprovement' } } } }
       responses: { '200': { description: Improvement reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/ImprovementResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{id}/financial-clearance:
+    get:
+      operationId: getManualFinancialClearance
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Manual financial verification, content: { application/json: { schema: { $ref: '#/components/schemas/ManualClearanceResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: submitManualFinancialClearance
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitManualClearance' } } } }
+      responses: { '200': { description: Submitted, content: { application/json: { schema: { $ref: '#/components/schemas/ManualClearanceResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{id}/financial-clearance/review:
+    post:
+      operationId: reviewManualFinancialClearance
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewManualClearance' } } } }
+      responses: { '200': { description: Reviewed, content: { application/json: { schema: { $ref: '#/components/schemas/ManualClearanceResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{id}/exit-readiness:
     get:
       operationId: getSupplierExitReadiness
@@ -1422,6 +1444,11 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    SubmitManualClearance: { type: object, required: [evidenceFileId, statement, version], properties: { evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }, statement: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
+    ReviewManualClearance: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT, REVOKE] }, comment: { type: string, minLength: 1, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }
+    ManualClearanceRecord: { type: object, required: [status, evidenceFileId, statement, submittedBy, submittedAt, version], properties: { status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED, REVOKED] }, evidenceFileId: { type: string }, statement: { type: string }, submittedBy: { type: string }, submittedAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
+    ManualClearanceView: { type: object, required: [manualEnabled], properties: { manualEnabled: { type: boolean }, record: { nullable: true, allOf: [{ $ref: '#/components/schemas/ManualClearanceRecord' }] } } }
+    ManualClearanceResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ManualClearanceView' } } }] }
     SupplierType:
       type: string
       enum: [MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER]

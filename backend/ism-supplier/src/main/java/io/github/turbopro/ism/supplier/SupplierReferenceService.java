@@ -19,4 +19,10 @@ public class SupplierReferenceService {
         return active(supplierId);
     }
     public record Reference(long organizationId, String code, String name) {}
+    public boolean lockForExitVerification(long supplierId) {
+        long tenant=TenantContext.require().tenantId();
+        blacklist.lockSupplier(tenant,supplierId);
+        var status=mapper.currentStatusForExit(tenant,supplierId);
+        return status!=null && !"EXITED".equals(status);
+    }
 }
