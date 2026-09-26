@@ -10,4 +10,5 @@ import io.github.turbopro.ism.common.api.ApiResponse;import io.github.turbopro.i
  @PostMapping("/assets")@RequiresPermission("resource:asset:manage")ApiResponse<SupplierResourceModels.AssetView>createAsset(@Valid@RequestBody SupplierResourceModels.SaveAsset c){return responses.success(service.createAsset(c));}
  @PutMapping("/assets/{id}")@RequiresPermission("resource:asset:manage")ApiResponse<SupplierResourceModels.AssetView>updateAsset(@PathVariable long id,@Valid@RequestBody SupplierResourceModels.SaveAsset c){return responses.success(service.updateAsset(id,c));}
  @PostMapping("/assets/{id}/status")@RequiresPermission("resource:asset:status")ApiResponse<SupplierResourceModels.AssetView>assetStatus(@PathVariable long id,@Valid@RequestBody SupplierResourceModels.AssetStatusCommand c){return responses.success(service.assetStatus(id,c));}
+ @PostMapping("/assets/{id}/handover")@RequiresPermission("resource:asset:status")ApiResponse<SupplierResourceModels.AssetView>handoverAsset(@PathVariable long id,@Valid@RequestBody SupplierResourceModels.AssetHandoverCommand c){return responses.success(service.handoverAsset(id,c));}
 }

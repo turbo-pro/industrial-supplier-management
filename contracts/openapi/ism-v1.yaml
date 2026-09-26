@@ -1069,6 +1069,14 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeAssetStatus' } } } }
       responses: { '200': { description: Supplier asset status changed, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /resources/assets/{id}/handover:
+    post:
+      operationId: handoverSupplierAsset
+      tags: [SupplierResource]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AssetHandover' } } } }
+      responses: { '200': { description: Asset handover recorded, content: { application/json: { schema: { $ref: '#/components/schemas/AssetResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /safety/issues:
     get:
       operationId: listSafetyIssues
@@ -1748,8 +1756,9 @@ components:
     SupplierAsset:
       type: object
       required: [id, organizationId, supplierId, supplierCode, supplierName, code, name, type, status, version, updatedAt]
-      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, type: { $ref: '#/components/schemas/AssetType' }, plateNo: { type: string }, serialNo: { type: string }, brand: { type: string }, model: { type: string }, inspectionExpiryDate: { type: string, format: date }, fileId: { type: string }, status: { $ref: '#/components/schemas/AssetStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time } }
+      properties: { id: { type: string }, organizationId: { type: string }, supplierId: { type: string }, projectId: { type: string }, supplierCode: { type: string }, supplierName: { type: string }, projectCode: { type: string }, code: { type: string }, name: { type: string }, type: { $ref: '#/components/schemas/AssetType' }, plateNo: { type: string }, serialNo: { type: string }, brand: { type: string }, model: { type: string }, inspectionExpiryDate: { type: string, format: date }, fileId: { type: string }, status: { $ref: '#/components/schemas/AssetStatus' }, statusReason: { type: string }, version: { type: integer }, updatedAt: { type: string, format: date-time }, handedOverAt: { type: string, format: date-time }, handoverRecipient: { type: string }, handoverNote: { type: string } }
     AssetPage: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/SupplierAsset' } } } }
+    AssetHandover: { type: object, required: [note, recipient, version], properties: { note: { type: string, minLength: 1, maxLength: 1000 }, recipient: { type: string, minLength: 1, maxLength: 100 }, version: { type: integer, minimum: 0 } } }
     ChangeAssetStatus: { type: object, required: [status, version], properties: { status: { $ref: '#/components/schemas/AssetStatus' }, reason: { type: string, maxLength: 500 }, version: { type: integer, minimum: 0 } } }
     AssetResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SupplierAsset' } } }] }
     AssetPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AssetPage' } } }] }

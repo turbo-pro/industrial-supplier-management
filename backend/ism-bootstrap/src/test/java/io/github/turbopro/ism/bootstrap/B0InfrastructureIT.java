@@ -264,11 +264,23 @@ class B0InfrastructureIT {
 
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
             assertThat(supplierResourceMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
+            assertThat(supplierResourceMapper.insertAsset(9907,tenantId,1,orgId,supplierId,null,"EXIT-ASSET","交接车辆","VEHICLE","IT-9907",null,null,null,null,null)).isOne();
             assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
             try (TenantContext.Scope other = TenantContext.open(tenantId + 100000, 1L)) {
                 assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
             }
             jdbcTemplate.update("UPDATE res_supplier_person SET status='EXITED' WHERE id=?", personId);
+            assertThat(supplierResourceMapper.assetStatus(tenantId,1,9907,"IN_USE",null,0)).isOne();
+            assertThat(supplierResourceMapper.handoverAsset(tenantId,1,9907,"接收单位","交接完成",1)).isZero();
+            assertThatThrownBy(() -> supplierResourceMapper.handoverAsset(tenantId+100000,1,9907,"接收单位","交接完成",1))
+                    .hasRootCauseInstanceOf(io.github.turbopro.ism.common.infrastructure.tenant.TenantIsolationException.class);
+            assertThat(supplierResourceMapper.assetStatus(tenantId,1,9907,"AVAILABLE",null,1)).isOne();
+            assertThat(supplierResourceMapper.handoverAsset(tenantId,1,9907,"接收单位","交接完成",1)).isZero();
+            assertThat(supplierResourceMapper.handoverAsset(tenantId,1,9907,"接收单位","交接完成",2)).isOne();
+            assertThat(supplierResourceMapper.asset(tenantId,9907).handedOverAt()).isNotNull();
+            assertThat(supplierResourceMapper.asset(tenantId,9907).handoverRecipient()).isEqualTo("接收单位");
+            assertThat(supplierResourceMapper.handoverAsset(tenantId,1,9907,"接收单位","重复交接",3)).isZero();
+            assertThat(supplierResourceMapper.assetStatus(tenantId,1,9907,"IN_USE",null,3)).isZero();
             assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
             assertThat(safetyCredentialMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
             assertThat(safetyCredentialMapper.activeFile(tenantId, fileId)).isOne();
@@ -285,6 +297,7 @@ class B0InfrastructureIT {
             }
         } finally {
             jdbcTemplate.update("DELETE FROM saf_person_credential WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM res_supplier_asset WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);

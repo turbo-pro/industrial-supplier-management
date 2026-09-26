@@ -50,6 +50,20 @@ class SupplierResourceServiceTest {
     }
 
     private AuthorizationContext.Scope auth(){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("resource:person",DataScope.all(),"resource:asset",DataScope.all()),Set.of()));}
+    @Test void inUseAssetCannotBeHandedOver(){
+        when(mapper.asset(10,88)).thenReturn(asset("IN_USE"));
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertThrows(ApiException.class,()->service.handoverAsset(88,new SupplierResourceModels.AssetHandoverCommand("交接","接收人",1)));
+        }
+        verify(mapper,never()).handoverAsset(anyLong(),anyLong(),anyLong(),anyString(),anyString(),anyInt());
+    }
+    @Test void staleHandoverVersionIsRejected(){
+        when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertThrows(ApiException.class,()->service.handoverAsset(88,new SupplierResourceModels.AssetHandoverCommand("交接","接收人",0)));
+        }
+        verify(mapper).handoverAsset(10,7,88,"接收人","交接",0);
+    }
     @Test void activationNeedsVerifiedTrainingAndMatchingSpecialWork(){
         when(mapper.person(10,99)).thenReturn(person("PENDING", "WELDING"));
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
@@ -64,5 +78,5 @@ class SupplierResourceServiceTest {
     }
     private SupplierResourceModels.PersonRow person(String status){return person(status,null);}
     private SupplierResourceModels.PersonRow person(String status,String workType){return new SupplierResourceModels.PersonRow(99,20,30,null,"SUP-001","测试供应商",null,"EMP-001","张三","NATIONAL_ID","110101********1234","13800138000",null,null,workType,LocalDate.now(),null,status,null,7,1,LocalDateTime.now());}
-    private SupplierResourceModels.AssetRow asset(String status){return new SupplierResourceModels.AssetRow(88,20,30,null,"SUP-001","测试供应商",null,"VEH-001","运输车辆","VEHICLE","沪A12345",null,null,null,null,null,status,null,7,1,LocalDateTime.now());}
+    private SupplierResourceModels.AssetRow asset(String status){return new SupplierResourceModels.AssetRow(88,20,30,null,"SUP-001","测试供应商",null,"VEH-001","运输车辆","VEHICLE","沪A12345",null,null,null,null,null,status,null,7,1,LocalDateTime.now(),null,null,null);}
 }

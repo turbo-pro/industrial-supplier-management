@@ -1530,6 +1530,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resources/assets/{id}/handover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["handoverSupplierAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/safety/issues": {
         parameters: {
             query?: never;
@@ -2571,6 +2587,10 @@ export interface components {
             version: number;
             /** Format: date-time */
             updatedAt: string;
+            /** Format: date-time */
+            handedOverAt?: string;
+            handoverRecipient?: string;
+            handoverNote?: string;
         };
         AssetPage: {
             /** Format: int64 */
@@ -2578,6 +2598,11 @@ export interface components {
             page: number;
             size: number;
             items: components["schemas"]["SupplierAsset"][];
+        };
+        AssetHandover: {
+            note: string;
+            recipient: string;
+            version: number;
         };
         ChangeAssetStatus: {
             status: components["schemas"]["AssetStatus"];
@@ -6933,6 +6958,33 @@ export interface operations {
         };
         responses: {
             /** @description Supplier asset status changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    handoverSupplierAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetHandover"];
+            };
+        };
+        responses: {
+            /** @description Asset handover recorded */
             200: {
                 headers: {
                     [name: string]: unknown;
