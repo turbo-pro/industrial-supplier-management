@@ -7,6 +7,8 @@ import java.util.List;
 
 @Mapper
 public interface ImprovementMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{supplierId} AND deleted=0 AND status!='EXITED' FOR UPDATE")
+    Long lockSupplier(long tenantId, long supplierId);
     @Select("SELECT id,evaluation_id,root_cause,action_plan,due_date,status,completion_note,evidence_file_id,review_comment,reviewed_by,reviewed_at,created_by,version,created_at,updated_at FROM per_improvement_plan WHERE tenant_id=#{tenantId} AND evaluation_id=#{evaluationId}")
     ImprovementModels.Row get(long tenantId,long evaluationId);
     @Insert("INSERT INTO per_improvement_plan(id,tenant_id,evaluation_id,root_cause,action_plan,due_date,created_by,updated_by) VALUES(#{id},#{tenantId},#{evaluationId},#{rootCause},#{actionPlan},#{dueDate},#{actorId},#{actorId})")

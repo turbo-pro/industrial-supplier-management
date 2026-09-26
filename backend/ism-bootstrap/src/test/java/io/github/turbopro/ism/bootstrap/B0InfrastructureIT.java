@@ -219,6 +219,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.resource.supplier.ResourceExitCheck resourceExitCheck;
     @Autowired private io.github.turbopro.ism.quality.QualityExitCheck qualityExitCheck;
     @Autowired private io.github.turbopro.ism.safety.SafetyExitCheck safetyExitCheck;
+    @Autowired private io.github.turbopro.ism.performance.PerformanceExitCheck performanceExitCheck;
     @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -491,12 +492,21 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.insert(planId, tenantId, evaluationId, "根因", "改进措施",
                         java.time.LocalDate.now().plusDays(7), 1)).isOne();
                 assertThat(improvementMapper.get(tenantId, evaluationId).status()).isEqualTo("OPEN");
+                assertThat(performanceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
+                try (TenantContext.Scope other = TenantContext.open(tenantId + 100000, 1L)) {
+                    assertThat(performanceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+                }
                 assertThat(improvementMapper.submit(tenantId, evaluationId, "已完成", fileId, 1, 0)).isOne();
                 assertThat(improvementMapper.review(tenantId, evaluationId, "REWORK", "证据不足", 2, 1)).isOne();
+                assertThat(performanceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
                 assertThat(improvementMapper.submit(tenantId, evaluationId, "补充证据", fileId, 1, 2)).isOne();
                 assertThat(improvementMapper.review(tenantId, evaluationId, "ACCEPT", "验收通过", 2, 3)).isOne();
                 assertThat(improvementMapper.review(tenantId, evaluationId, "REWORK", "过期版本", 2, 3)).isZero();
                 assertThat(improvementMapper.get(tenantId, evaluationId).status()).isEqualTo("ACCEPTED");
+                assertThat(performanceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+                assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
+                jdbcTemplate.update("UPDATE sup_supplier SET status='EXITED' WHERE id=?", supplierId);
+                assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isNull();
                 assertThat(improvementMapper.event(9949, tenantId, planId, "CREATE", null, "OPEN", null, 1)).isOne();
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }

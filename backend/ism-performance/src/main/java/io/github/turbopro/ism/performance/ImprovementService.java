@@ -32,6 +32,8 @@ public class ImprovementService {
         if(evaluation.status()!=PerformanceModels.Status.APPROVED)throw invalid("只有已批准的绩效评价可以发起改进");
         if(command.dueDate().isBefore(LocalDate.now()))throw invalid("整改期限不能早于今天");
         var identity=TenantContext.require();long id=ids.nextId();
+        if(mapper.lockSupplier(identity.tenantId(),Long.parseLong(evaluation.supplierId()))==null)
+            throw invalid("已退出供应商不能新增改进计划");
         try {mapper.insert(id,identity.tenantId(),evaluationId,command.rootCause().trim(),command.actionPlan().trim(),command.dueDate(),identity.actorId());}
         catch(DuplicateKeyException exception){throw new ApiException(CommonErrorCode.CONFLICT,"该评价已有改进计划");}
         event(id,"CREATE",null,"OPEN",null);audit("PERFORMANCE_IMPROVEMENT_CREATE",id,"OPEN");

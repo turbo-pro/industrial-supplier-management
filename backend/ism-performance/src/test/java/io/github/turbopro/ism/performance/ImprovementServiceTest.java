@@ -25,6 +25,15 @@ class ImprovementServiceTest {
         }
         verify(mapper,never()).insert(anyLong(),anyLong(),anyLong(),anyString(),anyString(),any(),anyLong());
     }
+    @Test void exitedSupplierCannotStartImprovement() {
+        when(evaluations.get(80)).thenReturn(evaluation(PerformanceModels.Status.APPROVED));
+        when(mapper.lockSupplier(10,40)).thenReturn(null);
+        try(var tenant=TenantContext.open(10,7)) {
+            assertThrows(ApiException.class,()->service.create(80,new ImprovementModels.Create("根因","措施",LocalDate.now().plusDays(7))));
+        }
+        verify(mapper).lockSupplier(10,40);
+        verify(mapper,never()).insert(anyLong(),anyLong(),anyLong(),anyString(),anyString(),any(),anyLong());
+    }
     @Test void submitRequiresEvidenceAndOpenState() {
         when(evaluations.get(80)).thenReturn(evaluation(PerformanceModels.Status.APPROVED));
         when(mapper.get(10,80)).thenReturn(plan("OPEN",7));
