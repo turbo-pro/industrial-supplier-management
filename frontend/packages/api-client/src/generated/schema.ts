@@ -2099,6 +2099,7 @@ export interface components {
             type: components["schemas"]["SupplierType"];
             status: components["schemas"]["SupplierStatus"];
             riskLevel: components["schemas"]["SupplierRiskLevel"];
+            observed: boolean;
             version: number;
             /** Format: date-time */
             updatedAt: string;
@@ -3041,7 +3042,7 @@ export interface components {
         /** @enum {string} */
         BlacklistStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVOKED";
         /** @enum {string} */
-        RestrictionType: "BLACKLIST" | "TEMPORARY";
+        RestrictionType: "BLACKLIST" | "TEMPORARY" | "WATCH";
         CreateBlacklistCase: {
             supplierId: string;
             reason: string;

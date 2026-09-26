@@ -16,12 +16,14 @@ public interface BlacklistMapper extends TenantScopedMapper {
     List<BlacklistModels.Row> list(long tenantId,Long supplierId,String status,String scopeType,Set<Long> organizationIds,long actorId,int offset,int size);
     @Select("SELECT "+FIELDS+" FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND id=#{id}")
     BlacklistModels.Row get(long tenantId,long id);
-    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND (status IN ('DRAFT','SUBMITTED') OR (status='APPROVED' AND (restriction_type='BLACKLIST' OR effective_until>=#{today})))")
-    int openCase(long tenantId,long supplierId,LocalDate today);
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND (status IN ('DRAFT','SUBMITTED') OR (status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND effective_until>=#{today}) OR (restriction_type='WATCH' AND #{type}='WATCH'))))")
+    int openCase(long tenantId,long supplierId,LocalDate today,String type);
     @Select("SELECT id FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{supplierId} FOR UPDATE")
     Long lockSupplier(long tenantId,long supplierId);
-    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND (restriction_type='BLACKLIST' OR #{today} BETWEEN effective_from AND effective_until)")
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND (restriction_type='BLACKLIST' OR (restriction_type='TEMPORARY' AND #{today} BETWEEN effective_from AND effective_until))")
     int active(long tenantId,long supplierId,LocalDate today);
+    @Select("SELECT COUNT(*) FROM sup_blacklist_case WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='APPROVED' AND restriction_type='WATCH'")
+    int observed(long tenantId,long supplierId);
     @Insert("INSERT INTO sup_blacklist_case(id,tenant_id,supplier_id,organization_id,supplier_code,supplier_name,restriction_type,effective_from,effective_until,reason,source_ref,created_by,updated_by) VALUES(#{id},#{tenantId},#{supplierId},#{org},#{code},#{name},#{restrictionType},#{effectiveFrom},#{effectiveUntil},#{reason},#{sourceRef},#{actorId},#{actorId})")
     int insert(long id,long tenantId,long supplierId,long org,String code,String name,String restrictionType,LocalDate effectiveFrom,LocalDate effectiveUntil,String reason,String sourceRef,long actorId);
     @Update("UPDATE sup_blacklist_case SET status='SUBMITTED',updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND status='DRAFT' AND version=#{version}")

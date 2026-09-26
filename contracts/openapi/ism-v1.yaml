@@ -1459,7 +1459,7 @@ components:
           properties: { id: { type: string } }
     SupplierSummary:
       type: object
-      required: [id, organizationId, code, name, type, status, riskLevel, version, updatedAt]
+      required: [id, organizationId, code, name, type, status, riskLevel, observed, version, updatedAt]
       properties:
         id: { type: string }
         organizationId: { type: string }
@@ -1470,6 +1470,7 @@ components:
         type: { $ref: '#/components/schemas/SupplierType' }
         status: { $ref: '#/components/schemas/SupplierStatus' }
         riskLevel: { $ref: '#/components/schemas/SupplierRiskLevel' }
+        observed: { type: boolean }
         version: { type: integer }
         updatedAt: { type: string, format: date-time }
     Supplier:
@@ -1843,7 +1844,7 @@ components:
       properties: { id: { type: string }, evaluationId: { type: string }, rootCause: { type: string }, actionPlan: { type: string }, dueDate: { type: string, format: date }, status: { $ref: '#/components/schemas/ImprovementStatus' }, completionNote: { type: string }, evidenceFileId: { type: string }, reviewComment: { type: string }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, createdBy: { type: string }, version: { type: integer }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, events: { type: array, items: { $ref: '#/components/schemas/ImprovementEvent' } } }
     ImprovementResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { oneOf: [{ $ref: '#/components/schemas/ImprovementPlan' }, { type: 'null' }] } } }] }
     BlacklistStatus: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, REVOKED] }
-    RestrictionType: { type: string, enum: [BLACKLIST, TEMPORARY] }
+    RestrictionType: { type: string, enum: [BLACKLIST, TEMPORARY, WATCH] }
     CreateBlacklistCase: { type: object, required: [supplierId, reason, restrictionType], properties: { supplierId: { type: string }, reason: { type: string, maxLength: 1000 }, sourceRef: { type: string, maxLength: 200 }, restrictionType: { $ref: '#/components/schemas/RestrictionType' }, effectiveFrom: { type: string, format: date }, effectiveUntil: { type: string, format: date } } }
     VersionCommand: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } }
     ReviewBlacklistCase: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } } }

@@ -31,7 +31,7 @@ public class BlacklistService {
         if(!scope().allows(new DataTarget(Long.parseLong(supplier.organizationId()),null,i.actorId(),i.actorId()),i.actorId()))throw new ApiException(CommonErrorCode.FORBIDDEN);
         // Serialize proposals for one supplier so concurrent drafts cannot bypass the open-case check.
         mapper.lockSupplier(i.tenantId(),supplierId);
-        if(mapper.openCase(i.tenantId(),supplierId,RestrictionBusinessDate.today())>0)throw new ApiException(CommonErrorCode.CONFLICT,"该供应商已有未结束的限制申请");
+        if(mapper.openCase(i.tenantId(),supplierId,RestrictionBusinessDate.today(),command.restrictionType().name())>0)throw new ApiException(CommonErrorCode.CONFLICT,"该供应商已有未结束的限制申请");
         long caseId=ids.nextId();mapper.insert(caseId,i.tenantId(),supplierId,Long.parseLong(supplier.organizationId()),supplier.code(),supplier.name(),command.restrictionType().name(),command.effectiveFrom(),command.effectiveUntil(),command.reason().trim(),blank(command.sourceRef()),i.actorId());
         event(caseId,"CREATE",null,"DRAFT",command.reason().trim());audit("SUPPLIER_BLACKLIST_CREATE",caseId,"DRAFT");
         return view(mapper.get(i.tenantId(),caseId));
@@ -60,10 +60,10 @@ public class BlacklistService {
         if(row==null||!scope().allows(new DataTarget(row.organizationId(),null,null,row.createdBy()),i.actorId()))throw new ApiException(CommonErrorCode.NOT_FOUND);return row;}
     private DataScope scope(){return AuthorizationContext.require().dataScope("supplier:master");}
     private BlacklistModels.View view(BlacklistModels.Row r){var i=TenantContext.require();return new BlacklistModels.View(Long.toString(r.id()),Long.toString(r.supplierId()),Long.toString(r.organizationId()),r.supplierCode(),r.supplierName(),r.restrictionType(),r.effectiveFrom(),r.effectiveUntil(),effective(r),r.reason(),r.sourceRef(),BlacklistModels.Status.valueOf(r.status()),r.reviewComment(),str(r.reviewedBy()),r.reviewedAt(),r.revokedReason(),str(r.revokedBy()),r.revokedAt(),Long.toString(r.createdBy()),r.version(),r.createdAt(),r.updatedAt(),mapper.events(i.tenantId(),r.id()).stream().map(e->new BlacklistModels.Event(Long.toString(e.id()),e.action(),e.fromStatus(),e.toStatus(),e.comment(),Long.toString(e.actorId()),e.createdAt())).toList());}
-    private boolean effective(BlacklistModels.Row row){if(!"APPROVED".equals(row.status()))return false;if(row.restrictionType()==BlacklistModels.RestrictionType.BLACKLIST)return true;var today=RestrictionBusinessDate.today();return !today.isBefore(row.effectiveFrom())&&!today.isAfter(row.effectiveUntil());}
+    private boolean effective(BlacklistModels.Row row){if(!"APPROVED".equals(row.status()))return false;if(row.restrictionType()!=BlacklistModels.RestrictionType.TEMPORARY)return true;var today=RestrictionBusinessDate.today();return !today.isBefore(row.effectiveFrom())&&!today.isAfter(row.effectiveUntil());}
     private void validateDates(BlacklistModels.Create command){
-        if(command.restrictionType()==BlacklistModels.RestrictionType.BLACKLIST){
-            if(command.effectiveFrom()!=null||command.effectiveUntil()!=null)throw invalid("长期黑名单不填写生效日期");
+        if(command.restrictionType()!=BlacklistModels.RestrictionType.TEMPORARY){
+            if(command.effectiveFrom()!=null||command.effectiveUntil()!=null)throw invalid("长期黑名单和观察名单不填写生效日期");
         }else if(command.effectiveFrom()==null||command.effectiveUntil()==null||command.effectiveFrom().isAfter(command.effectiveUntil())||command.effectiveUntil().isBefore(RestrictionBusinessDate.today()))
             throw invalid("限期限制必须填写有效的起止日期，结束日不能早于今天");
     }

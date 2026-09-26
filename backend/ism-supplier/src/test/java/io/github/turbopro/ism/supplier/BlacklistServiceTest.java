@@ -16,7 +16,7 @@ class BlacklistServiceTest {
     private final SupplierService suppliers=mock(SupplierService.class);
     private final BlacklistService service=new BlacklistService(mapper,suppliers,mock(OperationIdGenerator.class),mock(AuditService.class));
     @Test void cannotOpenSecondActiveCase(){
-        when(suppliers.get(30)).thenReturn(supplier());when(mapper.openCase(eq(10L),eq(30L),any())).thenReturn(1);
+        when(suppliers.get(30)).thenReturn(supplier());when(mapper.openCase(eq(10L),eq(30L),any(),eq("BLACKLIST"))).thenReturn(1);
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
             assertThrows(ApiException.class,()->service.create(new BlacklistModels.Create("30","重大违约",null,BlacklistModels.RestrictionType.BLACKLIST,null,null)));
         }
@@ -51,6 +51,16 @@ class BlacklistServiceTest {
             assertThrows(ApiException.class,()->service.review(90,new BlacklistModels.Review(BlacklistModels.Decision.APPROVE,"同意",0)));
         }
         verify(mapper,never()).review(anyLong(),anyLong(),anyString(),anyString(),anyLong(),anyInt());
+    }
+    @Test void approvedWatchIsEffectiveWithoutBlockingBusiness(){
+        var watch=new BlacklistModels.Row(90,30,20,"S-1","供应商",BlacklistModels.RestrictionType.WATCH,
+                null,null,"履约风险",null,"APPROVED",null,8L,LocalDateTime.now(),null,null,null,7,2,
+                LocalDateTime.now(),LocalDateTime.now());
+        when(mapper.get(10,90)).thenReturn(watch);
+        when(mapper.events(10,90)).thenReturn(List.of());
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertTrue(service.get(90).effective());
+        }
     }
     private AuthorizationContext.Scope auth(){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.all()),Set.of()));}
     private SupplierModels.SupplierView supplier(){return new SupplierModels.SupplierView("30","20","S-1","供应商",null,null,SupplierModels.Type.MANUFACTURER,null,"CN",null,null,null,null,null,null,null,null,"MANUAL",SupplierModels.Status.ACTIVE,SupplierModels.RiskLevel.LOW,null,0,null,null,List.of());}

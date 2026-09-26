@@ -27,6 +27,6 @@ public final class SupplierModels {
     public record ContactRow(long id,String contactName,String positionName,String mobile,String telephone,String email,boolean primary,int sortOrder) {}
     public record ContactView(String id,String name,String position,String mobile,String telephone,String email,boolean primary,int sortOrder) {}
     public record SupplierView(String id,String organizationId,String code,String name,String shortName,String unifiedSocialCreditCode,Type type,String industry,String countryCode,String province,String city,String address,String legalRepresentative,BigDecimal registeredCapital,String currency,LocalDate establishedDate,String website,String source,Status status,RiskLevel riskLevel,String remark,int version,LocalDateTime createdAt,LocalDateTime updatedAt,List<ContactView> contacts) {}
-    public record SupplierSummary(String id,String organizationId,String code,String name,String shortName,String unifiedSocialCreditCode,Type type,Status status,RiskLevel riskLevel,int version,LocalDateTime updatedAt) {}
+    public record SupplierSummary(String id,String organizationId,String code,String name,String shortName,String unifiedSocialCreditCode,Type type,Status status,RiskLevel riskLevel,boolean observed,int version,LocalDateTime updatedAt) {}
     public record SupplierPage(long total,int page,int size,List<SupplierSummary> items) {}
 }

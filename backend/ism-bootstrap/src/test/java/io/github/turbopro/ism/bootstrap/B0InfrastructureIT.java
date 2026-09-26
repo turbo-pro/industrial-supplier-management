@@ -42,6 +42,7 @@ import io.github.turbopro.ism.quality.QualityNcrMapper;
 import io.github.turbopro.ism.performance.PerformanceMapper;
 import io.github.turbopro.ism.performance.ImprovementMapper;
 import io.github.turbopro.ism.supplier.SupplierReferenceService;
+import io.github.turbopro.ism.supplier.SupplierMapper;
 import io.github.turbopro.ism.supplier.BlacklistMapper;
 import io.github.turbopro.ism.resource.file.FileReferenceService;
 import io.github.turbopro.ism.quality.QualityPerformanceFacts;
@@ -213,6 +214,7 @@ class B0InfrastructureIT {
     @Autowired private PerformanceMapper performanceMapper;
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
+    @Autowired private SupplierMapper supplierMapper;
     @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -376,7 +378,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",
                     orgId, tenantId, "PERFORMANCE_ORG", "Performance Organization", "SITE", "ACTIVE");
             jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",
-                    supplierId, tenantId, orgId, "PERFORMANCE_SUP", "Performance Supplier", "SERVICE", "ACTIVE", 1, 1);
+                    supplierId, tenantId, orgId, "PERFORMANCE_SUP", "Performance Supplier", "SERVICE_PROVIDER", "ACTIVE", 1, 1);
             jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
                     fileId, tenantId, 1, "performance.pdf", "application/pdf", 1, "e".repeat(64), "LOCAL", "it/performance", "ACTIVE");
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
@@ -411,7 +413,22 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("UPDATE sup_blacklist_case SET effective_until=? WHERE id=?",
                         java.time.LocalDate.now().minusDays(1), temporaryId);
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
-                assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now())).isZero();
+                assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "TEMPORARY")).isZero();
+                long watchId = 9952;
+                assertThat(blacklistMapper.insert(watchId, tenantId, supplierId, orgId,
+                        "PERFORMANCE_SUP", "Performance Supplier", "WATCH", null, null,
+                        "重点关注履约", "CASE-3", 1)).isOne();
+                assertThat(blacklistMapper.submit(tenantId, watchId, 1, 0)).isOne();
+                assertThat(blacklistMapper.review(tenantId, watchId, "APPROVE", "纳入观察", 2, 1)).isOne();
+                assertThat(blacklistMapper.observed(tenantId, supplierId)).isOne();
+                assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
+                assertThat(supplierMapper.list(tenantId, null, null, null, "TENANT_ALL", java.util.Set.of(), 1, 0, 20))
+                        .anySatisfy(supplier -> { assertThat(supplier.id()).isEqualTo(Long.toString(supplierId)); assertThat(supplier.observed()).isTrue(); });
+                assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "WATCH")).isOne();
+                assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
+                assertThat(blacklistMapper.revoke(tenantId, watchId, "观察期结束", 2, 2)).isOne();
+                assertThat(blacklistMapper.observed(tenantId, supplierId)).isZero();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
                 assertThat(qualityPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
                 assertThat(safetyPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();

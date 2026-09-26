@@ -7,7 +7,7 @@ import java.util.List;
 public final class BlacklistModels {
     private BlacklistModels() {}
     public enum Status { DRAFT, SUBMITTED, APPROVED, REJECTED, REVOKED }
-    public enum RestrictionType { BLACKLIST, TEMPORARY }
+    public enum RestrictionType { BLACKLIST, TEMPORARY, WATCH }
     public enum Decision { APPROVE, REJECT }
     public record Create(@NotBlank String supplierId,@NotBlank @Size(max=1000) String reason,
                          @Size(max=200) String sourceRef,@NotNull RestrictionType restrictionType,
