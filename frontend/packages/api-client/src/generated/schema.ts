@@ -1898,6 +1898,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{id}/exit-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierExitReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/supplier-blacklist": {
         parameters: {
             query?: never;
@@ -3041,6 +3057,20 @@ export interface components {
         };
         /** @enum {string} */
         BlacklistStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVOKED";
+        SupplierExitBlocker: {
+            code: string;
+            label: string;
+            /** Format: int64 */
+            count: number;
+            route: string;
+        };
+        SupplierExitReadiness: {
+            ready: boolean;
+            blockers: components["schemas"]["SupplierExitBlocker"][];
+        };
+        SupplierExitReadinessResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["SupplierExitReadiness"];
+        };
         /** @enum {string} */
         RestrictionType: "BLACKLIST" | "TEMPORARY" | "WATCH";
         CreateBlacklistCase: {
@@ -7676,6 +7706,29 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierExitReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exit blockers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierExitReadinessResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
         };
     };
     listSupplierBlacklist: {

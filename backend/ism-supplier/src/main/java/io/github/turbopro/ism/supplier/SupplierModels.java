@@ -11,6 +11,7 @@ public final class SupplierModels {
     public enum Type { MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER }
     public enum Status { DRAFT, ACTIVE, SUSPENDED, EXITED }
     public enum RiskLevel { LOW, MEDIUM, HIGH }
+    public record ExitReadiness(boolean ready,List<SupplierExitCheck.Blocker> blockers) {}
     public record ContactCommand(@NotBlank @Size(max=100) String name,@Size(max=100) String position,
         @Pattern(regexp="^$|^[0-9+() -]{6,32}$") String mobile,@Pattern(regexp="^$|^[0-9+() -]{6,32}$") String telephone,
         @Email @Size(max=200) String email,boolean primary,@PositiveOrZero int sortOrder) {}

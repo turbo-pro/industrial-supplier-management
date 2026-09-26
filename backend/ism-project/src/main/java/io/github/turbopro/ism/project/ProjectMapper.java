@@ -8,6 +8,10 @@ import java.util.*;
 
 @Mapper
 public interface ProjectMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM prj_contract WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status IN ('DRAFT','ACTIVE') FOR UPDATE")
+    List<Long> openContracts(long tenantId,long supplierId);
+    @Select("SELECT id FROM prj_project WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status IN ('PLANNED','ACTIVE','SUSPENDED') FOR UPDATE")
+    List<Long> openProjects(long tenantId,long supplierId);
     String CONTRACT_SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND c.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'OWNED'\"> AND c.owner_id=#{actorId}</when><when test=\"scopeType == 'CREATED'\"> AND c.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";
     String PROJECT_SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND p.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'PROJECT_SET'\"> AND p.id IN <foreach collection='projectIds' item='x' open='(' separator=',' close=')'>#{x}</foreach></when><when test=\"scopeType == 'OWNED'\"> AND p.manager_id=#{actorId}</when><when test=\"scopeType == 'CREATED'\"> AND p.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";
     String CONTRACT_FILTER="<if test='keyword != null and keyword != &quot;&quot;'> AND (c.contract_no LIKE #{keyword} ESCAPE '=' OR c.contract_name LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=')</if><if test='status != null and status != &quot;&quot;'> AND c.status=#{status}</if>";

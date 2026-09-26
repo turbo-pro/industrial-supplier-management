@@ -215,6 +215,7 @@ class B0InfrastructureIT {
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private SupplierMapper supplierMapper;
+    @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
     @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -430,6 +431,12 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.revoke(tenantId, watchId, "观察期结束", 2, 2)).isOne();
                 assertThat(blacklistMapper.observed(tenantId, supplierId)).isZero();
                 assertThat(fileReferenceService.active(fileId)).isTrue();
+                jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(9953,?,?,?,'EXIT-C','退出测试','SERVICE',10,CURRENT_DATE,CURRENT_DATE,1,?,1,1)",tenantId,orgId,supplierId,fileId);
+                jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(9954,?,?,?,'EXIT-P','退出测试','MAINTENANCE',CURRENT_DATE,CURRENT_DATE,1,1,1)",tenantId,orgId,supplierId);
+                assertThat(contractProjectExitCheck.blockers(supplierId)).allSatisfy(blocker -> assertThat(blocker.count()).isOne());
+                jdbcTemplate.update("UPDATE prj_contract SET status='TERMINATED' WHERE id=9953");
+                jdbcTemplate.update("UPDATE prj_project SET status='CANCELLED' WHERE id=9954");
+                assertThat(contractProjectExitCheck.blockers(supplierId)).allSatisfy(blocker -> assertThat(blocker.count()).isZero());
                 assertThat(qualityPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
                 assertThat(safetyPerformanceFacts.forSupplier(supplierId, java.time.LocalDate.now().minusDays(30), java.time.LocalDate.now()).total()).isZero();
                 assertThat(performanceMapper.insert(evaluationId, tenantId, orgId, supplierId,
@@ -479,6 +486,8 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM per_evaluation_item WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM per_score_rule WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM prj_contract WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?", tenantId);
