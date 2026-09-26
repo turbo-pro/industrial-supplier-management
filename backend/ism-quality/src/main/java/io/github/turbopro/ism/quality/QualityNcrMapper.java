@@ -25,7 +25,7 @@ public interface QualityNcrMapper extends TenantScopedMapper {
     FactRow performanceFacts(long tenantId, long supplierId, LocalDate start, LocalDate end);
     record FactRow(int total, int openCount) {}
 
-    @Select("SELECT p.organization_id,p.supplier_id FROM prj_project p JOIN sup_supplier s ON s.id=p.supplier_id AND s.tenant_id=p.tenant_id WHERE p.tenant_id=#{tenantId} AND p.id=#{projectId} AND p.status='ACTIVE' AND s.status='ACTIVE' AND s.deleted=0")
+    @Select("SELECT p.organization_id,p.supplier_id FROM prj_project p JOIN sup_supplier s ON s.id=p.supplier_id AND s.tenant_id=p.tenant_id WHERE p.tenant_id=#{tenantId} AND p.id=#{projectId} AND p.status='ACTIVE' AND s.status='ACTIVE' AND s.deleted=0 FOR UPDATE")
     QualityNcrModels.ProjectRef activeProject(long tenantId, long projectId);
 
     @Select("SELECT COUNT(*) FROM res_file_object WHERE tenant_id=#{tenantId} AND id=#{fileId} AND status='ACTIVE'")

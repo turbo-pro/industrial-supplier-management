@@ -15,7 +15,7 @@ public interface SafetyAttendanceMapper extends TenantScopedMapper {
     String FIELDS = "a.id,a.organization_id,a.project_id,a.supplier_id,a.person_id,p.person_code,p.person_name,s.supplier_name,j.project_name,a.site_name,a.check_in_at,a.check_out_at,a.check_in_by,a.check_out_by,a.check_out_note,a.created_by,a.version";
     String JOINS = " FROM saf_site_attendance a JOIN res_supplier_person p ON p.id=a.person_id AND p.tenant_id=a.tenant_id JOIN sup_supplier s ON s.id=a.supplier_id AND s.tenant_id=a.tenant_id JOIN prj_project j ON j.id=a.project_id AND j.tenant_id=a.tenant_id";
 
-    @Select("SELECT COUNT(*) FROM prj_project WHERE tenant_id=#{tenantId} AND id=#{projectId} AND supplier_id=#{supplierId} AND status='ACTIVE'")
+    @Select("SELECT COUNT(*) FROM prj_project p JOIN sup_supplier s ON s.id=p.supplier_id AND s.tenant_id=p.tenant_id WHERE p.tenant_id=#{tenantId} AND p.id=#{projectId} AND p.supplier_id=#{supplierId} AND p.status='ACTIVE' AND s.status='ACTIVE' AND s.deleted=0 FOR UPDATE")
     int activeProject(long tenantId, long projectId, long supplierId);
 
     @Select("<script>SELECT COUNT(*)" + JOINS + " WHERE a.tenant_id=#{tenantId}" + SCOPE + "<if test='personId != null'> AND a.person_id=#{personId}</if><if test='openOnly'> AND a.check_out_at IS NULL</if></script>")

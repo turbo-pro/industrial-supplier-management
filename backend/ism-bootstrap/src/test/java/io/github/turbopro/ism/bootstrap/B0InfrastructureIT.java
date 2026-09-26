@@ -216,6 +216,9 @@ class B0InfrastructureIT {
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private SupplierMapper supplierMapper;
     @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
+    @Autowired private io.github.turbopro.ism.resource.supplier.ResourceExitCheck resourceExitCheck;
+    @Autowired private io.github.turbopro.ism.quality.QualityExitCheck qualityExitCheck;
+    @Autowired private io.github.turbopro.ism.safety.SafetyExitCheck safetyExitCheck;
     @Autowired private BlacklistMapper blacklistMapper;
     @Autowired private FileReferenceService fileReferenceService;
     @Autowired private QualityPerformanceFacts qualityPerformanceFacts;
@@ -260,6 +263,12 @@ class B0InfrastructureIT {
 
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
             assertThat(supplierResourceMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
+            assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
+            try (TenantContext.Scope other = TenantContext.open(tenantId + 100000, 1L)) {
+                assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+            }
+            jdbcTemplate.update("UPDATE res_supplier_person SET status='EXITED' WHERE id=?", personId);
+            assertThat(resourceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
             assertThat(safetyCredentialMapper.person(tenantId, personId).specialWorkType()).isEqualTo("WELDING");
             assertThat(safetyCredentialMapper.activeFile(tenantId, fileId)).isOne();
             assertThat(safetyCredentialMapper.insert(credentialId, tenantId, orgId, supplierId, personId,
@@ -301,18 +310,27 @@ class B0InfrastructureIT {
                     "c".repeat(64), "****5678", "ACTIVE", 1, 1);
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, 1L)) {
                 assertThat(safetyAttendanceMapper.activeProject(tenantId, projectId, supplierId)).isOne();
+                jdbcTemplate.update("INSERT INTO saf_issue(id,tenant_id,organization_id,project_id,supplier_id,issue_no,title,category,severity,description,discovered_at,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,'EXIT-IT','退出检查隐患','OTHER','HIGH','测试',NOW(),CURRENT_DATE,1,1,1)", 9918, tenantId, orgId, projectId, supplierId);
+                assertThat(safetyExitCheck.blockers(supplierId)).filteredOn(b -> b.code().equals("OPEN_SAFETY")).singleElement().satisfies(b -> assertThat(b.count()).isOne());
+                try (TenantContext.Scope other = TenantContext.open(tenantId + 100000, 1L)) {
+                    assertThat(safetyExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+                }
+                jdbcTemplate.update("UPDATE saf_issue SET status='CLOSED' WHERE id=9918");
                 assertThat(safetyAttendanceMapper.checkIn(9916, tenantId, orgId, projectId, supplierId, personId, "一号厂区", 1)).isOne();
                 assertThat(safetyAttendanceMapper.get(tenantId, 9916).personName()).isEqualTo("Attendance Worker");
+                assertThat(safetyExitCheck.blockers(supplierId)).filteredOn(b -> b.code().equals("OPEN_ATTENDANCE")).singleElement().satisfies(b -> assertThat(b.count()).isOne());
                 assertThat(safetyAttendanceMapper.count(tenantId, personId, true, "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1)).isOne();
                 assertThatThrownBy(() -> safetyAttendanceMapper.checkIn(9917, tenantId, orgId, projectId, supplierId, personId, "二号厂区", 1))
                         .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
                 assertThat(safetyAttendanceMapper.checkOut(tenantId, 9916, 1, "离场", 0)).isOne();
+                assertThat(safetyExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
                 assertThat(safetyAttendanceMapper.checkOut(tenantId, 9916, 1, "重复签退", 1)).isZero();
                 assertThat(safetyAttendanceMapper.checkIn(9917, tenantId, orgId, projectId, supplierId, personId, "二号厂区", 1)).isOne();
                 assertThat(safetyAttendanceMapper.list(tenantId, personId, true, "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1, 0, 20)).hasSize(1);
             }
         } finally {
             jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM saf_issue WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?", tenantId);
@@ -349,6 +367,10 @@ class B0InfrastructureIT {
                         "件", fileId, java.time.LocalDate.now().plusDays(7), 1, 1)).isOne();
                 assertThat(qualityNcrMapper.insertEvent(9937, tenantId, ncrId, "CREATE", null, "OPEN", "抽样不合格", fileId, 1)).isOne();
                 assertThat(qualityNcrMapper.get(tenantId, ncrId).status()).isEqualTo("OPEN");
+                assertThat(qualityExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isOne());
+                try (TenantContext.Scope other = TenantContext.open(tenantId + 100000, 1L)) {
+                    assertThat(qualityExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
+                }
                 assertThat(qualityNcrMapper.count(tenantId, null, "OPEN", "TENANT_ALL", java.util.Set.of(), java.util.Set.of(), 1)).isOne();
                 assertThat(qualityNcrMapper.rectify(tenantId, ncrId, "焊接参数错误", "返工", "校准设备", fileId, 1, 0)).isOne();
                 assertThat(qualityNcrMapper.verify(tenantId, ncrId, "REJECT", "仍不合格", 1, 1)).isOne();
@@ -356,6 +378,7 @@ class B0InfrastructureIT {
                 assertThat(qualityNcrMapper.verify(tenantId, ncrId, "PASS", "合格", 1, 3)).isOne();
                 assertThat(qualityNcrMapper.verify(tenantId, ncrId, "REJECT", "重复复验", 1, 4)).isZero();
                 assertThat(qualityNcrMapper.get(tenantId, ncrId).status()).isEqualTo("CLOSED");
+                assertThat(qualityExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
                 assertThat(qualityNcrMapper.events(tenantId, ncrId)).hasSize(1);
             }
         } finally {

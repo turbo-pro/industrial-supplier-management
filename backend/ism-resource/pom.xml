@@ -11,6 +11,7 @@
   </parent>
   <artifactId>ism-resource</artifactId>
   <dependencies>
+    <dependency><groupId>io.github.turbo-pro</groupId><artifactId>ism-supplier</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.github.turbo-pro</groupId>
       <artifactId>ism-common-api</artifactId>
