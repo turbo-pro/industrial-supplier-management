@@ -10,8 +10,10 @@ import org.springframework.web.bind.annotation.*;
 
 @Validated @RestController @RequestMapping("/api/suppliers/{supplierId}/exit-applications")
 public class ExitController {
-    private final ExitApplicationService service;private final ApiResponseFactory responses;
-    public ExitController(ExitApplicationService service,ApiResponseFactory responses){this.service=service;this.responses=responses;}
+    private final ExitApplicationService service;private final ExitReminderFailureService failures;private final ApiResponseFactory responses;
+    public ExitController(ExitApplicationService service,ExitReminderFailureService failures,ApiResponseFactory responses){this.service=service;this.failures=failures;this.responses=responses;}
+    @GetMapping("/reminder-failures") @RequiresPermission("supplier:exit:view")
+    public ApiResponse<ExitReminderFailureModels.Page> reminderFailures(@PathVariable long supplierId,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(failures.list(supplierId,page,size));}
     @GetMapping @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitModels.Page> list(@PathVariable long supplierId,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.list(supplierId,page,size));}
     @GetMapping("/{id}") @RequiresPermission("supplier:exit:view")

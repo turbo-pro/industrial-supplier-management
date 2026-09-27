@@ -218,6 +218,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
     @Autowired private io.github.turbopro.ism.supplier.ExitTaskService exitTaskService;
     @Autowired private ExitAutoReminderWorker exitAutoReminderWorker;
+    @Autowired private io.github.turbopro.ism.supplier.ExitReminderFailureService exitReminderFailureService;
     @Autowired private io.github.turbopro.ism.supplier.RestrictionExplanationService restrictionExplanationService;
     @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
     @Autowired private SupplierMapper supplierMapper;
@@ -745,6 +746,12 @@ class B0InfrastructureIT {
                     exitAutoReminderWorker.poll();
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isEqualTo(2);
                     assertThat(jdbcTemplate.queryForObject("SELECT version FROM sup_exit_entity WHERE id=?",Integer.class,entityId)).isEqualTo(reminded.entities().get(0).version());
+                    var failure=exitReminderFailureService.list(supplierId,0,20);
+                    assertThat(failure.total()).isOne();assertThat(failure.items().get(0).status()).isEqualTo("FAILED");
+                    assertThat(failure.items().get(0).failureCount()).isOne();
+                    assertThat(failure.items().get(0).reasonCode()).isEqualTo("COMMON_VALIDATION_FAILED");
+                    exitAutoReminderWorker.poll();
+                    assertThat(exitReminderFailureService.list(supplierId,0,20).items().get(0).failureCount()).isEqualTo(2);
                     jdbcTemplate.update("UPDATE msg_template SET status='ACTIVE' WHERE id=?",Long.parseLong(reminderTemplate.id()));
                     jdbcTemplate.update("UPDATE cfg_tenant_setting SET setting_value='48' WHERE tenant_id=? AND setting_key='exit.autoReminderIntervalHours'",tenantId);
                     exitAutoReminderWorker.poll();
@@ -754,6 +761,9 @@ class B0InfrastructureIT {
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isEqualTo(3);
                     assertThat(jdbcTemplate.queryForObject("SELECT actor_id FROM sup_exit_event WHERE tenant_id=? AND application_id=? AND action='AUTO_ENTITY_REMIND'",Long.class,tenantId,finalExitId)).isZero();
                     assertThat(jdbcTemplate.queryForObject("SELECT operator_id FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_EXIT_ENTITY_AUTO_REMIND' ORDER BY occurred_at DESC LIMIT 1",Long.class,tenantId)).isZero();
+                    var recovered=exitReminderFailureService.list(supplierId,0,20).items().get(0);
+                    assertThat(recovered.status()).isEqualTo("DELIVERED");assertThat(recovered.resolvedAt()).isNotNull();
+                    assertThat(recovered.failureCount()).isEqualTo(2);
                     exitAutoReminderWorker.poll();
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isEqualTo(3);
                     jdbcTemplate.update("UPDATE cfg_tenant_setting SET setting_value='0' WHERE tenant_id=? AND setting_key='exit.autoReminderEnabled'",tenantId);
@@ -777,6 +787,7 @@ class B0InfrastructureIT {
                 }
                 try(var other=TenantContext.open(tenantId+100000,4);var authorization=AuthorizationContext.open(exitPermissions)){
                     assertThatThrownBy(()->exitApplicationService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitReminderFailureService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
                 }
                 assertThat(supplierMapper.find(tenantId,supplierId).status()).isEqualTo("EXITED");
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
@@ -790,6 +801,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976",tenantId);
             jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code IN ('SUPPLIER_EXIT_ASSIGNMENT','SUPPLIER_EXIT_REMINDER')",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_reminder_failure WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_item WHERE tenant_id=?", tenantId);

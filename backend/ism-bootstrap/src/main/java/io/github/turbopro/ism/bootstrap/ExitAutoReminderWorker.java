@@ -1,7 +1,9 @@
 package io.github.turbopro.ism.bootstrap;
 
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.supplier.ExitApplicationService;
+import io.github.turbopro.ism.supplier.ExitReminderFailureService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,13 +21,14 @@ public class ExitAutoReminderWorker {
     private static final ZoneId BUSINESS_ZONE=ZoneId.of("Asia/Shanghai");
     private final ExitReminderDispatchMapper dispatch;
     private final ExitApplicationService exits;
+    private final ExitReminderFailureService failures;
     private final TransactionTemplate transactions;
     private final boolean enabled;
     private volatile long scanCursor;
 
-    public ExitAutoReminderWorker(ExitReminderDispatchMapper dispatch,ExitApplicationService exits,
+    public ExitAutoReminderWorker(ExitReminderDispatchMapper dispatch,ExitApplicationService exits,ExitReminderFailureService failures,
                                   TransactionTemplate transactions,@Value("${ism.exit.auto-reminder.worker-enabled:true}") boolean enabled){
-        this.dispatch=dispatch;this.exits=exits;this.transactions=transactions;this.enabled=enabled;
+        this.dispatch=dispatch;this.exits=exits;this.failures=failures;this.transactions=transactions;this.enabled=enabled;
     }
 
     @Scheduled(fixedDelayString="${ism.exit.auto-reminder.poll-interval:300000}")
@@ -44,9 +47,16 @@ public class ExitAutoReminderWorker {
                         if(!"1".equals(dispatch.enabled(candidate.tenantId())))return;
                         String configuredHours=dispatch.intervalHours(candidate.tenantId());
                         int hours=Integer.parseInt(configuredHours==null?"24":configuredHours);
-                        exits.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours);
+                        if(exits.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours))
+                            failures.delivered(candidate.supplierId(),candidate.applicationId(),candidate.id());
                     });
-                }catch(Exception ex){log.warn("Automatic exit reminder failed for tenant={} entity={}",candidate.tenantId(),candidate.id(),ex);}
+                }catch(Exception ex){
+                    log.warn("Automatic exit reminder failed for tenant={} entity={}",candidate.tenantId(),candidate.id(),ex);
+                    try(var context=TenantContext.openSystem(candidate.tenantId())){
+                        String reason=ex instanceof ApiException api?api.errorCode().code():"WORKER_FAILED";
+                        transactions.executeWithoutResult(status->failures.record(candidate.supplierId(),candidate.applicationId(),candidate.id(),reason));
+                    }catch(Exception ledgerError){log.error("Cannot record exit reminder failure for tenant={} entity={}",candidate.tenantId(),candidate.id(),ledgerError);}
+                }
             }
             cursor=batch.get(batch.size()-1).id();
             scanCursor=cursor;

@@ -5,6 +5,7 @@ import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 type Application=components['schemas']['ExitApplication'];
 type Entity=components['schemas']['ExitEntity'];
+type ReminderFailure=components['schemas']['ExitReminderFailure'];
 const props=defineProps<{modelValue:boolean;supplier:components['schemas']['SupplierSummary']|null}>();
 const emit=defineEmits<{ 'update:modelValue':[value:boolean];changed:[] }>();
 const visible=computed({get:()=>props.modelValue,set:(value:boolean)=>emit('update:modelValue',value)});
@@ -12,6 +13,18 @@ const session=useSessionStore(),rows=ref<Application[]>([]),page=ref(0),total=re
 const form=reactive({type:'NORMAL' as 'NORMAL'|'ELIMINATION',reason:'',evidenceFileId:''});
 const states={SUBMITTED:'处置中 / 待独立审批',REJECTED:'已驳回',CANCELLED:'已撤回',BUSINESS_CLOSED:'本地业务已关闭'};
 const canApply=ref(false);
+const failureRows=ref<ReminderFailure[]>([]),failurePage=ref(0),failureTotal=ref(0),failureLoading=ref(false);
+async function loadFailures(targetPage=0){
+  const supplierId=props.supplier?.id;if(!supplierId)return;
+  const version=requestVersion,sequence=++failureRequestVersion;failureLoading.value=true;
+  try{
+    const {data,error}=await session.client.GET('/suppliers/{supplierId}/exit-applications/reminder-failures',{params:{path:{supplierId},query:{page:targetPage,size:20}}});
+    if(version!==requestVersion||sequence!==failureRequestVersion||supplierId!==props.supplier?.id||!props.modelValue)return;
+    if(error){failureRows.value=[];failureTotal.value=0;ElMessage.error(error.error.message);return;}
+    failureRows.value=data?.data?.items??[];failureTotal.value=data?.data?.total??0;failurePage.value=targetPage;
+  }catch{if(version===requestVersion&&sequence===failureRequestVersion){failureRows.value=[];failureTotal.value=0;ElMessage.error('催办失败台账加载失败');}}
+  finally{if(version===requestVersion&&sequence===failureRequestVersion)failureLoading.value=false;}
+}
 const labels:Record<string,string>={OPEN_CONTRACT:'合同',OPEN_PROJECT:'项目',OPEN_PERSON:'人员',OPEN_ASSET:'车辆设备',OPEN_SAFETY:'安全隐患',OPEN_ATTENDANCE:'现场签到',OPEN_QUALITY:'质量不符合项',OPEN_IMPROVEMENT:'绩效改进'};
 const assignment=ref(false),selectedApplication=ref<Application>(),selectedEntity=ref<Entity>();
 const disposition=reactive({assigneeId:'',note:''});
@@ -66,7 +79,7 @@ async function saveAssignment(){
     assignment.value=false;ElMessage.success('责任与说明已记录，站内通知已发送；处置后须重新核验');await load();
   }catch{ElMessage.error('保存失败，请刷新核对结果');}finally{busy.value=false;}
 }
-let requestVersion=0;
+let requestVersion=0,failureRequestVersion=0;
 async function load(){
   if(!props.supplier)return;
   const version=++requestVersion,supplierId=props.supplier.id;
@@ -78,6 +91,7 @@ async function load(){
     if(version!==requestVersion||supplierId!==props.supplier?.id||!props.modelValue)return;
     if(error){rows.value=[];total.value=0;canApply.value=false;ElMessage.error(error.error.message);return;}
     entityPages.value={};entityRequests.clear();rows.value=data?.data?.items??[];total.value=data?.data?.total??0;canApply.value=data?.data?.canApply??false;
+    void loadFailures(failurePage.value);
   }catch{if(version===requestVersion){rows.value=[];total.value=0;canApply.value=false;ElMessage.error('退出申请加载失败');}}finally{if(version===requestVersion)loading.value=false;}
 }
 async function create(){
@@ -118,7 +132,7 @@ async function review(row:Application,decision:'APPROVE'|'REJECT'){
     await load();emit('changed');
   }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('审批失败，请刷新核对结果');}finally{busy.value=false;}
 }
-watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;rows.value=[];total.value=0;canApply.value=false;loading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
+watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureRequestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;rows.value=[];total.value=0;canApply.value=false;loading.value=false;failureRows.value=[];failureTotal.value=0;failurePage.value=0;failureLoading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
 </script>
 <template>
   <el-dialog v-model="visible" :title="`${supplier?.name??''} · 退出流程`" width="1040px" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
@@ -130,6 +144,20 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPage
       <el-button type="primary" :loading="busy" :disabled="loading" @click="create">提交退出申请</el-button>
     </el-form>
     <p>展开申请查看处置项及历史。初始数量保留；当前数量为最近核验快照，批准时始终重新检查。</p>
+    <el-card shadow="never" style="margin-bottom:16px">
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span>自动催办投递记录（{{failureTotal}}）</span><el-button :disabled="failureLoading" @click="loadFailures(failurePage)">刷新</el-button></div></template>
+      <el-alert title="仅记录自动催办失败及其后续成功恢复；历史失败不代表当前事项仍未结清。错误代码不包含异常堆栈。" type="info" :closable="false"/>
+      <el-table v-loading="failureLoading" :data="failureRows" style="margin-top:12px">
+        <el-table-column prop="entityId" label="事项 ID" min-width="160"/>
+        <el-table-column label="投递状态" width="125"><template #default="{row:failure}"><el-tag :type="failure.status==='DELIVERED'?'success':'danger'">{{failure.status==='DELIVERED'?'已恢复':'失败待重试'}}</el-tag></template></el-table-column>
+        <el-table-column label="当前事项" width="170"><template #default="{row:failure}">{{failure.applicationStatus==='SUBMITTED'&&failure.entityState==='OPEN'?'处置中':'已结束/已结清'}}</template></el-table-column>
+        <el-table-column prop="failureCount" label="失败次数" width="95"/>
+        <el-table-column prop="reasonCode" label="错误代码" min-width="190"/>
+        <el-table-column prop="lastFailedAt" label="最近失败（UTC）" width="190"/>
+        <el-table-column prop="resolvedAt" label="恢复时间（UTC）" width="190"/>
+      </el-table>
+      <el-pagination :current-page="failurePage+1" :total="failureTotal" :page-size="20" layout="total, prev, pager, next" :disabled="failureLoading" @current-change="(value:number)=>loadFailures(value-1)"/>
+    </el-card>
     <el-table v-loading="loading" :data="rows" row-key="id">
       <el-table-column type="expand">
         <template #default="{row}">

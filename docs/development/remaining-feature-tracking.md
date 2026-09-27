@@ -18,7 +18,7 @@
 
 ## 新增交付的包级定位
 
-- B7 期限与催办增量：退出实体期限、逾期展示、人工及租户显式启用的自动站内催办已接入；升级链、失败台账仍缺，参见 [期限催办验收](exit-deadline-reminder-review.md)、[自动催办验收](exit-auto-reminder-review.md)。
+- B7 期限与催办增量：退出实体期限、逾期展示、人工及租户显式启用的自动站内催办、供应商范围失败台账已接入；升级链和跨供应商集中监控仍缺，参见 [期限催办验收](exit-deadline-reminder-review.md)、[自动催办验收](exit-auto-reminder-review.md)、[失败台账验收](exit-reminder-failure-ledger-review.md)。
 - B7 责任待办增量：个人退出待办已接入授权数据范围、实时有效状态、分页、筛选、期限与逾期展示；跨业务人工任务聚合仍缺，参见 [待办验收](my-exit-tasks-review.md)。
 - B7 退出通知增量：责任分派与站内投递同事务，模板失效回滚，旧版本不重复投递；管理端个人收件箱及已读闭环已补齐，并接入人工/逾期自动站内催办。独立任务中心聚合和多渠道升级未完成，参见 [通知验收](exit-assignment-notification-review.md)、[自动催办验收](exit-auto-reminder-review.md)。
 - B2-07：**部分实现**。个人方案持久化闭环已接入供应商档案、合同台账、项目台账、人员台账、车辆设备台账；五表默认互相独立。公共方案、其余业务表推广、真实后端持久化页面 E2E 尚未验收。资源页面模拟接口浏览器检查不等于全渠道 E2E，参见 [资源台账验收](resource-table-views-review.md)。

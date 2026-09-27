@@ -149,6 +149,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/reminder-failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Tenant-scoped, supplier-authorized history of automatic reminder failures and delivered recovery. No raw exception text is returned. */
+        get: operations["listSupplierExitReminderFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/assign": {
         parameters: {
             query?: never;
@@ -2510,6 +2527,37 @@ export interface components {
         ExitEntityReminder: {
             version: number;
             applicationVersion: number;
+        };
+        ExitReminderFailure: {
+            entityId: string;
+            applicationId: string;
+            supplierId: string;
+            failureCount: number;
+            reasonCode: string;
+            /** @enum {string} */
+            status: "FAILED" | "DELIVERED";
+            /** Format: date-time */
+            firstFailedAt: string;
+            /** Format: date-time */
+            lastFailedAt: string;
+            /** Format: date-time */
+            resolvedAt?: string | null;
+            /** @enum {string} */
+            entityState: "OPEN" | "CLEARED";
+            /** @enum {string} */
+            applicationStatus: "SUBMITTED" | "REJECTED" | "CANCELLED" | "BUSINESS_CLOSED";
+            /** Format: date */
+            dueDate?: string | null;
+        };
+        ExitReminderFailurePage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["ExitReminderFailure"][];
+        };
+        ExitReminderFailurePageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ExitReminderFailurePage"];
         };
         ExitEntity: {
             id: string;
@@ -4937,6 +4985,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExitEntityPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierExitReminderFailures: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Automatic reminder failure ledger */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitReminderFailurePageResponse"];
                 };
             };
             400: components["responses"]["ApiFailure"];
