@@ -13,6 +13,9 @@ public class PerformanceExitCheck implements SupplierExitCheck, io.github.turbop
     private final ExitMapper mapper;
     public PerformanceExitCheck(ExitMapper mapper) { this.mapper = mapper; }
 
+    @Override public List<Entity> entities(long supplierId) {
+        return SupplierExitCheck.entities("OPEN_IMPROVEMENT",mapper.open(TenantContext.require().tenantId(),supplierId),"/performance/evaluations");
+    }
     @Override public List<Blocker> blockers(long supplierId) {
         return List.of(new Blocker("OPEN_IMPROVEMENT", "未验收绩效改进计划",
                 mapper.open(TenantContext.require().tenantId(), supplierId).size(), "/performance/evaluations"));

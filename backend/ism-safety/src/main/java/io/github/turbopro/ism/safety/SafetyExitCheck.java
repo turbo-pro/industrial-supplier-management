@@ -11,6 +11,12 @@ import java.util.List;
 public class SafetyExitCheck implements SupplierExitCheck, io.github.turbopro.ism.supplier.SupplierLiftCheck {
     private final ExitMapper mapper;
     public SafetyExitCheck(ExitMapper mapper) { this.mapper=mapper; }
+    @Override public List<Entity> entities(long supplierId) {
+        long tenant=TenantContext.require().tenantId();var result=new java.util.ArrayList<Entity>();
+        result.addAll(SupplierExitCheck.entities("OPEN_SAFETY",mapper.open(tenant,supplierId),"/safety/issues"));
+        result.addAll(SupplierExitCheck.entities("OPEN_ATTENDANCE",mapper.attendance(tenant,supplierId),"/safety/attendance"));
+        return List.copyOf(result);
+    }
     @Override public List<Blocker> blockers(long supplierId) {
         long tenant=TenantContext.require().tenantId();
         return List.of(new Blocker("OPEN_SAFETY","未关闭安全隐患",mapper.open(tenant,supplierId).size(),"/safety/issues"),

@@ -117,6 +117,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierExitEntities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Assign current same-tenant active account and record a note. Never manually clears a business blocker. Both application and entity versions are required. */
+        post: operations["assignSupplierExitEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/review": {
         parameters: {
             query?: never;
@@ -2400,6 +2433,41 @@ export interface components {
         ExitApplicationVersion: {
             version: number;
         };
+        ExitEntityPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            applicationVersion: number;
+            items: components["schemas"]["ExitEntity"][];
+        };
+        ExitEntityPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ExitEntityPage"];
+        };
+        AssignExitEntity: {
+            assigneeId: string;
+            note: string;
+            version: number;
+            applicationVersion: number;
+        };
+        ExitEntity: {
+            id: string;
+            code: string;
+            sourceId: string;
+            route: string;
+            /** @enum {string} */
+            state: "OPEN" | "CLEARED";
+            assigneeId?: string | null;
+            note?: string | null;
+            assignedBy?: string | null;
+            /** Format: date-time */
+            assignedAt?: string | null;
+            /** Format: date-time */
+            checkedAt: string;
+            /** Format: date-time */
+            clearedAt?: string | null;
+            version: number;
+        };
         ExitItem: {
             id: string;
             code: string;
@@ -2451,6 +2519,9 @@ export interface components {
             /** @description Last persisted local facts; approval always checks again */
             localReady: boolean;
             items: components["schemas"]["ExitItem"][];
+            /** Format: int64 */
+            entityTotal: number;
+            entities: components["schemas"]["ExitEntity"][];
             events: components["schemas"]["ExitEvent"][];
             result?: components["schemas"]["ExitResult"] | null;
         };
@@ -4692,6 +4763,69 @@ export interface operations {
         };
         responses: {
             /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierExitEntities: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded entity page with current application version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitEntityPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    assignSupplierExitEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                entityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignExitEntity"];
+            };
+        };
+        responses: {
+            /** @description Versioned exit application and entity disposition */
             200: {
                 headers: {
                     [name: string]: unknown;

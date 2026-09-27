@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { createIsmClient } from './index';
 
 describe('generated ISM client', () => {
+  it('loads a bounded exit entity page with its application version',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({success:true,data:{total:21,page:1,size:20,applicationVersion:2,items:[]},traceId:'exit-page',timestamp:'2026-09-27T10:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    const response=await client.GET('/suppliers/{supplierId}/exit-applications/{id}/entities',{params:{path:{supplierId:'30',id:'90'},query:{page:1,size:20}}});
+    expect(response.data?.data?.applicationVersion).toBe(2);expect(response.data?.data?.total).toBe(21);
+    const url=new URL((fetchMock.mock.calls[0]![0] as Request).url);
+    expect(url.pathname).toBe('/api/suppliers/30/exit-applications/90/entities');expect(url.searchParams.get('page')).toBe('1');expect(url.searchParams.get('size')).toBe('20');
+  });
+  it('assigns exit entities with both optimistic versions and never sends a completion flag',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({success:true,data:{id:'90',version:2,entities:[]},traceId:'exit-assign',timestamp:'2026-09-27T10:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    const body={assigneeId:'7',note:'跟进合同处置',version:0,applicationVersion:1};
+    const response=await client.POST('/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/assign',{params:{path:{supplierId:'30',id:'90',entityId:'100'}},body});
+    expect(response.data?.data?.version).toBe(2);
+    const request=fetchMock.mock.calls[0]![0] as Request;
+    expect(request.url).toBe('http://localhost:8080/api/suppliers/30/exit-applications/90/entities/100/assign');
+    expect(await request.json()).toEqual(body);
+  });
   it.each(['contract.ledger','project.ledger'] as const)('keeps %s view saves on the registered table path',async(tableKey)=>{
     const columns=(tableKey==='contract.ledger'?['contractNo','name','amount','period','status']:['projectCode','name','contractNo','period','status']).map(key=>({key,visible:true,width:160}));
     const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({success:true,data:{id:'901',name:'常用',columns,defaultView:true,version:0,updatedAt:'2026-09-27T05:20:00Z'},traceId:'column-save',timestamp:'2026-09-27T05:20:00Z'}),{status:200,headers:{'Content-Type':'application/json'}}));

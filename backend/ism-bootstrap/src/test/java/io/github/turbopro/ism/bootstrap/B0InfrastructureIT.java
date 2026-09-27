@@ -672,19 +672,34 @@ class B0InfrastructureIT {
                 }
                 final long finalExitId=exitId;
                 jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(9975,?,?,?,'EXIT-LATE','新增处置事项','SERVICE',10,CURRENT_DATE,CURRENT_DATE,1,?,1,1)",tenantId,orgId,supplierId,fileId);
+                jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(89781,'EXIT_ENTITY_FOREIGN','退出事项外租户','ACTIVE')");
+                jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(9976,?,'exit-owner','处置责任人','not-a-login-password','ACTIVE'),(9977,?,'exit-disabled','停用责任人','not-a-login-password','DISABLED'),(9978,89781,'exit-foreign','外租户责任人','not-a-login-password','ACTIVE')",tenantId,tenantId);
                 try(var reviewer=TenantContext.open(tenantId,4);var authorization=AuthorizationContext.open(exitPermissions)){
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"过期快照",0))).isInstanceOf(ApiException.class);
                     var blocked=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0));
                     assertThat(blocked.localReady()).isFalse();assertThat(blocked.version()).isOne();
                     assertThat(blocked.items()).filteredOn(item->item.code().equals("OPEN_CONTRACT")).singleElement().satisfies(item->{assertThat(item.initialCount()).isZero();assertThat(item.currentCount()).isOne();});
+                    assertThat(blocked.entities()).singleElement().satisfies(entity->{assertThat(entity.code()).isEqualTo("OPEN_CONTRACT");assertThat(entity.sourceId()).isEqualTo("9975");assertThat(entity.state()).isEqualTo("OPEN");});
+                    var entity=blocked.entities().get(0);long entityId=Long.parseLong(entity.id());
+                    assertThat(blocked.entityTotal()).isOne();assertThat(exitApplicationService.entities(supplierId,finalExitId,0,20).items()).hasSize(1);
+                    assertThat(exitApplicationService.entities(supplierId,finalExitId,1,20).items()).isEmpty();
+                    for(String invalidOwner:List.of("9977","9978","9979"))assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign(invalidOwner,"不能越权分派",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
+                    var assigned=exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","跟进合同结束，不手工清除阻断",entity.version(),blocked.version()));
+                    assertThat(assigned.version()).isEqualTo(2);assertThat(assigned.localReady()).isFalse();
+                    assertThat(assigned.entities().get(0).assigneeId()).isEqualTo("9976");assertThat(assigned.entities().get(0).state()).isEqualTo("OPEN");
+                    assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","过期修改",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"说明不能放行",assigned.version()))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0))).isInstanceOf(ApiException.class);
                     jdbcTemplate.update("UPDATE prj_contract SET status='TERMINATED' WHERE id=9975");
-                    var ready=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(1));
+                    var ready=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(assigned.version()));
                     assertThat(ready.localReady()).isTrue();
+                    assertThat(ready.entities().get(0).state()).isEqualTo("CLEARED");assertThat(ready.entities().get(0).clearedAt()).isNotNull();assertThat(ready.entities().get(0).assigneeId()).isEqualTo("9976");
+                    assertThat(ready.entities().get(0).note()).isEqualTo("跟进合同结束，不手工清除阻断");
+                    assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","不改结清历史",ready.entities().get(0).version(),ready.version()))).isInstanceOf(ApiException.class);
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
                     assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
-                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","RECHECK","BUSINESS_CLOSE");
+                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","RECHECK","BUSINESS_CLOSE");
                     assertThat(exitApplicationService.list(supplierId,0,20).total()).isEqualTo(3);
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"重复",closed.version()))).isInstanceOf(ApiException.class);
                 }
@@ -700,9 +715,12 @@ class B0InfrastructureIT {
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_item WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_application WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (9976,9977,9978)");
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=89781");
             jdbcTemplate.update("DELETE FROM sup_lift_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_lift_application WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM cfg_tenant_setting WHERE tenant_id=?", tenantId);

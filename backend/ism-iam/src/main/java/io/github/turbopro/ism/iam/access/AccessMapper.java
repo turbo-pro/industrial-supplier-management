@@ -39,6 +39,8 @@ public interface AccessMapper extends TenantScopedMapper {
     int grantScopeOrganizations(long tenantId,long roleId,String resource,Set<Long> ids);
     @Select("SELECT id,username,display_name,status,force_password_change,version FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY created_at,id")
     List<AccessModels.UserRow> users(long tenantId);
+    @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0 FOR SHARE")
+    Long activeUserForAssignment(long tenantId,long userId);
     @Insert("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status,force_password_change) VALUES(#{id},#{tenantId},#{username},#{displayName},#{passwordHash},'ACTIVE',1)")
     int insertUser(long tenantId,long id,String username,String displayName,String passwordHash);
     @Insert("INSERT INTO iam_user_organization(tenant_id,user_id,organization_id,is_primary) SELECT #{tenantId},#{userId},id,1 FROM iam_organization WHERE tenant_id=#{tenantId} AND id=#{organizationId} AND status='ACTIVE'")

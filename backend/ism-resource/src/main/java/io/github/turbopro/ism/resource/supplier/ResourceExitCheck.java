@@ -11,6 +11,12 @@ import java.util.List;
 public class ResourceExitCheck implements SupplierExitCheck {
     private final ExitMapper mapper;
     public ResourceExitCheck(ExitMapper mapper) { this.mapper=mapper; }
+    @Override public List<Entity> entities(long supplierId) {
+        long tenant=TenantContext.require().tenantId();var result=new java.util.ArrayList<Entity>();
+        result.addAll(SupplierExitCheck.entities("OPEN_PERSON",mapper.open(tenant,supplierId),"/resources/persons"));
+        result.addAll(SupplierExitCheck.entities("OPEN_ASSET",mapper.assets(tenant,supplierId),"/resources/assets"));
+        return List.copyOf(result);
+    }
     @Override public List<Blocker> blockers(long supplierId) {
         long tenant=TenantContext.require().tenantId();
         return List.of(new Blocker("OPEN_PERSON","未离场人员",mapper.open(tenant,supplierId).size(),"/resources/persons"),

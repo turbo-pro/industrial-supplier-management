@@ -11,6 +11,9 @@ import java.util.List;
 public class QualityExitCheck implements SupplierExitCheck, io.github.turbopro.ism.supplier.SupplierLiftCheck {
     private final ExitMapper mapper;
     public QualityExitCheck(ExitMapper mapper) { this.mapper=mapper; }
+    @Override public List<Entity> entities(long supplierId) {
+        return SupplierExitCheck.entities("OPEN_QUALITY",mapper.open(TenantContext.require().tenantId(),supplierId),"/quality/nonconformances");
+    }
     @Override public List<Blocker> blockers(long supplierId) {
         return List.of(new Blocker("OPEN_QUALITY","未关闭质量不符合项",mapper.open(TenantContext.require().tenantId(),supplierId).size(),"/quality/nonconformances"));
     }
