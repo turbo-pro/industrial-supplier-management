@@ -216,6 +216,7 @@ class B0InfrastructureIT {
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
+    @Autowired private io.github.turbopro.ism.supplier.ExitTaskService exitTaskService;
     @Autowired private io.github.turbopro.ism.supplier.RestrictionExplanationService restrictionExplanationService;
     @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
     @Autowired private SupplierMapper supplierMapper;
@@ -693,6 +694,24 @@ class B0InfrastructureIT {
                     var assigned=exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","跟进合同结束，不手工清除阻断",entity.version(),blocked.version()));
                     assertThat(assigned.version()).isEqualTo(2);assertThat(assigned.localReady()).isFalse();
                     assertThat(assigned.entities().get(0).assigneeId()).isEqualTo("9976");assertThat(assigned.entities().get(0).state()).isEqualTo("OPEN");
+                    long taskOrganization=supplierMapper.find(tenantId,supplierId).organizationId();
+                    assertThat(exitTasks(tenantId,9976,DataScope.all()).items()).singleElement().satisfies(task->{assertThat(task.id()).isEqualTo(entity.id());assertThat(task.sourceId()).isEqualTo("9975");assertThat(task.applicationVersion()).isEqualTo(2);});
+                    assertThat(exitTasks(tenantId,4,DataScope.all()).total()).isZero();
+                    assertThat(exitTasks(89781,9976,DataScope.all()).total()).isZero();
+                    assertThat(exitTasks(tenantId,9976,DataScope.none()).total()).isZero();
+                    assertThat(exitTasks(tenantId,9976,DataScope.organizations(Set.of())).total()).isZero();
+                    assertThat(exitTasks(tenantId,9976,DataScope.organizations(Set.of(taskOrganization))).total()).isOne();
+                    assertThat(exitTasks(tenantId,9976,DataScope.organizations(Set.of(taskOrganization+100000))).total()).isZero();
+                    assertThat(exitTasks(tenantId,9976,DataScope.created()).total()).isZero();
+                    assertThat(exitTasks(tenantId,9976,DataScope.projects(Set.of(1L))).total()).isZero();
+                    jdbcTemplate.update("UPDATE sup_exit_entity SET assignee_id=4 WHERE id=?",entityId);
+                    assertThat(exitTasks(tenantId,9976,DataScope.all()).total()).isZero();
+                    jdbcTemplate.update("UPDATE sup_exit_entity SET assignee_id=9976 WHERE id=?",entityId);
+                    for(String terminal:List.of("CANCELLED","REJECTED","BUSINESS_CLOSED")){
+                        jdbcTemplate.update("UPDATE sup_exit_application SET status=? WHERE id=?",terminal,finalExitId);
+                        assertThat(exitTasks(tenantId,9976,DataScope.all()).total()).isZero();
+                    }
+                    jdbcTemplate.update("UPDATE sup_exit_application SET status='SUBMITTED' WHERE id=?",finalExitId);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox i JOIN msg_delivery d ON d.id=i.delivery_id AND d.tenant_id=i.tenant_id WHERE i.tenant_id=? AND i.recipient_id=9976 AND d.business_type='SUPPLIER_EXIT_ENTITY' AND d.business_id=?",Integer.class,tenantId,entityId)).isOne();
                     assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","过期修改",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isOne();
@@ -703,6 +722,7 @@ class B0InfrastructureIT {
                     assertThat(ready.localReady()).isTrue();
                     assertThat(ready.entities().get(0).state()).isEqualTo("CLEARED");assertThat(ready.entities().get(0).clearedAt()).isNotNull();assertThat(ready.entities().get(0).assigneeId()).isEqualTo("9976");
                     assertThat(ready.entities().get(0).note()).isEqualTo("跟进合同结束，不手工清除阻断");
+                    assertThat(exitTasks(tenantId,9976,DataScope.all()).total()).isZero();
                     assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","不改结清历史",ready.entities().get(0).version(),ready.version()))).isInstanceOf(ApiException.class);
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
@@ -1486,6 +1506,12 @@ class B0InfrastructureIT {
             }
             assertThat(cause).isInstanceOf(TenantIsolationException.class);
         });
+    }
+
+    private io.github.turbopro.ism.supplier.ExitTaskModels.Page exitTasks(long tenantId,long actorId,DataScope scope){
+        try(var identity=TenantContext.open(tenantId,actorId);var authorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of(),Map.of("supplier:master",scope),Set.of()))){
+            return exitTaskService.mine(null,null,0,20);
+        }
     }
 
     @RestController

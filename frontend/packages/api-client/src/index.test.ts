@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { createIsmClient } from './index';
 
 describe('generated ISM client', () => {
+  it('loads personal exit tasks with bounded query filters and no recipient override',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({data:{total:21,page:1,size:20,items:[]}}),{status:200,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    const result=await client.GET('/supplier-exit-tasks/mine',{params:{query:{keyword:'测试',code:'OPEN_CONTRACT',page:1,size:20}}});
+    expect(result.data?.data.total).toBe(21);
+    const url=new URL((fetchMock.mock.calls[0]![0] as Request).url);
+    expect(url.pathname).toBe('/api/supplier-exit-tasks/mine');expect(url.searchParams.get('page')).toBe('1');expect(url.searchParams.get('keyword')).toBe('测试');expect(url.searchParams.has('assigneeId')).toBe(false);
+  });
   it('decodes unread counts and permission errors for the personal inbox',async()=>{
     const fetchMock=vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({data:{count:3}}),{status:200,headers:{'Content-Type':'application/json'}})).mockResolvedValueOnce(new Response(JSON.stringify({error:{code:'FORBIDDEN',message:'无权限'}}),{status:403,headers:{'Content-Type':'application/json'}}));
     const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});

@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/supplier-exit-tasks/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMySupplierExitTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/table-views/{tableKey}": {
         parameters: {
             query?: never;
@@ -3977,6 +3993,33 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        MyExitTask: {
+            id: string;
+            applicationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            organizationId: string;
+            code: string;
+            sourceId: string;
+            route: string;
+            note?: string | null;
+            /** Format: date-time */
+            assignedAt: string | null;
+            /** Format: date-time */
+            checkedAt: string;
+            version: number;
+            applicationVersion: number;
+        };
+        MyExitTaskPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["MyExitTask"][];
+            };
+        };
         MessageTemplateListResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["MessageTemplate"][];
         };
@@ -4488,6 +4531,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMySupplierExitTasks: {
+        parameters: {
+            query?: {
+                /** @description Supplier code or name; wildcard characters are literal */
+                keyword?: string;
+                code?: "OPEN_CONTRACT" | "OPEN_PROJECT" | "OPEN_PERSON" | "OPEN_ASSET" | "OPEN_SAFETY" | "OPEN_ATTENDANCE" | "OPEN_QUALITY" | "OPEN_IMPROVEMENT";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current actor's open disposition tasks within live supplier data scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyExitTaskPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
     listPersonalTableViews: {
         parameters: {
             query?: never;

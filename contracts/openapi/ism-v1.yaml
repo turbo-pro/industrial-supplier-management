@@ -6,6 +6,21 @@ info:
 servers:
   - url: /api
 paths:
+  /supplier-exit-tasks/mine:
+    get:
+      operationId: listMySupplierExitTasks
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 }, description: Supplier code or name; wildcard characters are literal }
+        - { name: code, in: query, schema: { type: string, enum: [OPEN_CONTRACT, OPEN_PROJECT, OPEN_PERSON, OPEN_ASSET, OPEN_SAFETY, OPEN_ATTENDANCE, OPEN_QUALITY, OPEN_IMPROVEMENT] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Current actor's open disposition tasks within live supplier data scope, content: { application/json: { schema: { $ref: '#/components/schemas/MyExitTaskPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /table-views/{tableKey}:
     get:
       operationId: listPersonalTableViews
@@ -2349,6 +2364,26 @@ components:
       type: object
       required: [id, title, content, createdAt]
       properties: { id: { type: string }, title: { type: string }, content: { type: string }, businessType: { type: string }, businessId: { type: string }, readAt: { type: string, format: date-time }, createdAt: { type: string, format: date-time } }
+    MyExitTask:
+      type: object
+      required: [id, applicationId, supplierId, supplierCode, supplierName, organizationId, code, sourceId, route, assignedAt, checkedAt, version, applicationVersion]
+      properties:
+        id: { type: string }
+        applicationId: { type: string }
+        supplierId: { type: string }
+        supplierCode: { type: string }
+        supplierName: { type: string }
+        organizationId: { type: string }
+        code: { type: string }
+        sourceId: { type: string }
+        route: { type: string }
+        note: { type: string, nullable: true }
+        assignedAt: { type: string, format: date-time, nullable: true }
+        checkedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 0 }
+        applicationVersion: { type: integer, minimum: 0 }
+    MyExitTaskPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/MyExitTask' } } } } } }]
     MessageTemplateListResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MessageTemplate' } } } }]
     MessageTemplateResponse:
