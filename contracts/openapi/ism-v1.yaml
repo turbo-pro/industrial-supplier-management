@@ -711,26 +711,26 @@ paths:
       operationId: getInbox
       tags: [Messages]
       security: [{ bearerAuth: [] }]
-      responses: { '200': { description: Current user inbox, content: { application/json: { schema: { $ref: '#/components/schemas/InboxListResponse' } } } } }
+      responses: { '200': { description: Current user inbox, content: { application/json: { schema: { $ref: '#/components/schemas/InboxListResponse' } } } }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
   /messages/inbox/unread-count:
     get:
       operationId: getUnreadMessageCount
       tags: [Messages]
       security: [{ bearerAuth: [] }]
-      responses: { '200': { description: Unread count } }
+      responses: { '200': { description: Unread count, content: { application/json: { schema: { $ref: '#/components/schemas/UnreadMessageCountResponse' } } } }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
   /messages/inbox/{id}/read:
     put:
       operationId: markMessageRead
       tags: [Messages]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { description: Message marked read, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } } }
+      responses: { '200': { description: Message marked read, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
   /messages/inbox/read-all:
     put:
       operationId: markAllMessagesRead
       tags: [Messages]
       security: [{ bearerAuth: [] }]
-      responses: { '200': { description: All messages marked read } }
+      responses: { '200': { description: All messages marked read, content: { application/json: { schema: { $ref: '#/components/schemas/MarkAllMessagesReadResponse' } } } }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
   /tasks:
     get:
       operationId: listMyTasks
@@ -2355,6 +2355,10 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/MessageTemplate' } } }]
     InboxListResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/InboxMessage' } } } }]
+    UnreadMessageCountResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [count], properties: { count: { type: integer, minimum: 0 } } } } }]
+    MarkAllMessagesReadResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [updated], properties: { updated: { type: integer, minimum: 0 } } } } }]
     SendMessageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: object, properties: { requested: { type: integer }, delivered: { type: integer }, deliveryIds: { type: array, items: { type: string } } } } } }]
     InitializeFileUpload:

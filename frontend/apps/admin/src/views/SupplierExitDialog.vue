@@ -41,7 +41,7 @@ async function saveAssignment(){
       params:{path:{supplierId,id:row.id,entityId:entity.id}},body:{assigneeId:disposition.assigneeId,note:disposition.note.trim(),version:entity.version,applicationVersion:row.version}
     });
     if(error){ElMessage.error(error.error.message+'；如版本冲突，请刷新后重新编辑');return;}
-    assignment.value=false;ElMessage.success('责任与处理说明已记录；请在业务页面处置后重新核验');await load();
+    assignment.value=false;ElMessage.success('责任与说明已记录，站内通知已发送；处置后须重新核验');await load();
   }catch{ElMessage.error('保存失败，请刷新核对结果');}finally{busy.value=false;}
 }
 let requestVersion=0;
@@ -147,7 +147,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPage
     <template #footer><el-button :disabled="busy" @click="load">刷新</el-button><el-button :disabled="busy" @click="visible=false">关闭</el-button></template>
   </el-dialog>
   <el-dialog v-model="assignment" title="退出事项责任与处理说明" width="600px" append-to-body :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
-    <el-alert title="只能分派给本租户有效账号；本操作不能手工完成或移交未结业务。" type="warning" :closable="false"/>
+    <el-alert title="保存会向本租户有效责任人发送站内通知；通知失败则不会保存。本操作不能手工完成或移交未结业务。" type="warning" :closable="false"/>
     <el-form label-position="top"><el-form-item label="责任人账号 ID"><el-input v-model="disposition.assigneeId" maxlength="19" :disabled="busy"/><el-button link :disabled="busy" @click="disposition.assigneeId=session.actorId??''">分派给我</el-button></el-form-item><el-form-item label="处理说明"><el-input v-model="disposition.note" type="textarea" maxlength="1800" show-word-limit :disabled="busy"/></el-form-item></el-form>
     <template #footer><el-button :disabled="busy" @click="assignment=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveAssignment">保存责任与说明</el-button></template>
   </el-dialog>

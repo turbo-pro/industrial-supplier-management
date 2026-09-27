@@ -3986,6 +3986,16 @@ export interface components {
         InboxListResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["InboxMessage"][];
         };
+        UnreadMessageCountResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                count: number;
+            };
+        };
+        MarkAllMessagesReadResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                updated: number;
+            };
+        };
         SendMessageResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: {
                 requested?: number;
@@ -6306,6 +6316,8 @@ export interface operations {
                     "application/json": components["schemas"]["InboxListResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     getUnreadMessageCount: {
@@ -6322,8 +6334,12 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UnreadMessageCountResponse"];
+                };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     markMessageRead: {
@@ -6346,6 +6362,9 @@ export interface operations {
                     "application/json": components["schemas"]["EmptyResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     markAllMessagesRead: {
@@ -6362,8 +6381,12 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MarkAllMessagesReadResponse"];
+                };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     listMyTasks: {

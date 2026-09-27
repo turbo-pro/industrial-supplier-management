@@ -1,6 +1,10 @@
 package io.github.turbopro.ism.operation.message;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;import org.apache.ibatis.annotations.*;import java.time.LocalDateTime;import java.util.*;
 @Mapper public interface MessageMapper extends TenantScopedMapper{
+ @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'SUPPLIER_EXIT_ASSIGNMENT','退出事项责任分派','IN_APP','退出事项待处置','供应商 {{supplierId}} 的退出申请 {{applicationId}} 已分派事项 {{code}} / {{sourceId}} 给您。请在业务台账处置并通知管理人员重新核验；本消息不是完成凭证。',JSON_ARRAY('supplierId','applicationId','code','sourceId'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
+ int ensureExitAssignmentTemplate(long tenantId,long id);
+ @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_ASSIGNMENT' AND channel='IN_APP' FOR SHARE")
+ MessageModels.TemplateRow exitAssignmentTemplate(long tenantId);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} ORDER BY template_code,channel")List<MessageModels.TemplateRow> templates(long tenantId);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code=#{code} AND status='ACTIVE' ORDER BY channel LIMIT 1")MessageModels.TemplateRow activeTemplate(long tenantId,String code);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND id=#{id}")MessageModels.TemplateRow template(long tenantId,long id);

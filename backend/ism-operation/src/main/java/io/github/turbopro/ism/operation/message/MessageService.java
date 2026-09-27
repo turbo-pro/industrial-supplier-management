@@ -3,6 +3,18 @@ import com.fasterxml.jackson.core.type.TypeReference;import com.fasterxml.jackso
 @Service public class MessageService{
  private static final Pattern VARIABLE=Pattern.compile("\\{\\{([a-zA-Z][a-zA-Z0-9_.-]{0,63})}} ".trim());private final MessageMapper mapper;private final OperationIdGenerator ids;private final ObjectMapper json;
  public MessageService(MessageMapper mapper,OperationIdGenerator ids,ObjectMapper json){this.mapper=mapper;this.ids=ids;this.json=json;}
+ @Transactional public void notifyExitAssignment(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId){
+  if(supplierId<=0||applicationId<=0||entityId<=0||sourceId<=0||assigneeId<=0||code==null)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+  long tenant=tenant();mapper.ensureExitAssignmentTemplate(tenant,ids.nextId());var template=mapper.exitAssignmentTemplate(tenant);
+  if(template==null||!"ACTIVE".equals(template.status()))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出分派消息模板不可用");
+  if(!mapper.validUsers(tenant,Set.of(assigneeId)).equals(Set.of(assigneeId)))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"责任人不存在或已停用");
+  var variables=Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"code",code,"sourceId",Long.toString(sourceId));
+  if(!variables.keySet().containsAll(read(template.variableSchema())))throw new ApiException(MessageErrorCode.INVALID_VARIABLES);
+  String title=render(template.titleTemplate(),variables),content=render(template.contentTemplate(),variables);
+  if(title.length()>200||content.length()>10000)throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出分派消息内容超长");
+  long delivery=ids.nextId();mapper.insertDelivery(tenant,delivery,template.id(),assigneeId,title,content,"SUPPLIER_EXIT_ENTITY",entityId,LocalDateTime.now(ZoneOffset.UTC));
+  mapper.insertInbox(tenant,ids.nextId(),delivery,assigneeId);
+ }
  public List<MessageModels.TemplateView> templates(){return mapper.templates(tenant()).stream().map(this::view).toList();}
  @Transactional public MessageModels.TemplateView create(MessageModels.SaveTemplate c){validateTemplate(c);long id=ids.nextId();try{mapper.insertTemplate(tenant(),id,c.code(),c.name(),c.channel(),c.titleTemplate(),c.contentTemplate(),write(c.requiredVariables()));}catch(DuplicateKeyException e){throw new ApiException(MessageErrorCode.DUPLICATE);}return view(mapper.template(tenant(),id));}
  @Transactional public MessageModels.TemplateView update(long id,MessageModels.SaveTemplate c){validateTemplate(c);if(mapper.updateTemplate(tenant(),id,c.name(),c.titleTemplate(),c.contentTemplate(),write(c.requiredVariables()),c.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);return view(mapper.template(tenant(),id));}

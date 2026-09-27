@@ -4,6 +4,7 @@
 
 ## 已完成的最近闭环
 
+- 退出分派站内提醒与个人收件箱：分派/投递同事务、失败回滚、租户默认模板保留自定义、旧版本不重复投递、未读及已读页面；参见 [通知验收](exit-assignment-notification-review.md)。尚不是人工待办和期限催办闭环。
 - 逐实体退出处置：八类本地未结事项的具体记录快照、分页、同租户有效责任人分派、处理说明、双版本冲突、重新核验结清及历史保留；不能手工覆盖实时阻断，参见 [逐实体验收](exit-entity-disposition-review.md)。
 - 人员/车辆设备列方案与分页：五表目录受控、资源权限独立、脱敏证件列、必显标识和固定操作、标签/过期请求保护；参见 [资源台账验收](resource-table-views-review.md)。
 - 合同限制动作闭环：合同创建/生效分别使用平台固定 CONTRACT_CREATE / CONTRACT_ACTIVATE；限制说明页面与 API 同步扩展，合同终止继续允许退出处置。验收见 [动作接入 Review](entry-action-routing-review.md)。

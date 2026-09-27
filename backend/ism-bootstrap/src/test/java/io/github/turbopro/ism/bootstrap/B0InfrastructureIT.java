@@ -684,10 +684,18 @@ class B0InfrastructureIT {
                     assertThat(blocked.entityTotal()).isOne();assertThat(exitApplicationService.entities(supplierId,finalExitId,0,20).items()).hasSize(1);
                     assertThat(exitApplicationService.entities(supplierId,finalExitId,1,20).items()).isEmpty();
                     for(String invalidOwner:List.of("9977","9978","9979"))assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign(invalidOwner,"不能越权分派",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
+                    var assignmentTemplate=messageService.create(new MessageModels.SaveTemplate("SUPPLIER_EXIT_ASSIGNMENT","退出事项责任分派","IN_APP","退出事项待处置","供应商 {{supplierId}} / 申请 {{applicationId}} / {{code}} / {{sourceId}}，请处置后重新核验",Set.of("supplierId","applicationId","code","sourceId"),0));
+                    jdbcTemplate.update("UPDATE msg_template SET status='DISABLED' WHERE id=?",Long.parseLong(assignmentTemplate.id()));
+                    assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","模板停用不能静默保存",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
+                    assertThat(exitApplicationService.get(supplierId,finalExitId).version()).isEqualTo(blocked.version());
+                    assertThat(exitApplicationService.get(supplierId,finalExitId).entities().get(0).assigneeId()).isNull();
+                    jdbcTemplate.update("UPDATE msg_template SET status='ACTIVE' WHERE id=?",Long.parseLong(assignmentTemplate.id()));
                     var assigned=exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","跟进合同结束，不手工清除阻断",entity.version(),blocked.version()));
                     assertThat(assigned.version()).isEqualTo(2);assertThat(assigned.localReady()).isFalse();
                     assertThat(assigned.entities().get(0).assigneeId()).isEqualTo("9976");assertThat(assigned.entities().get(0).state()).isEqualTo("OPEN");
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox i JOIN msg_delivery d ON d.id=i.delivery_id AND d.tenant_id=i.tenant_id WHERE i.tenant_id=? AND i.recipient_id=9976 AND d.business_type='SUPPLIER_EXIT_ENTITY' AND d.business_id=?",Integer.class,tenantId,entityId)).isOne();
                     assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","过期修改",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isOne();
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"说明不能放行",assigned.version()))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0))).isInstanceOf(ApiException.class);
                     jdbcTemplate.update("UPDATE prj_contract SET status='TERMINATED' WHERE id=9975");
@@ -714,6 +722,9 @@ class B0InfrastructureIT {
             }
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",tenantId);
+            jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976",tenantId);
+            jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ASSIGNMENT'",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);

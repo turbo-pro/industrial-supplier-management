@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { createIsmClient } from './index';
 
 describe('generated ISM client', () => {
+  it('decodes unread counts and permission errors for the personal inbox',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({data:{count:3}}),{status:200,headers:{'Content-Type':'application/json'}})).mockResolvedValueOnce(new Response(JSON.stringify({error:{code:'FORBIDDEN',message:'无权限'}}),{status:403,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    expect((await client.GET('/messages/inbox/unread-count')).data?.data.count).toBe(3);
+    expect((await client.GET('/messages/inbox')).error?.error.message).toBe('无权限');
+  });
+  it('marks only the specified message read through the PUT contract',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({data:null}),{status:200,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    await client.PUT('/messages/inbox/{id}/read',{params:{path:{id:'100'}}});
+    const request=fetchMock.mock.calls[0]![0] as Request;
+    expect(request.method).toBe('PUT');expect(request.url).toBe('http://localhost:8080/api/messages/inbox/100/read');
+  });
   it('loads a bounded exit entity page with its application version',async()=>{
     const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({success:true,data:{total:21,page:1,size:20,applicationVersion:2,items:[]},traceId:'exit-page',timestamp:'2026-09-27T10:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}}));
     const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});

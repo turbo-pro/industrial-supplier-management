@@ -17,7 +17,8 @@ class ExitApplicationServiceTest {
     final SupplierService scope=mock(SupplierService.class);final AppealEvidenceVerifier evidence=mock(AppealEvidenceVerifier.class);
     final OperationIdGenerator ids=mock(OperationIdGenerator.class);final SupplierModels.SupplierRow current=mock(SupplierModels.SupplierRow.class);
     final ExitAssigneeVerifier assignees=mock(ExitAssigneeVerifier.class);
-    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees);}
+    final ExitAssignmentNotifier notifications=mock(ExitAssignmentNotifier.class);
+    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees,notifications);}
     void setup(){
         when(suppliers.findForNewBusiness(10,30)).thenReturn(current);when(current.status()).thenReturn("ACTIVE");
         when(current.organizationId()).thenReturn(20L);when(current.createdBy()).thenReturn(7L);
@@ -43,6 +44,7 @@ class ExitApplicationServiceTest {
             assertEquals(1,service(List.of(contractFact(1,List.of(new SupplierExitCheck.Entity("OPEN_CONTRACT",77,"/projects/contracts"))))).assign(30,90,100,assign(0,0)).version());
         }
         verify(mapper).assignEntity(10,90,100,8,"跟进合同终止",7,0);verify(mapper).advanceVersion(10,30,90,0);
+        verify(notifications).assigned(30,90,100,"OPEN_CONTRACT",77,8);
         verify(mapper,never()).clearEntities(anyLong(),anyLong(),anySet());verify(suppliers,never()).completeExit(anyLong(),anyLong(),anyLong(),anyInt());
     }
     @Test void assignmentRejectsStaleApplicationAndEntityVersions(){setup();

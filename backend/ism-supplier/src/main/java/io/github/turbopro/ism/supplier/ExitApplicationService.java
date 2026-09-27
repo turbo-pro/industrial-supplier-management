@@ -14,11 +14,11 @@ public class ExitApplicationService {
     private static final Set<String> ENTITY_CODES=Set.of("OPEN_CONTRACT","OPEN_PROJECT","OPEN_PERSON","OPEN_ASSET","OPEN_SAFETY","OPEN_ATTENDANCE","OPEN_QUALITY","OPEN_IMPROVEMENT");
     private final ExitMapper mapper;private final SupplierMapper suppliers;private final SupplierService scope;
     private final AppealEvidenceVerifier evidence;private final List<SupplierExitCheck> checks;
-    private final OperationIdGenerator ids;private final AuditService audit;private final ExitAssigneeVerifier assignees;
+    private final OperationIdGenerator ids;private final AuditService audit;private final ExitAssigneeVerifier assignees;private final ExitAssignmentNotifier notifications;
     public ExitApplicationService(ExitMapper mapper,SupplierMapper suppliers,SupplierService scope,
-        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees){
+        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees,ExitAssignmentNotifier notifications){
         this.mapper=mapper;this.suppliers=suppliers;this.scope=scope;this.evidence=evidence;
-        this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.assignees=assignees;
+        this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.assignees=assignees;this.notifications=notifications;
     }
     public ExitModels.Page list(long supplierId,int page,int size){
         var supplier=scope.get(supplierId);long tenant=TenantContext.require().tenantId();
@@ -110,6 +110,7 @@ public class ExitApplicationService {
         if(command.note()==null||command.note().isBlank()||command.note().trim().length()>1800)throw invalid("处理说明不能为空且不超过 1800 字");
         if(mapper.assignEntity(i.tenantId(),applicationId,entityId,assignee,command.note().trim(),i.actorId(),command.version())!=1)throw conflict();
         if(mapper.advanceVersion(i.tenantId(),supplierId,applicationId,application.version())!=1)throw conflict();
+        notifications.assigned(supplierId,applicationId,entityId,entity.checkCode(),entity.sourceId(),assignee);
         event(applicationId,"ENTITY_ASSIGN",entity.checkCode()+" #"+entity.sourceId()+" → 责任人 "+assignee+"："+command.note().trim());
         audit("SUPPLIER_EXIT_ENTITY_ASSIGN",applicationId,Map.of("supplierId",supplierId,"entityId",entityId,"code",entity.checkCode(),"sourceId",entity.sourceId(),"assigneeId",assignee));
         return view(require(supplierId,applicationId));
