@@ -215,6 +215,7 @@ class B0InfrastructureIT {
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
+    @Autowired private io.github.turbopro.ism.supplier.RestrictionExplanationService restrictionExplanationService;
     @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
     @Autowired private SupplierMapper supplierMapper;
     @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
@@ -509,6 +510,12 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "WATCH")).isOne();
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
                 var observationPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                try(var actor=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(observationPermissions)){
+                    var explanation=restrictionExplanationService.explain(supplierId,io.github.turbopro.ism.supplier.RestrictionExplanationService.Action.PROJECT_CREATE);
+                    assertThat(explanation.decision()).isEqualTo(io.github.turbopro.ism.supplier.RestrictionExplanationService.Decision.WARN);
+                    assertThat(explanation.hits()).extracting(io.github.turbopro.ism.supplier.RestrictionExplanationService.Hit::sourceId).containsExactly(Long.toString(watchId));
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_RESTRICTION_EXPLAIN'",Long.class,tenantId)).isPositive();
+                }
                 String observationApplication;
                 try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(observationPermissions)){
                     configurationService.updateSetting("restriction.watchPeriodDays",new ConfigurationModels.UpdateSetting("30",0));
@@ -566,6 +573,7 @@ class B0InfrastructureIT {
                 }
                 assertThat(blacklistMapper.currentCase(tenantId,9981).status()).isEqualTo("APPROVED");
                 assertThat(blacklistMapper.lifted(tenantId,9981)).isOne();
+                assertThat(blacklistMapper.currentEffectiveCases(tenantId,supplierId,java.time.LocalDate.now())).extracting(io.github.turbopro.ism.supplier.BlacklistModels.Row::id).containsExactly(9982L);
                 assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
                 assertThat(blacklistMapper.revoke(tenantId,9982,"测试清理",2,2)).isOne();

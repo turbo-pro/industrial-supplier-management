@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/restriction-explanation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Advisory enterprise-wide snapshot. Does not authorize any command; records an audit event and never claims factory scope or external clearance. */
+        post: operations["explainSupplierRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications": {
         parameters: {
             query?: never;
@@ -2274,6 +2291,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        RestrictionExplainAction: "QUALIFICATION_APPLY" | "PROJECT_CREATE" | "RESOURCE_ASSIGN" | "SITE_ENTER" | "START_WORK" | "RESUME_WORK";
+        /** @enum {string} */
+        RestrictionExplainDecision: "ALLOW" | "WARN" | "DENY";
+        RestrictionExplanationHit: {
+            code: string;
+            sourceId: string;
+            decision: components["schemas"]["RestrictionExplainDecision"];
+            explanation: string;
+        };
+        RestrictionExplanation: {
+            supplierId: string;
+            action: components["schemas"]["RestrictionExplainAction"];
+            decision: components["schemas"]["RestrictionExplainDecision"];
+            /** Format: date */
+            businessDate: string;
+            /** @enum {string} */
+            scope: "TENANT_ENTERPRISE";
+            /** @enum {boolean} */
+            advisoryOnly: true;
+            hits: components["schemas"]["RestrictionExplanationHit"][];
+        };
         CreateExitApplication: {
             /** @enum {string} */
             type: "NORMAL" | "ELIMINATION";
@@ -4296,6 +4335,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    explainSupplierRestriction: {
+        parameters: {
+            query: {
+                action: components["schemas"]["RestrictionExplainAction"];
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All current enterprise restriction hits */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["RestrictionExplanation"];
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
     listSupplierExitApplications: {
         parameters: {
             query?: {

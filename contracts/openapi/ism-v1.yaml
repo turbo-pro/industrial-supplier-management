@@ -6,6 +6,30 @@ info:
 servers:
   - url: /api
 paths:
+  /suppliers/{supplierId}/restriction-explanation:
+    post:
+      operationId: explainSupplierRestriction
+      tags: [Supplier Restriction]
+      description: Advisory enterprise-wide snapshot. Does not authorize any command; records an audit event and never claims factory scope or external clearance.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: action, in: query, required: true, schema: { $ref: '#/components/schemas/RestrictionExplainAction' } }
+      responses:
+        '200':
+          description: All current enterprise restriction hits
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RestrictionExplanation' }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /suppliers/{supplierId}/exit-applications:
     get:
       operationId: listSupplierExitApplications
@@ -1547,6 +1571,29 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    RestrictionExplainAction:
+      type: string
+      enum: [QUALIFICATION_APPLY, PROJECT_CREATE, RESOURCE_ASSIGN, SITE_ENTER, START_WORK, RESUME_WORK]
+    RestrictionExplainDecision: { type: string, enum: [ALLOW, WARN, DENY] }
+    RestrictionExplanationHit:
+      type: object
+      required: [code, sourceId, decision, explanation]
+      properties:
+        code: { type: string }
+        sourceId: { type: string }
+        decision: { $ref: '#/components/schemas/RestrictionExplainDecision' }
+        explanation: { type: string }
+    RestrictionExplanation:
+      type: object
+      required: [supplierId, action, decision, businessDate, scope, advisoryOnly, hits]
+      properties:
+        supplierId: { type: string }
+        action: { $ref: '#/components/schemas/RestrictionExplainAction' }
+        decision: { $ref: '#/components/schemas/RestrictionExplainDecision' }
+        businessDate: { type: string, format: date }
+        scope: { type: string, enum: [TENANT_ENTERPRISE] }
+        advisoryOnly: { type: boolean, enum: [true] }
+        hits: { type: array, items: { $ref: '#/components/schemas/RestrictionExplanationHit' } }
     CreateExitApplication: { type: object, required: [type, reason, evidenceFileId], properties: { type: { type: string, enum: [NORMAL, ELIMINATION] }, reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
     ReviewExitApplication: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
     ExitApplicationVersion: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } }
