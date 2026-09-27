@@ -17,6 +17,17 @@ public class TableViewService {
         new TableViewModels.Definition("code","供应商编码",true,160),new TableViewModels.Definition("name","供应商名称",true,240),
         new TableViewModels.Definition("type","类型",false,110),new TableViewModels.Definition("riskLevel","风险",false,90),
         new TableViewModels.Definition("status","状态",false,110),new TableViewModels.Definition("updatedAt","更新时间",false,180));
+    private record Registration(String permission,List<TableViewModels.Definition> columns){}
+    private static final Map<String,Registration> TABLES=Map.of(
+        "supplier.master",new Registration("supplier:master:view",SUPPLIER_COLUMNS),
+        "contract.ledger",new Registration("contract:view",List.of(
+            new TableViewModels.Definition("contractNo","合同编号",true,160),new TableViewModels.Definition("name","合同/供应商",true,250),
+            new TableViewModels.Definition("amount","金额",false,150),new TableViewModels.Definition("period","期限",false,240),
+            new TableViewModels.Definition("status","状态",false,110))),
+        "project.ledger",new Registration("project:view",List.of(
+            new TableViewModels.Definition("projectCode","项目编码",true,150),new TableViewModels.Definition("name","项目/供应商",true,250),
+            new TableViewModels.Definition("contractNo","关联合同",false,150),new TableViewModels.Definition("period","计划周期",false,240),
+            new TableViewModels.Definition("status","状态",false,110))));
     private final TableViewMapper mapper;private final OperationIdGenerator ids;private final ObjectMapper json;private final AuditService audit;
     public TableViewService(TableViewMapper mapper,OperationIdGenerator ids,ObjectMapper json,AuditService audit){this.mapper=mapper;this.ids=ids;this.json=json;this.audit=audit;}
     public TableViewModels.Page list(String tableKey){var catalog=catalog(tableKey);var i=TenantContext.require();return new TableViewModels.Page(tableKey,catalog,20,mapper.list(i.tenantId(),i.actorId(),tableKey).stream().map(this::view).toList());}
@@ -42,9 +53,10 @@ public class TableViewService {
         if(mapper.delete(i.tenantId(),i.actorId(),tableKey,id,version)!=1)throw conflict();audit("TABLE_VIEW_DELETE",tableKey,id);
     }
     private List<TableViewModels.Definition> catalog(String key){
-        if(!"supplier.master".equals(key))throw invalid("此表尚未注册列配置");
-        if(!AuthorizationContext.require().hasAction("supplier:master:view"))throw new ApiException(CommonErrorCode.FORBIDDEN);
-        return SUPPLIER_COLUMNS;
+        var table=key==null?null:TABLES.get(key);
+        if(table==null)throw invalid("此表尚未注册列配置");
+        if(!AuthorizationContext.require().hasAction(table.permission()))throw new ApiException(CommonErrorCode.FORBIDDEN);
+        return table.columns();
     }
     private void validate(String key,TableViewModels.Save c){
         var definitions=catalog(key);

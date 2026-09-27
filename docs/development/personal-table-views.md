@@ -1,6 +1,6 @@
 # 个人表格列方案
 
-对应完整推进计划 B2-07 的个人方案部分。当前接入供应商档案 `supplier.master`，并提供通用列方案 API、受控列目录及可复用 `PersonalTableViews` 管理组件。公共/租户级方案和其他业务表接入未完成，不能将 B2-07 整包标为完成。
+对应完整推进计划 B2-07 的个人方案部分。当前接入供应商档案 `supplier.master`、合同台账 `contract.ledger`、项目台账 `project.ledger`，并提供通用列方案 API、受控列目录及可复用 `PersonalTableViews` 管理组件。公共/租户级方案和其余业务表接入未完成，不能将 B2-07 整包标为完成。合同/项目接入详见 [台账验收](ledger-table-views-review.md)。
 
 ## 可独立验收的行为
 
@@ -18,7 +18,7 @@
 
 `PUT/DELETE /api/table-views/{tableKey}/{id}`：版本化更新 / 按查询参数 `version` 删除。
 
-前端客户端源于 OpenAPI。后端需要 `table:view:manage` 及对应表 `supplier:master:view` 权限；列目录目前仅允许 `supplier.master`。不接受 ownerId、tenantId、数据库字段名或客户端定义的表目录。新增表必须在服务注册列目录及对应业务权限，并更新契约和接入测试。
+前端客户端源于 OpenAPI。后端需要 `table:view:manage` 及对应表查看权限：供应商 `supplier:master:view`、合同 `contract:view`、项目 `project:view`。受控目录只允许已注册的三个表键。不接受 ownerId、tenantId、数据库字段名或客户端定义的表目录。新增表必须在服务注册列目录及对应业务权限，并更新契约和接入测试。
 
 V37 创建 `ui_table_view_owner` 作为租户/用户/表并发锁锚点、`ui_table_view` 保存 JSON 列序列。默认方案生成列唯一键、名称唯一键、版本约束及父子外键防止数据库层冲突。方案写操作先持有锁锚点，配额统计采用当前读，默认变更与方案写入、审计同事务；重复名称、旧版本等失败全部回滚。锁锚点不包含业务数据。
 

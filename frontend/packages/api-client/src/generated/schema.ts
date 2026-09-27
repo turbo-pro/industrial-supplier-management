@@ -2323,6 +2323,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        PersonalTableKey: "supplier.master" | "contract.ledger" | "project.ledger";
         PersonalTableColumn: {
             key: string;
             visible: boolean;
@@ -4410,7 +4412,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                tableKey: "supplier.master";
+                tableKey: components["schemas"]["PersonalTableKey"];
             };
             cookie?: never;
         };
@@ -4435,7 +4437,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                tableKey: "supplier.master";
+                tableKey: components["schemas"]["PersonalTableKey"];
             };
             cookie?: never;
         };
@@ -4465,7 +4467,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                tableKey: "supplier.master";
+                tableKey: components["schemas"]["PersonalTableKey"];
                 id: string;
             };
             cookie?: never;
@@ -4499,7 +4501,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                tableKey: "supplier.master";
+                tableKey: components["schemas"]["PersonalTableKey"];
                 id: string;
             };
             cookie?: never;
@@ -6851,6 +6853,9 @@ export interface operations {
                     "application/json": components["schemas"]["SupplierPageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     createSupplier: {
@@ -7383,6 +7388,9 @@ export interface operations {
                     "application/json": components["schemas"]["ContractPageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     createContract: {
@@ -7510,6 +7518,9 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectPageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     createProject: {

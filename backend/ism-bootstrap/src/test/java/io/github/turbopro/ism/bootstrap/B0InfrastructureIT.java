@@ -1202,7 +1202,7 @@ class B0InfrastructureIT {
         String key="supplier.master";
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantA,"TABLE_VIEW_A","列方案租户 A");
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantB,"TABLE_VIEW_B","列方案租户 B");
-        var permission=new PermissionSnapshot(Set.of("supplier:master:view","table:view:manage"),Map.of(),Set.of());
+        var permission=new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","table:view:manage"),Map.of(),Set.of());
         var columns=List.of("code","name","type","riskLevel","status","updatedAt").stream().map(k->new io.github.turbopro.ism.integration.table.TableViewModels.Column(k,!k.equals("type"),160)).toList();
         String firstId,secondId;
         try {
@@ -1245,6 +1245,20 @@ class B0InfrastructureIT {
                 assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='TABLE_VIEW_CREATE'",Long.class,tenantA)).isEqualTo(5L);
                 for(var view:saved)tableViewService.delete(key,Long.parseLong(view.id()),view.version());
                 assertThat(tableViewService.list(key).views()).isEmpty();
+                var supplierView=tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("共同方案",columns,true,0));
+                var contractColumns=tableViewService.list("contract.ledger").catalog().stream().map(c->new io.github.turbopro.ism.integration.table.TableViewModels.Column(c.key(),true,c.width())).toList();
+                var projectColumns=tableViewService.list("project.ledger").catalog().stream().map(c->new io.github.turbopro.ism.integration.table.TableViewModels.Column(c.key(),true,c.width())).toList();
+                var contractView=tableViewService.create("contract.ledger",new io.github.turbopro.ism.integration.table.TableViewModels.Save("共同方案",contractColumns,true,0));
+                var projectView=tableViewService.create("project.ledger",new io.github.turbopro.ism.integration.table.TableViewModels.Save("共同方案",projectColumns,true,0));
+                assertThat(tableViewService.list(key).views()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(supplierView.id());
+                assertThat(tableViewService.list("contract.ledger").views()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(contractView.id());
+                assertThat(tableViewService.list("project.ledger").views()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(projectView.id());
+                assertThatThrownBy(()->tableViewService.delete("contract.ledger",Long.parseLong(supplierView.id()),0)).isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->tableViewService.create("contract.ledger",new io.github.turbopro.ism.integration.table.TableViewModels.Save("错用列",columns,true,0))).isInstanceOf(ApiException.class);
+                tableViewService.update("contract.ledger",Long.parseLong(contractView.id()),new io.github.turbopro.ism.integration.table.TableViewModels.Save("共同方案",contractColumns,false,0));
+                assertThat(tableViewService.list("contract.ledger").views().get(0).defaultView()).isFalse();
+                assertThat(tableViewService.list(key).views().get(0).defaultView()).isTrue();
+                assertThat(tableViewService.list("project.ledger").views().get(0).defaultView()).isTrue();
             }
         }finally{
             jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id IN (?,?)",tenantA,tenantB);

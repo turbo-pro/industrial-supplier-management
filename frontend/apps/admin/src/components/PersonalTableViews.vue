@@ -5,7 +5,7 @@ import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 type Column=components['schemas']['PersonalTableColumn'];
 type View=components['schemas']['PersonalTableView'];
-const props=defineProps<{tableKey:'supplier.master';defaults:components['schemas']['PersonalTableColumnDefinition'][]}>();
+const props=defineProps<{tableKey:components['schemas']['PersonalTableKey'];defaults:components['schemas']['PersonalTableColumnDefinition'][]}>();
 const emit=defineEmits<{change:[columns:Column[]]}>();
 const session=useSessionStore();const views=ref<View[]>([]);const catalog=ref(props.defaults);
 const selected=ref('');const available=ref(false);const busy=ref(false);const open=ref(false);
