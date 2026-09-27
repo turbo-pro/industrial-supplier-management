@@ -140,6 +140,28 @@ public class ExitApplicationService {
         audit("SUPPLIER_EXIT_ENTITY_REMIND",applicationId,Map.of("entityId",entityId,"assigneeId",entity.assigneeId()));
         return view(require(supplierId,applicationId));
     }
+    /** Background-only path: rechecks mutable facts under the same supplier/application/entity locks as manual reminders. */
+    @Transactional public boolean autoRemind(long supplierId,long applicationId,long entityId,int intervalHours){
+        var i=TenantContext.require();
+        if(i.actorId()!=0||intervalHours<24||intervalHours>720)throw new IllegalArgumentException("system context and valid interval required");
+        var supplier=suppliers.findForNewBusiness(i.tenantId(),supplierId);
+        if(supplier==null||"EXITED".equals(supplier.status()))return false;
+        var application=mapper.get(i.tenantId(),supplierId,applicationId);
+        if(application==null||!"SUBMITTED".equals(application.status()))return false;
+        var entity=mapper.entity(i.tenantId(),applicationId,entityId);
+        if(entity==null||!"OPEN".equals(entity.state())||entity.dueDate()==null||!entity.dueDate().isBefore(RestrictionBusinessDate.today()))return false;
+        if(entity.assigneeId()==null||!assignees.active(entity.assigneeId()))return false;
+        var now=java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if(entity.lastRemindedAt()!=null&&entity.lastRemindedAt().isAfter(now.minusHours(intervalHours)))return false;
+        var facts=ExitReadinessEvaluator.evaluate(checks,supplierId);
+        if(entityFacts(supplierId,facts).stream().noneMatch(e->e.code().equals(entity.checkCode())&&e.sourceId()==entity.sourceId()))return false;
+        if(mapper.reminded(i.tenantId(),applicationId,entityId,now,entity.version())!=1)throw conflict();
+        if(mapper.advanceVersion(i.tenantId(),supplierId,applicationId,application.version())!=1)throw conflict();
+        notifications.reminded(supplierId,applicationId,entityId,entity.checkCode(),entity.sourceId(),entity.assigneeId(),entity.dueDate());
+        event(applicationId,"AUTO_ENTITY_REMIND",entity.checkCode()+" #"+entity.sourceId()+" 自动催办责任人 "+entity.assigneeId());
+        audit("SUPPLIER_EXIT_ENTITY_AUTO_REMIND",applicationId,Map.of("entityId",entityId,"assigneeId",entity.assigneeId()));
+        return true;
+    }
     private ExitModels.EntityRow openEntity(long supplierId,long applicationId,long entityId,int version){
         var entity=mapper.entity(TenantContext.require().tenantId(),applicationId,entityId);
         if(entity==null)throw notFound();if(entity.version()!=version)throw conflict();

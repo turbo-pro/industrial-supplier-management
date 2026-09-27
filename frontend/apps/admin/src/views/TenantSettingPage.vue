@@ -5,7 +5,9 @@ import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 const session=useSessionStore();
 const setting=ref<components['schemas']['TenantSetting']>();
-const days=ref(7),loading=ref(false),saving=ref(false);
+const reminderEnabled=ref<components['schemas']['TenantSetting']>();
+const reminderInterval=ref<components['schemas']['TenantSetting']>();
+const days=ref(7),enabled=ref(false),hours=ref(24),loading=ref(false),saving=ref(false);
 async function load(){
   loading.value=true;
   try{
@@ -13,7 +15,32 @@ async function load(){
     if(error){ElMessage.error(error.error.message);return;}
     setting.value=data?.data?.find(item=>item.key==='restriction.watchPeriodDays');
     if(setting.value)days.value=Number(setting.value.value);
+    reminderEnabled.value=data?.data?.find(item=>item.key==='exit.autoReminderEnabled');
+    reminderInterval.value=data?.data?.find(item=>item.key==='exit.autoReminderIntervalHours');
+    if(reminderEnabled.value)enabled.value=reminderEnabled.value.value==='1';
+    if(reminderInterval.value)hours.value=Number(reminderInterval.value.value);
   }catch{ElMessage.error('网络异常，配置加载失败');}finally{loading.value=false;}
+}
+async function saveReminder(){
+  if(!reminderEnabled.value||!reminderInterval.value||!Number.isInteger(hours.value)||hours.value<24||hours.value>720){
+    ElMessage.warning('催办间隔须为 24 至 720 小时的整数');return;
+  }
+  saving.value=true;
+  try{
+    // Enabling saves interval first; disabling saves the switch first so a stale interval cannot keep reminders active.
+    const changes:Array<[components['schemas']['TenantSetting'],string]>=enabled.value
+      ? [[reminderInterval.value,String(hours.value)],[reminderEnabled.value,'1']]
+      : [[reminderEnabled.value,'0'],[reminderInterval.value,String(hours.value)]];
+    for(const [item,value] of changes){
+      const {data,error,response}=await session.client.PUT('/configuration/settings/{settingKey}',{
+        params:{path:{settingKey:item.key},header:{'Idempotency-Key':crypto.randomUUID()}},
+        body:{value,version:item.version}
+      });
+      if(error){ElMessage.error(response.status===409?'配置已被更新，请刷新后重试':error.error.message);await load();return;}
+      if(data?.data){if(item.key==='exit.autoReminderEnabled')reminderEnabled.value=data.data;else reminderInterval.value=data.data;}
+    }
+    ElMessage.success('退出自动催办策略已保存');
+  }catch{ElMessage.error('网络异常，请刷新核对保存结果');await load();}finally{saving.value=false;}
 }
 async function save(){
   if(!setting.value||!Number.isInteger(days.value)||days.value<1||days.value>3650){
@@ -43,6 +70,16 @@ onMounted(load);
         <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
       </el-form>
       <el-empty v-else-if="!loading" description="配置尚未加载或无权限"/>
+    </el-card>
+    <el-card shadow="never" style="margin-top:16px">
+      <template #header>退出处置 · 自动催办</template>
+      <el-alert title="默认关闭。仅对已逾期、仍未结清且已分派有效责任人的事项发送站内消息；多实例共享限频，失败不会记录为已发送。" type="info" :closable="false"/>
+      <el-form v-if="reminderEnabled&&reminderInterval" label-position="top" style="margin-top:16px">
+        <el-form-item label="启用自动催办"><el-switch v-model="enabled" :disabled="saving"/></el-form-item>
+        <el-form-item label="重复催办间隔（小时）"><el-input-number v-model="hours" :min="24" :max="720" :precision="0" :disabled="saving"/></el-form-item>
+        <el-button type="primary" :loading="saving" @click="saveReminder">保存催办策略</el-button>
+      </el-form>
+      <el-empty v-else-if="!loading" description="自动催办策略尚未加载"/>
     </el-card>
   </div>
 </template>

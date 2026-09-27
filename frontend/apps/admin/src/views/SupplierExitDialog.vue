@@ -152,7 +152,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPage
             <el-table-column label="操作" width="320"><template #default="{row:entity}"><router-link :to="entity.route">业务入口</router-link><template v-if="row.status==='SUBMITTED'&&entity.state==='OPEN'"><el-button link type="primary" :disabled="busy" @click="openAssign(row,entity)">责任/说明</el-button><el-button link :disabled="busy" @click="openDeadline(row,entity)">期限</el-button><el-button link type="warning" :disabled="busy||!entity.assigneeId" @click="remind(row,entity)">催办</el-button></template></template></el-table-column>
           </el-table>
           <el-pagination :current-page="(entityPages[row.id]?.page??0)+1" :total="entityPages[row.id]?.total??row.entityTotal" :page-size="20" layout="total, prev, pager, next" :disabled="busy||!!entityPages[row.id]?.loading" @current-change="(value:number)=>loadEntities(row,value-1)"/>
-          <el-timeline style="margin-top:16px"><el-timeline-item v-for="event in row.events" :key="event.id" :timestamp="event.createdAt">{{event.action}} · 操作人 {{event.actorId}} · {{event.comment}}</el-timeline-item></el-timeline>
+          <el-timeline style="margin-top:16px"><el-timeline-item v-for="event in row.events" :key="event.id" :timestamp="event.createdAt">{{event.action==='AUTO_ENTITY_REMIND'?'自动催办':event.action}} · 操作人 {{event.actorId==='0'?'系统任务':event.actorId}} · {{event.comment}}</el-timeline-item></el-timeline>
         </template>
       </el-table-column>
       <el-table-column label="类型" width="90"><template #default="{row}">{{row.type==='NORMAL'?'正常退出':'淘汰'}}</template></el-table-column>

@@ -10,6 +10,34 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class ExitDeadlineReminderTest extends ExitApplicationServiceTest {
+    @Test void automaticReminderUsesSystemActorAndCurrentFacts(){
+        var service=pendingTask();
+        when(mapper.entity(10,90,100)).thenReturn(owner(RestrictionBusinessDate.today().minusDays(1),null));
+        when(assignees.active(8)).thenReturn(true);
+        when(mapper.reminded(eq(10L),eq(90L),eq(100L),any(),eq(0))).thenReturn(1);
+        when(mapper.advanceVersion(10,30,90,0)).thenReturn(1);
+        try(var t=TenantContext.openSystem(10)){
+            assertTrue(service.autoRemind(30,90,100,24));
+        }
+        verify(notifications).reminded(30,90,100,"OPEN_CONTRACT",77,8,RestrictionBusinessDate.today().minusDays(1));
+        verify(mapper).event(anyLong(),eq(10L),eq(90L),eq("AUTO_ENTITY_REMIND"),anyString(),eq(0L));
+    }
+    @Test void automaticReminderSkipsDisabledFactsAndCannotBeCalledAsUser(){
+        var service=pendingTask();
+        when(mapper.entity(10,90,100)).thenReturn(owner(RestrictionBusinessDate.today(),null));
+        try(var t=TenantContext.openSystem(10)){
+            assertFalse(service.autoRemind(30,90,100,24));
+        }
+        when(mapper.entity(10,90,100)).thenReturn(owner(RestrictionBusinessDate.today().minusDays(1),null));
+        when(assignees.active(8)).thenReturn(true);
+        try(var t=TenantContext.openSystem(10)){
+            assertFalse(service(List.of(contractFact(0,List.of()))).autoRemind(30,90,100,24));
+        }
+        try(var t=TenantContext.open(10,7)){
+            assertThrows(IllegalArgumentException.class,()->service.autoRemind(30,90,100,24));
+        }
+        verifyNoInteractions(notifications);
+    }
     ExitModels.EntityRow owner(LocalDate dueDate,LocalDateTime reminded){return new ExitModels.EntityRow(100,"OPEN_CONTRACT",77,"/projects/contracts","OPEN",8L,"说明",7L,LocalDateTime.now(),LocalDateTime.now(),null,0,dueDate,reminded);}
     ExitApplicationService pendingTask(){setup();return service(List.of(contractFact(1,List.of(new SupplierExitCheck.Entity("OPEN_CONTRACT",77,"/projects/contracts")))));}
     @Test void deadlineCanBeClearedWithAuditedReasonAndDoesNotComplete(){var service=pendingTask();when(mapper.entity(10,90,100)).thenReturn(owner(RestrictionBusinessDate.today(),null));when(mapper.deadline(10,90,100,null,0)).thenReturn(1);when(mapper.advanceVersion(10,30,90,0)).thenReturn(1);

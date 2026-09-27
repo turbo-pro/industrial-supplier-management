@@ -17,6 +17,16 @@ public final class TenantContext {
         return new Scope(previous);
     }
 
+    /** Internal background work only. Zero is reserved for the system actor and cannot be opened by user requests. */
+    public static Scope openSystem(long tenantId) {
+        if (tenantId <= 0) {
+            throw new IllegalArgumentException("tenantId must be positive");
+        }
+        Identity previous = CURRENT.get();
+        CURRENT.set(new Identity(tenantId, 0));
+        return new Scope(previous);
+    }
+
     public static Optional<Identity> current() {
         return Optional.ofNullable(CURRENT.get());
     }

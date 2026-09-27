@@ -47,6 +47,12 @@ public class ConfigurationService {
     }
     private void validate(String type,String value){try{switch(type){case "INTEGER"->{if(Long.parseLong(value)<0)throw new IllegalArgumentException();}case "URL"->{if(!value.isBlank()){URI uri=URI.create(value);if(!value.startsWith("/")&&!List.of("http","https").contains(uri.getScheme()))throw new IllegalArgumentException();}}default->{}}}catch(Exception exception){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}}
     private void validateKey(String key,String value){
+        if("exit.autoReminderEnabled".equals(key)&&!List.of("0","1").contains(value))
+            throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);
+        if("exit.autoReminderIntervalHours".equals(key)){
+            try{long hours=Long.parseLong(value);if(hours<24||hours>720)throw new IllegalArgumentException();}
+            catch(IllegalArgumentException e){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}
+        }
         if("restriction.watchPeriodDays".equals(key)){
             try{long days=Long.parseLong(value);if(days<1||days>3650)throw new IllegalArgumentException();}
             catch(IllegalArgumentException e){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}

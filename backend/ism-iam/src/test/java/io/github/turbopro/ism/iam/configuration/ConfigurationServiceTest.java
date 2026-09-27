@@ -9,6 +9,19 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ConfigurationServiceTest {
+    @Test void rejectsInvalidAutoReminderPolicyBeforeWriting(){
+        var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
+        when(definitions.settingType("exit.autoReminderEnabled")).thenReturn("INTEGER");
+        when(definitions.settingType("exit.autoReminderIntervalHours")).thenReturn("INTEGER");
+        var service=new ConfigurationService(mapper,definitions,mock(OperationIdGenerator.class));
+        try(var t=TenantContext.open(10,1)){
+            for(String value:new String[]{"-1","2","true","01"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.autoReminderEnabled",new ConfigurationModels.UpdateSetting(value,0)));
+            for(String value:new String[]{"0","23","721","24.5","bad"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.autoReminderIntervalHours",new ConfigurationModels.UpdateSetting(value,0)));
+        }
+        verifyNoInteractions(mapper);
+    }
     @Test void rejectsInvalidObservationDaysBeforeWriting(){
         var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
         when(definitions.settingType("restriction.watchPeriodDays")).thenReturn("INTEGER");
