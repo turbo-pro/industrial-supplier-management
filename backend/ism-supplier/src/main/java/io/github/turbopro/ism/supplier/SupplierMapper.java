@@ -6,6 +6,10 @@ import java.util.*;
 
 @Mapper
 public interface SupplierMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='SUBMITTED' FOR UPDATE")
+    List<Long> currentPendingExits(long tenantId,long supplierId);
+    @Update("UPDATE sup_supplier SET status='EXITED',updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 AND status IN ('DRAFT','ACTIVE','SUSPENDED') AND version=#{version}")
+    int completeExit(long tenantId,long actorId,long id,int version);
     @Select("SELECT id,organization_id,supplier_code,supplier_name,short_name,unified_social_credit_code,supplier_type,industry,country_code,province,city,address,legal_representative,registered_capital,currency,established_date,website,source,status,risk_level,remark,created_by,version,created_at,updated_at FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 FOR UPDATE")
     SupplierModels.SupplierRow findForNewBusiness(long tenantId,long id);
     @Select("SELECT status FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 FOR UPDATE")
@@ -27,5 +31,5 @@ public interface SupplierMapper extends TenantScopedMapper {
     int update(long tenantId,long actorId,long id,long organizationId,String name,String shortName,String creditCode,String type,String industry,String countryCode,String province,String city,String address,String legalRepresentative,java.math.BigDecimal registeredCapital,String currency,java.time.LocalDate establishedDate,String website,String riskLevel,String remark,int version);
     @Insert("INSERT INTO sup_supplier_contact(id,tenant_id,supplier_id,contact_name,position_name,mobile,telephone,email,is_primary,sort_order) VALUES(#{id},#{tenantId},#{supplierId},#{name},#{position},#{mobile},#{telephone},#{email},#{primary},#{sortOrder})") int insertContact(long id,long tenantId,long supplierId,String name,String position,String mobile,String telephone,String email,boolean primary,int sortOrder);
     @Delete("DELETE FROM sup_supplier_contact WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId}") int deleteContacts(long tenantId,long supplierId);
-    @Update("UPDATE sup_supplier SET status=#{status},updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 AND version=#{version}") int changeStatus(long tenantId,long actorId,long id,String status,String reason,int version);
+    @Update("UPDATE sup_supplier SET status=#{status},updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 AND version=#{version} AND #{status} IN ('ACTIVE','SUSPENDED')") int changeStatus(long tenantId,long actorId,long id,String status,String reason,int version);
 }

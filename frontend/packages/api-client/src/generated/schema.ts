@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/exit-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierExitApplications"];
+        put?: never;
+        post: operations["createSupplierExitApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierExitApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recheckSupplierExitApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelSupplierExitApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewSupplierExitApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/auth/login": {
         parameters: {
             query?: never;
@@ -2194,6 +2274,89 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateExitApplication: {
+            /** @enum {string} */
+            type: "NORMAL" | "ELIMINATION";
+            reason: string;
+            evidenceFileId: string;
+        };
+        ReviewExitApplication: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            comment: string;
+            version: number;
+        };
+        ExitApplicationVersion: {
+            version: number;
+        };
+        ExitItem: {
+            id: string;
+            code: string;
+            label: string;
+            route: string;
+            /** Format: int64 */
+            initialCount: number;
+            /** Format: int64 */
+            currentCount: number;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        ExitEvent: {
+            id: string;
+            action: string;
+            comment?: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ExitResult: {
+            id: string;
+            approvedBy: string;
+            comment: string;
+            /** @enum {string} */
+            completionScope: "LOCAL_BUSINESS";
+            /** @enum {string} */
+            accessRecoveryStatus: "NOT_VERIFIED";
+            /** Format: date-time */
+            effectiveAt: string;
+        };
+        ExitApplication: {
+            id: string;
+            supplierId: string;
+            /** @enum {string} */
+            type: "NORMAL" | "ELIMINATION";
+            reason: string;
+            evidenceFileId: string;
+            /** @enum {string} */
+            status: "SUBMITTED" | "REJECTED" | "CANCELLED" | "BUSINESS_CLOSED";
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            reviewedBy?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            reviewComment?: string;
+            version: number;
+            /** @description Last persisted local facts; approval always checks again */
+            localReady: boolean;
+            items: components["schemas"]["ExitItem"][];
+            events: components["schemas"]["ExitEvent"][];
+            result?: components["schemas"]["ExitResult"] | null;
+        };
+        ExitApplicationPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            canApply: boolean;
+            items: components["schemas"]["ExitApplication"][];
+        };
+        ExitApplicationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ExitApplication"];
+        };
+        ExitApplicationPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["ExitApplicationPage"];
+        };
         CreateLift: {
             reason: string;
             evidenceFileId: string;
@@ -2395,7 +2558,11 @@ export interface components {
             items: components["schemas"]["SupplierSummary"][];
         };
         ChangeSupplierStatus: {
-            status: components["schemas"]["SupplierStatus"];
+            /**
+             * @description EXITED is only produced by independently approved exit applications
+             * @enum {string}
+             */
+            status: "ACTIVE" | "SUSPENDED";
             reason?: string;
             version: number;
         };
@@ -4129,6 +4296,191 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSupplierExitApplications: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    createSupplierExitApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExitApplication"];
+            };
+        };
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierExitApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    recheckSupplierExitApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExitApplicationVersion"];
+            };
+        };
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    cancelSupplierExitApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExitApplicationVersion"];
+            };
+        };
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewSupplierExitApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewExitApplication"];
+            };
+        };
+        responses: {
+            /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     consoleLogin: {
         parameters: {
             query?: never;

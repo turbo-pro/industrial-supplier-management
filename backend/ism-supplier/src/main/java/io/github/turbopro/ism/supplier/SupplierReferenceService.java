@@ -25,7 +25,8 @@ public class SupplierReferenceService {
         blacklist.lockSupplier(tenant, supplierId);
         var row=mapper.findForNewBusiness(tenant,supplierId);
         if(row==null || !allowedStatuses.contains(row.status())
-                || !blacklist.currentActive(tenant,supplierId,RestrictionBusinessDate.today()).isEmpty())return null;
+                || !blacklist.currentActive(tenant,supplierId,RestrictionBusinessDate.today()).isEmpty()
+                || !mapper.currentPendingExits(tenant,supplierId).isEmpty())return null;
         return new Reference(row.organizationId(),row.supplierCode(),row.supplierName());
     }
     public record Reference(long organizationId, String code, String name) {}

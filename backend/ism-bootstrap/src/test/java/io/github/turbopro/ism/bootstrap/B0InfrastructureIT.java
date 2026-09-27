@@ -108,7 +108,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties="ism.integration.finance.mode=MANUAL")
 @AutoConfigureMockMvc
 @Import({B0InfrastructureIT.TenantProbeController.class, B0InfrastructureIT.PermissionProbeController.class,
         B0InfrastructureIT.ConsolePermissionProbeController.class})
@@ -214,6 +214,8 @@ class B0InfrastructureIT {
     @Autowired private PerformanceMapper performanceMapper;
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
+    @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
+    @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
     @Autowired private SupplierMapper supplierMapper;
     @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
     @Autowired private io.github.turbopro.ism.resource.supplier.ResourceExitCheck resourceExitCheck;
@@ -619,13 +621,72 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.get(tenantId, evaluationId).status()).isEqualTo("ACCEPTED");
                 assertThat(performanceExitCheck.blockers(supplierId)).allSatisfy(b -> assertThat(b.count()).isZero());
                 assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
-                jdbcTemplate.update("UPDATE sup_supplier SET status='EXITED' WHERE id=?", supplierId);
+                assertThat(manualClearanceMapper.resubmit(tenantId,supplierId,fileId,"退出前重新核验",1,2)).isOne();
+                assertThat(manualClearanceMapper.review(tenantId,supplierId,"APPROVED","财务核验通过",2,3)).isOne();
+                var exitPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                var previewTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
+                var exitSubmitTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
+                exitSubmitTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                var firstExitId=new java.util.concurrent.atomic.AtomicReference<String>();
+                previewTransaction.executeWithoutResult(tx->{
+                    assertThat(supplierMapper.find(tenantId,supplierId).status()).isEqualTo("ACTIVE");
+                    exitSubmitTransaction.executeWithoutResult(submit->{
+                        try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(exitPermissions)){
+                            firstExitId.set(exitApplicationService.create(supplierId,new io.github.turbopro.ism.supplier.ExitModels.Create(io.github.turbopro.ism.supplier.ExitModels.Type.NORMAL,"正常结束合作",Long.toString(fileId))).id());
+                        }
+                    });
+                    assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
+                    assertThat(supplierReferenceService.eligibleForAdmission(supplierId)).isNull();
+                });
+                final long firstId=Long.parseLong(firstExitId.get());
+                try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(exitPermissions)){
+                    assertThatThrownBy(()->exitApplicationService.create(supplierId,new io.github.turbopro.ism.supplier.ExitModels.Create(io.github.turbopro.ism.supplier.ExitModels.Type.NORMAL,"重复申请",Long.toString(fileId)))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitApplicationService.review(supplierId,firstId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"自审",0))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->supplierService.changeStatus(supplierId,new io.github.turbopro.ism.supplier.SupplierModels.ChangeStatus(io.github.turbopro.ism.supplier.SupplierModels.Status.EXITED,"绕过审批",0))).isInstanceOf(ApiException.class);
+                }
+                try(var reviewer=TenantContext.open(tenantId,4);var authorization=AuthorizationContext.open(exitPermissions)){
+                    assertThat(exitApplicationService.review(supplierId,firstId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.REJECT,"退回处置",0)).status()).isEqualTo("REJECTED");
+                }
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
+                long exitId;
+                try(var applicant=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(exitPermissions)){
+                    exitId=Long.parseLong(exitApplicationService.create(supplierId,new io.github.turbopro.ism.supplier.ExitModels.Create(io.github.turbopro.ism.supplier.ExitModels.Type.NORMAL,"准备退出",Long.toString(fileId))).id());
+                    assertThat(exitApplicationService.cancel(supplierId,exitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0)).status()).isEqualTo("CANCELLED");
+                    exitId=Long.parseLong(exitApplicationService.create(supplierId,new io.github.turbopro.ism.supplier.ExitModels.Create(io.github.turbopro.ism.supplier.ExitModels.Type.ELIMINATION,"正式淘汰",Long.toString(fileId))).id());
+                }
+                final long finalExitId=exitId;
+                jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(9975,?,?,?,'EXIT-LATE','新增处置事项','SERVICE',10,CURRENT_DATE,CURRENT_DATE,1,?,1,1)",tenantId,orgId,supplierId,fileId);
+                try(var reviewer=TenantContext.open(tenantId,4);var authorization=AuthorizationContext.open(exitPermissions)){
+                    assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"过期快照",0))).isInstanceOf(ApiException.class);
+                    var blocked=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0));
+                    assertThat(blocked.localReady()).isFalse();assertThat(blocked.version()).isOne();
+                    assertThat(blocked.items()).filteredOn(item->item.code().equals("OPEN_CONTRACT")).singleElement().satisfies(item->{assertThat(item.initialCount()).isZero();assertThat(item.currentCount()).isOne();});
+                    assertThatThrownBy(()->exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0))).isInstanceOf(ApiException.class);
+                    jdbcTemplate.update("UPDATE prj_contract SET status='TERMINATED' WHERE id=9975");
+                    var ready=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(1));
+                    assertThat(ready.localReady()).isTrue();
+                    var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
+                    assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
+                    assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","RECHECK","BUSINESS_CLOSE");
+                    assertThat(exitApplicationService.list(supplierId,0,20).total()).isEqualTo(3);
+                    assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"重复",closed.version()))).isInstanceOf(ApiException.class);
+                }
+                try(var other=TenantContext.open(tenantId+100000,4);var authorization=AuthorizationContext.open(exitPermissions)){
+                    assertThatThrownBy(()->exitApplicationService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                }
+                assertThat(supplierMapper.find(tenantId,supplierId).status()).isEqualTo("EXITED");
+                assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
                 assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isNull();
                 assertThat(improvementMapper.event(9949, tenantId, planId, "CREATE", null, "OPEN", null, 1)).isOne();
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_item WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_application WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_lift_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_lift_application WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM cfg_tenant_setting WHERE tenant_id=?", tenantId);

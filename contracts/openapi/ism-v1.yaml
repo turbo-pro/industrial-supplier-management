@@ -6,6 +6,51 @@ info:
 servers:
   - url: /api
 paths:
+  /suppliers/{supplierId}/exit-applications:
+    get:
+      operationId: listSupplierExitApplications
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }, { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }]
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: createSupplierExitApplication
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateExitApplication' } } } }
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}:
+    get:
+      operationId: getSupplierExitApplication
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/recheck:
+    post:
+      operationId: recheckSupplierExitApplication
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationVersion' } } } }
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/cancel:
+    post:
+      operationId: cancelSupplierExitApplication
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationVersion' } } } }
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/review:
+    post:
+      operationId: reviewSupplierExitApplication
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewExitApplication' } } } }
+      responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /console/auth/login:
     post:
       operationId: consoleLogin
@@ -1502,6 +1547,16 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    CreateExitApplication: { type: object, required: [type, reason, evidenceFileId], properties: { type: { type: string, enum: [NORMAL, ELIMINATION] }, reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
+    ReviewExitApplication: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
+    ExitApplicationVersion: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } }
+    ExitItem: { type: object, required: [id, code, label, route, initialCount, currentCount, checkedAt], properties: { id: { type: string }, code: { type: string }, label: { type: string }, route: { type: string }, initialCount: { type: integer, format: int64 }, currentCount: { type: integer, format: int64 }, checkedAt: { type: string, format: date-time } } }
+    ExitEvent: { type: object, required: [id, action, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
+    ExitResult: { type: object, required: [id, approvedBy, comment, completionScope, accessRecoveryStatus, effectiveAt], properties: { id: { type: string }, approvedBy: { type: string }, comment: { type: string }, completionScope: { type: string, enum: [LOCAL_BUSINESS] }, accessRecoveryStatus: { type: string, enum: [NOT_VERIFIED] }, effectiveAt: { type: string, format: date-time } } }
+    ExitApplication: { type: object, required: [id, supplierId, type, reason, evidenceFileId, status, createdBy, createdAt, version, localReady, items, events], properties: { id: { type: string }, supplierId: { type: string }, type: { type: string, enum: [NORMAL, ELIMINATION] }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, REJECTED, CANCELLED, BUSINESS_CLOSED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer }, localReady: { type: boolean, description: Last persisted local facts; approval always checks again }, items: { type: array, items: { $ref: '#/components/schemas/ExitItem' } }, events: { type: array, items: { $ref: '#/components/schemas/ExitEvent' } }, result: { nullable: true, allOf: [{ $ref: '#/components/schemas/ExitResult' }] } } }
+    ExitApplicationPage: { type: object, required: [total, page, size, canApply, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, canApply: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/ExitApplication' } } } }
+    ExitApplicationResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ExitApplication' } } }] }
+    ExitApplicationPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ExitApplicationPage' } } }] }
     CreateLift: { type: object, required: [reason, evidenceFileId], properties: { reason: { type: string, minLength: 1, maxLength: 2000 }, evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } } }
     ReviewLift: { type: object, required: [decision, comment, version], properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, minLength: 1, maxLength: 2000 }, version: { type: integer, minimum: 0 } } }
     RestrictionLift: { type: object, required: [id, caseId, reason, evidenceFileId, status, createdBy, createdAt, version, observationSeconds], properties: { id: { type: string }, caseId: { type: string }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer }, observationSeconds: { type: integer, format: int64, minimum: 0 } } }
@@ -1611,7 +1666,7 @@ components:
       type: object
       required: [status, version]
       properties:
-        status: { $ref: '#/components/schemas/SupplierStatus' }
+        status: { type: string, enum: [ACTIVE, SUSPENDED], description: EXITED is only produced by independently approved exit applications }
         reason: { type: string, maxLength: 500 }
         version: { type: integer, minimum: 0 }
     SupplierResponse:

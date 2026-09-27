@@ -29,4 +29,13 @@ class SupplierReferenceServiceTest {
         when(mapper.findForNewBusiness(10,99)).thenReturn(row);
         try(var tenant=TenantContext.open(10,7)){assertNull(service.activeForNewBusiness(99));}
     }
+    @Test void pendingExitBlocksAllNewBusinessUntilCancelledOrRejected(){
+        var row=mock(SupplierModels.SupplierRow.class);when(row.status()).thenReturn("ACTIVE");
+        when(mapper.findForNewBusiness(10,99)).thenReturn(row);when(mapper.currentPendingExits(10,99)).thenReturn(List.of(101L));
+        try(var tenant=TenantContext.open(10,7)){
+            assertNull(service.activeForNewBusiness(99));assertNull(service.eligibleForAdmission(99));
+            when(mapper.currentPendingExits(10,99)).thenReturn(List.of());
+            assertNotNull(service.activeForNewBusiness(99));
+        }
+    }
 }

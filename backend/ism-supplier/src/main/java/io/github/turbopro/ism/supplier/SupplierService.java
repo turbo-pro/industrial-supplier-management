@@ -16,8 +16,7 @@ public class SupplierService {
     public SupplierService(SupplierMapper mapper,OperationIdGenerator ids,AuditService audit,BlacklistMapper blacklist,List<SupplierExitCheck> exitChecks){this.mapper=mapper;this.ids=ids;this.audit=audit;this.blacklist=blacklist;this.exitChecks=List.copyOf(exitChecks);}
     public SupplierModels.ExitReadiness exitReadiness(long id){requireAllowed(id);return readiness(id);}
     private SupplierModels.ExitReadiness readiness(long id){
-        var blockers=exitChecks.stream().flatMap(check->check.blockers(id).stream()).toList();
-        return new SupplierModels.ExitReadiness(!exitChecks.isEmpty()&&blockers.stream().allMatch(b->b.count()==0),blockers);
+        return ExitReadinessEvaluator.evaluate(exitChecks,id);
     }
     public SupplierModels.SupplierPage list(String keyword,String status,Long organizationId,int page,int size){var i=TenantContext.require();var scope=scope();String like=keyword==null||keyword.isBlank()?null:"%"+keyword.trim().replace("=","==").replace("%","=%").replace("_","=_")+"%";String state=status==null||status.isBlank()?null:parseStatus(status).name();int offset=Math.multiplyExact(page,size);long total=mapper.count(i.tenantId(),like,state,organizationId,scope.type().name(),scope.organizationIds(),i.actorId());return new SupplierModels.SupplierPage(total,page,size,mapper.list(i.tenantId(),like,state,organizationId,scope.type().name(),scope.organizationIds(),i.actorId(),offset,size));}
     public SupplierModels.SupplierView get(long id){return view(requireAllowed(id));}
@@ -25,12 +24,13 @@ public class SupplierService {
     @Transactional public SupplierModels.SupplierView update(long id,SupplierModels.SaveSupplier command){validateContacts(command.contacts());var before=requireAllowed(id);if(!before.supplierCode().equals(command.code()))throw validation("供应商编码不可修改");var i=TenantContext.require();long org=parseId(command.organizationId());requireOrganization(org);requireScope(org,i.actorId());try{if(mapper.update(i.tenantId(),i.actorId(),id,org,command.name().trim(),blank(command.shortName()),blank(command.unifiedSocialCreditCode()),command.type().name(),blank(command.industry()),command.countryCode(),blank(command.province()),blank(command.city()),blank(command.address()),blank(command.legalRepresentative()),command.registeredCapital(),blank(command.currency()),command.establishedDate(),blank(command.website()),command.riskLevel().name(),blank(command.remark()),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);mapper.deleteContacts(i.tenantId(),id);replaceContacts(i.tenantId(),id,command.contacts());}catch(DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"统一社会信用代码已存在");}audit.append(new AuditService.AuditCommand("SUPPLIER_UPDATE","SUPPLIER",id,null,Map.of("name",before.supplierName(),"status",before.status()),Map.of("name",command.name(),"organizationId",org),null,null));return view(mapper.find(i.tenantId(),id));}
     @Transactional public SupplierModels.SupplierView changeStatus(long id,SupplierModels.ChangeStatus command){
         var before=requireAllowed(id);var from=SupplierModels.Status.valueOf(before.status());
+        if(command.status()==SupplierModels.Status.EXITED)throw validation("直接退出入口已停用，请发起独立退出申请");
         if(!allowed(from,command.status()))throw validation("不允许从 "+from+" 变更为 "+command.status());
-        if((command.status()==SupplierModels.Status.SUSPENDED||command.status()==SupplierModels.Status.EXITED)&&(command.reason()==null||command.reason().isBlank()))throw validation("停用或退出必须填写原因");
+        if(command.status()==SupplierModels.Status.SUSPENDED&&(command.reason()==null||command.reason().isBlank()))throw validation("停用必须填写原因");
         var i=TenantContext.require();
-        if(command.status()==SupplierModels.Status.ACTIVE||command.status()==SupplierModels.Status.EXITED)blacklist.lockSupplier(i.tenantId(),id);
-        if(command.status()==SupplierModels.Status.ACTIVE&&blacklist.active(i.tenantId(),id,RestrictionBusinessDate.today())>0)throw validation("限制生效期间不能启用供应商");
-        if(command.status()==SupplierModels.Status.EXITED&&!readiness(id).ready())throw validation("退出检查未通过，请先完成合同和项目处置");
+        if(command.status()==SupplierModels.Status.ACTIVE)blacklist.lockSupplier(i.tenantId(),id);
+        if(command.status()==SupplierModels.Status.ACTIVE&&!blacklist.currentActive(i.tenantId(),id,RestrictionBusinessDate.today()).isEmpty())throw validation("限制生效期间不能启用供应商");
+        if(command.status()==SupplierModels.Status.ACTIVE&&!mapper.currentPendingExits(i.tenantId(),id).isEmpty())throw validation("退出处置期间不能启用供应商");
         if(mapper.changeStatus(i.tenantId(),i.actorId(),id,command.status().name(),blank(command.reason()),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
         audit.append(new AuditService.AuditCommand("SUPPLIER_STATUS_CHANGE","SUPPLIER",id,null,Map.of("status",from),Map.of("status",command.status(),"reason",Objects.toString(command.reason(),"")),null,null));return view(mapper.find(i.tenantId(),id));
     }
@@ -40,7 +40,7 @@ public class SupplierService {
     private void requireOrganization(long org){if(mapper.organizationExists(TenantContext.require().tenantId(),org)!=1)throw validation("归属组织不存在或已停用");}
     private void replaceContacts(long tenant,long supplier,List<SupplierModels.ContactCommand> contacts){for(var c:contacts)mapper.insertContact(ids.nextId(),tenant,supplier,c.name().trim(),blank(c.position()),blank(c.mobile()),blank(c.telephone()),blank(c.email()),c.primary(),c.sortOrder());}
     private void validateContacts(List<SupplierModels.ContactCommand> contacts){if(contacts.stream().filter(SupplierModels.ContactCommand::primary).count()>1)throw validation("只能设置一个主要联系人");for(var c:contacts)if((c.mobile()==null||c.mobile().isBlank())&&(c.telephone()==null||c.telephone().isBlank())&&(c.email()==null||c.email().isBlank()))throw validation("联系人至少填写手机、电话或邮箱之一");}
-    private boolean allowed(SupplierModels.Status from,SupplierModels.Status to){return from!=to&&switch(from){case DRAFT->to==SupplierModels.Status.ACTIVE||to==SupplierModels.Status.EXITED;case ACTIVE->to==SupplierModels.Status.SUSPENDED||to==SupplierModels.Status.EXITED;case SUSPENDED->to==SupplierModels.Status.ACTIVE||to==SupplierModels.Status.EXITED;case EXITED->false;};}
+    private boolean allowed(SupplierModels.Status from,SupplierModels.Status to){return from!=to&&switch(from){case DRAFT,SUSPENDED->to==SupplierModels.Status.ACTIVE;case ACTIVE->to==SupplierModels.Status.SUSPENDED;case EXITED->false;};}
     private SupplierModels.Status parseStatus(String value){try{return SupplierModels.Status.valueOf(value);}catch(Exception e){throw validation("供应商状态无效");}}
     private long parseId(String value){try{return Long.parseLong(value);}catch(Exception e){throw validation("组织 ID 无效");}}
     private String blank(String value){return value==null||value.isBlank()?null:value.trim();}
