@@ -4,6 +4,38 @@
  */
 
 export interface paths {
+    "/table-views/{tableKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPersonalTableViews"];
+        put?: never;
+        post: operations["createPersonalTableView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/table-views/{tableKey}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updatePersonalTableView"];
+        post?: never;
+        delete: operations["deletePersonalTableView"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/restriction-explanation": {
         parameters: {
             query?: never;
@@ -2291,6 +2323,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PersonalTableColumn: {
+            key: string;
+            visible: boolean;
+            width: number;
+        };
+        PersonalTableColumnDefinition: {
+            key: string;
+            label: string;
+            required: boolean;
+            width: number;
+        };
+        SavePersonalTableView: {
+            name: string;
+            columns: components["schemas"]["PersonalTableColumn"][];
+            defaultView: boolean;
+            version: number;
+        };
+        PersonalTableView: {
+            id: string;
+            name: string;
+            columns: components["schemas"]["PersonalTableColumn"][];
+            defaultView: boolean;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalTableViewPage: {
+            tableKey: string;
+            catalog: components["schemas"]["PersonalTableColumnDefinition"][];
+            maxPersonalViews: number;
+            views: components["schemas"]["PersonalTableView"][];
+        };
+        PersonalTableViewResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PersonalTableView"];
+        };
+        PersonalTableViewPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PersonalTableViewPage"];
+        };
         /** @enum {string} */
         RestrictionExplainAction: "QUALIFICATION_APPLY" | "PROJECT_CREATE" | "RESOURCE_ASSIGN" | "SITE_ENTER" | "START_WORK" | "RESUME_WORK";
         /** @enum {string} */
@@ -4335,6 +4405,123 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPersonalTableViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tableKey: "supplier.master";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered columns and current user's private views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTableViewPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    createPersonalTableView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tableKey: "supplier.master";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePersonalTableView"];
+            };
+        };
+        responses: {
+            /** @description Saved private view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTableViewResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updatePersonalTableView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tableKey: "supplier.master";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePersonalTableView"];
+            };
+        };
+        responses: {
+            /** @description Updated private view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTableViewResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    deletePersonalTableView: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                tableKey: "supplier.master";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     explainSupplierRestriction: {
         parameters: {
             query: {

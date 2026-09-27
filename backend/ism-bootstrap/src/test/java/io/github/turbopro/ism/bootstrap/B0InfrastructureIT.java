@@ -208,6 +208,7 @@ class B0InfrastructureIT {
     @Autowired private TaskCenterService taskCenterService;
     @Autowired private PrintService printService;
     @Autowired private SearchService searchService;
+    @Autowired private io.github.turbopro.ism.integration.table.TableViewService tableViewService;
     @Autowired private SafetyCredentialMapper safetyCredentialMapper;
     @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
     @Autowired private QualityNcrMapper qualityNcrMapper;
@@ -1192,6 +1193,64 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM iam_organization WHERE id=?",organizationId);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id=?",userId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?",tenantId);
+        }
+    }
+
+    @Test
+    void shouldPersistPrivateTableViewsWithDefaultVersionAndConcurrencyGuards() throws Exception {
+        long tenantA=87001,tenantB=87002,owner=87011,otherOwner=87012;
+        String key="supplier.master";
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantA,"TABLE_VIEW_A","列方案租户 A");
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantB,"TABLE_VIEW_B","列方案租户 B");
+        var permission=new PermissionSnapshot(Set.of("supplier:master:view","table:view:manage"),Map.of(),Set.of());
+        var columns=List.of("code","name","type","riskLevel","status","updatedAt").stream().map(k->new io.github.turbopro.ism.integration.table.TableViewModels.Column(k,!k.equals("type"),160)).toList();
+        String firstId,secondId;
+        try {
+            try(var tenant=TenantContext.open(tenantA,owner);var authorization=AuthorizationContext.open(permission)){
+                var first=tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("默认一",columns,true,0));firstId=first.id();
+                var second=tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("默认二",columns,true,0));secondId=second.id();
+                assertThat(tableViewService.list(key).views()).filteredOn(io.github.turbopro.ism.integration.table.TableViewModels.View::defaultView).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(secondId);
+                assertThatThrownBy(()->tableViewService.update(key,Long.parseLong(firstId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("旧版本",columns,true,0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("默认二",columns,true,0))).isInstanceOf(ApiException.class);
+                assertThat(tableViewService.list(key).views()).filteredOn(io.github.turbopro.ism.integration.table.TableViewModels.View::defaultView).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(secondId);
+                var updated=tableViewService.update(key,Long.parseLong(secondId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("已更新",columns,true,0));
+                assertThat(updated.version()).isOne();assertThat(updated.columns()).isEqualTo(columns);
+                assertThatThrownBy(()->tableViewService.delete(key,Long.parseLong(secondId),0)).isInstanceOf(ApiException.class);
+            }
+            try(var tenant=TenantContext.open(tenantA,otherOwner);var authorization=AuthorizationContext.open(permission)){
+                assertThat(tableViewService.list(key).views()).isEmpty();
+                assertThatThrownBy(()->tableViewService.update(key,Long.parseLong(secondId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("越权修改",columns,true,1))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->tableViewService.delete(key,Long.parseLong(secondId),1)).isInstanceOf(ApiException.class);
+                tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("已更新",columns,true,0));
+            }
+            try(var tenant=TenantContext.open(tenantB,owner);var authorization=AuthorizationContext.open(permission)){
+                assertThat(tableViewService.list(key).views()).isEmpty();
+                assertThatThrownBy(()->tableViewService.delete(key,Long.parseLong(secondId),1)).isInstanceOf(ApiException.class);
+                tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("已更新",columns,true,0));
+            }
+            ExecutorService pool=Executors.newFixedThreadPool(2);CountDownLatch ready=new CountDownLatch(2),start=new CountDownLatch(1);
+            try{
+                var tasks=new java.util.ArrayList<Future<?>>();
+                for(int n=0;n<2;n++){final int index=n;tasks.add(pool.submit(()->{
+                    try(var tenant=TenantContext.open(tenantA,owner);var authorization=AuthorizationContext.open(permission)){
+                        ready.countDown();start.await();tableViewService.create(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("并发默认"+index,columns,true,0));
+                    }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
+                }));}
+                assertThat(ready.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();start.countDown();
+                for(var task:tasks)task.get(20,java.util.concurrent.TimeUnit.SECONDS);
+            }finally{start.countDown();pool.shutdownNow();}
+            try(var tenant=TenantContext.open(tenantA,owner);var authorization=AuthorizationContext.open(permission)){
+                var saved=tableViewService.list(key).views();assertThat(saved).hasSize(4);
+                assertThat(saved.stream().filter(io.github.turbopro.ism.integration.table.TableViewModels.View::defaultView).count()).isOne();
+                assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='TABLE_VIEW_CREATE'",Long.class,tenantA)).isEqualTo(5L);
+                for(var view:saved)tableViewService.delete(key,Long.parseLong(view.id()),view.version());
+                assertThat(tableViewService.list(key).views()).isEmpty();
+            }
+        }finally{
+            jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM ui_table_view WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM ui_table_view_owner WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)",tenantA,tenantB);
         }
     }
 
