@@ -2,6 +2,8 @@ package io.github.turbopro.ism.supplier;
 
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -10,15 +12,16 @@ import static org.mockito.ArgumentMatchers.*;
 class SupplierReferenceServiceTest {
     private final SupplierMapper mapper=mock(SupplierMapper.class);
     private final BlacklistMapper blacklist=mock(BlacklistMapper.class);
-    private final SupplierReferenceService service=new SupplierReferenceService(mapper,blacklist);
+    private final SupplierReferenceService service=new SupplierReferenceService(mapper,blacklist,new EnterpriseSupplierRestrictionEvaluator(mapper,blacklist));
     @Test void usesCurrentSupplierAndRestrictionReads(){
         var row=mock(SupplierModels.SupplierRow.class);
         when(row.status()).thenReturn("ACTIVE");
         when(mapper.findForNewBusiness(10,99)).thenReturn(row);
-        when(blacklist.currentActive(eq(10L),eq(99L),any())).thenReturn(List.of(101L));
+        var restriction=mock(BlacklistModels.Row.class);when(restriction.id()).thenReturn(101L);when(restriction.restrictionType()).thenReturn(BlacklistModels.RestrictionType.BLACKLIST);
+        when(blacklist.currentEffectiveCases(eq(10L),eq(99L),any())).thenReturn(List.of(restriction));
         try(var tenant=TenantContext.open(10,7)){
             assertNull(service.activeForNewBusiness(99));
-            when(blacklist.currentActive(eq(10L),eq(99L),any())).thenReturn(List.of());
+            when(blacklist.currentEffectiveCases(eq(10L),eq(99L),any())).thenReturn(List.of());
             assertNotNull(service.activeForNewBusiness(99));
         }
         verify(blacklist,times(2)).lockSupplier(10,99);
@@ -37,5 +40,22 @@ class SupplierReferenceServiceTest {
             when(mapper.currentPendingExits(10,99)).thenReturn(List.of());
             assertNotNull(service.activeForNewBusiness(99));
         }
+    }
+    @ParameterizedTest @EnumSource(SupplierRestrictionEvaluator.Action.class)
+    void everyControlledActionWarnsOnWatchAndBlocksOnRestrictionOrExit(SupplierRestrictionEvaluator.Action action){
+        var row=mock(SupplierModels.SupplierRow.class);when(row.status()).thenReturn("ACTIVE");when(mapper.findForNewBusiness(10,99)).thenReturn(row);
+        var watch=mock(BlacklistModels.Row.class);when(watch.id()).thenReturn(101L);when(watch.restrictionType()).thenReturn(BlacklistModels.RestrictionType.WATCH);
+        var deny=mock(BlacklistModels.Row.class);when(deny.id()).thenReturn(102L);when(deny.restrictionType()).thenReturn(BlacklistModels.RestrictionType.BLACKLIST);
+        when(blacklist.currentEffectiveCases(eq(10L),eq(99L),any())).thenReturn(List.of(watch));
+        try(var tenant=TenantContext.open(10,7)){
+            assertNotNull(service.eligibleForBusiness(99,action));
+            when(blacklist.currentEffectiveCases(eq(10L),eq(99L),any())).thenReturn(List.of(watch,deny));assertNull(service.eligibleForBusiness(99,action));
+            when(blacklist.currentEffectiveCases(eq(10L),eq(99L),any())).thenReturn(List.of(watch));
+            when(mapper.currentPendingExits(10,99)).thenReturn(List.of(103L));assertNull(service.eligibleForBusiness(99,action));
+        }
+    }
+    @Test void missingActionCannotAuthorizeOrReadBusiness(){
+        try(var tenant=TenantContext.open(10,7)){assertThrows(io.github.turbopro.ism.common.api.error.ApiException.class,()->service.eligibleForBusiness(99,null));}
+        verifyNoInteractions(mapper,blacklist);
     }
 }

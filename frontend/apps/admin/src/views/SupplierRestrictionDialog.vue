@@ -38,7 +38,7 @@ watch(action,()=>{result.value=null;});
     </el-form>
     <template v-if="result">
       <el-alert :title="decisions[result.decision]" :type="result.decision==='DENY'?'error':result.decision==='WARN'?'warning':'info'" :closable="false"/>
-      <p>业务日期：{{result.businessDate}}（中国标准时间）；查询记录已审计，提交业务时仍会重新校验。</p>
+      <p>业务日期：{{result.businessDate}}（中国标准时间）。企业级规则与新增业务拦截共用判定接口；查询记录已审计，提交业务时仍会重新校验，不以此快照放行。</p>
       <el-table :data="result.hits" empty-text="当前企业级检查无命中，仍需满足具体业务条件">
         <el-table-column prop="code" label="命中类型" width="160"/>
         <el-table-column prop="sourceId" label="来源记录 ID" width="170"/>

@@ -515,6 +515,7 @@ class B0InfrastructureIT {
                     var explanation=restrictionExplanationService.explain(supplierId,io.github.turbopro.ism.supplier.RestrictionExplanationService.Action.PROJECT_CREATE);
                     assertThat(explanation.decision()).isEqualTo(io.github.turbopro.ism.supplier.RestrictionExplanationService.Decision.WARN);
                     assertThat(explanation.hits()).extracting(io.github.turbopro.ism.supplier.RestrictionExplanationService.Hit::sourceId).containsExactly(Long.toString(watchId));
+                    for(var action:io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.values())assertThat(supplierReferenceService.eligibleForBusiness(supplierId,action)).isNotNull();
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_RESTRICTION_EXPLAIN'",Long.class,tenantId)).isPositive();
                 }
                 String observationApplication;
@@ -574,6 +575,12 @@ class B0InfrastructureIT {
                 }
                 assertThat(blacklistMapper.currentCase(tenantId,9981).status()).isEqualTo("APPROVED");
                 assertThat(blacklistMapper.lifted(tenantId,9981)).isOne();
+                try(var actor=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(liftPermissions)){
+                    var explanation=restrictionExplanationService.explain(supplierId,io.github.turbopro.ism.supplier.RestrictionExplanationService.Action.PROJECT_CREATE);
+                    assertThat(explanation.decision()).isEqualTo(io.github.turbopro.ism.supplier.RestrictionExplanationService.Decision.DENY);
+                    assertThat(explanation.hits()).extracting(io.github.turbopro.ism.supplier.RestrictionExplanationService.Hit::sourceId).containsExactly("9982");
+                    for(var action:io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.values())assertThat(supplierReferenceService.eligibleForBusiness(supplierId,action)).isNull();
+                }
                 assertThat(blacklistMapper.currentEffectiveCases(tenantId,supplierId,java.time.LocalDate.now())).extracting(io.github.turbopro.ism.supplier.BlacklistModels.Row::id).containsExactly(9982L);
                 assertThat(blacklistMapper.active(tenantId,supplierId,java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();

@@ -19,10 +19,10 @@ public class RestrictionExplanationService {
                        String scope,boolean advisoryOnly,List<Hit> hits) {}
     private final SupplierService scope;
     private final SupplierMapper suppliers;
-    private final BlacklistMapper restrictions;
+    private final SupplierRestrictionEvaluator evaluator;
     private final AuditService audit;
-    public RestrictionExplanationService(SupplierService scope,SupplierMapper suppliers,BlacklistMapper restrictions,AuditService audit){
-        this.scope=scope;this.suppliers=suppliers;this.restrictions=restrictions;this.audit=audit;
+    public RestrictionExplanationService(SupplierService scope,SupplierMapper suppliers,SupplierRestrictionEvaluator evaluator,AuditService audit){
+        this.scope=scope;this.suppliers=suppliers;this.evaluator=evaluator;this.audit=audit;
     }
     @Transactional
     public View explain(long supplierId,Action action){
@@ -33,20 +33,10 @@ public class RestrictionExplanationService {
         if(row==null||!AuthorizationContext.require().dataScope("supplier:master")
             .allows(new DataTarget(row.organizationId(),null,row.createdBy(),row.createdBy()),identity.actorId()))
             throw new ApiException(CommonErrorCode.NOT_FOUND);
-        var hits=new ArrayList<Hit>();
-        var allowed=action==Action.QUALIFICATION_APPLY?Set.of("DRAFT","ACTIVE","SUSPENDED"):Set.of("ACTIVE");
-        if(!allowed.contains(row.status()))hits.add(new Hit("SUPPLIER_STATUS",Long.toString(supplierId),Decision.DENY,"供应商当前状态不允许此新增业务："+row.status()));
-        LocalDate date=RestrictionBusinessDate.today();
-        for(var restriction:restrictions.currentEffectiveCases(identity.tenantId(),supplierId,date)){
-            boolean warning=restriction.restrictionType()==BlacklistModels.RestrictionType.WATCH;
-            hits.add(new Hit(restriction.restrictionType().name(),Long.toString(restriction.id()),warning?Decision.WARN:Decision.DENY,
-                warning?"供应商处于观察期，请核对风险记录":"存在有效企业级限制，请核对限制记录"));
-        }
-        for(var id:suppliers.currentPendingExits(identity.tenantId(),supplierId))
-            hits.add(new Hit("PENDING_EXIT",Long.toString(id),Decision.DENY,"退出申请待处置，禁止新增业务"));
-        Decision decision=hits.stream().anyMatch(hit->hit.decision()==Decision.DENY)?Decision.DENY:
-            hits.isEmpty()?Decision.ALLOW:Decision.WARN;
-        var view=new View(Long.toString(supplierId),action,decision,date,"TENANT_ENTERPRISE",true,List.copyOf(hits));
+        var evaluation=evaluator.evaluateLocked(supplierId,row.status(),SupplierRestrictionEvaluator.Action.valueOf(action.name()));
+        var hits=evaluation.hits().stream().map(hit->new Hit(hit.code(),hit.sourceId(),Decision.valueOf(hit.decision().name()),hit.explanation())).toList();
+        var decision=Decision.valueOf(evaluation.decision().name());var date=evaluation.businessDate();
+        var view=new View(Long.toString(supplierId),action,decision,date,"TENANT_ENTERPRISE",true,hits);
         // Only stable identifiers/codes are recorded; restriction reasons can contain sensitive information.
         audit.append(new AuditService.AuditCommand("SUPPLIER_RESTRICTION_EXPLAIN","SUPPLIER",supplierId,null,Map.of(),
             Map.of("action",action,"decision",decision,"businessDate",date.toString(),"scope",view.scope(),

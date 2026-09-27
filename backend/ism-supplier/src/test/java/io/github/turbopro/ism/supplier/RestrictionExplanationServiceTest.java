@@ -16,7 +16,7 @@ class RestrictionExplanationServiceTest {
     final BlacklistMapper restrictions=mock(BlacklistMapper.class);
     final AuditService audit=mock(AuditService.class);
     final SupplierModels.SupplierRow supplier=mock(SupplierModels.SupplierRow.class);
-    final RestrictionExplanationService service=new RestrictionExplanationService(scope,suppliers,restrictions,audit);
+    final RestrictionExplanationService service=new RestrictionExplanationService(scope,suppliers,new EnterpriseSupplierRestrictionEvaluator(suppliers,restrictions),audit);
     AuthorizationContext.Scope auth(){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.all()),Set.of()));}
     void setup(){when(suppliers.findForNewBusiness(10,30)).thenReturn(supplier);when(supplier.organizationId()).thenReturn(20L);when(supplier.status()).thenReturn("ACTIVE");}
     BlacklistModels.Row restriction(long id,BlacklistModels.RestrictionType type){var row=mock(BlacklistModels.Row.class);when(row.id()).thenReturn(id);when(row.restrictionType()).thenReturn(type);return row;}
