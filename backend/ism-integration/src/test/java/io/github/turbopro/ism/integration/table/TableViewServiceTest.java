@@ -39,7 +39,7 @@ class TableViewServiceTest {
     }verify(mapper).list(10,7,"supplier.master");}
     @Test void catalogRequiresEachTablesOwnBusinessPermission(){
         try(var t=TenantContext.open(10,7);var a=auth()){
-            for(var key:List.of("contract.ledger","project.ledger"))assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list(key)).errorCode());
+            for(var key:List.of("contract.ledger","project.ledger","resource.person","resource.asset"))assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list(key)).errorCode());
         }
         try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("contract:view"),Map.of(),Set.of()))){
             assertEquals(List.of("contractNo","name","amount","period","status"),service.list("contract.ledger").catalog().stream().map(TableViewModels.Definition::key).toList());
@@ -51,8 +51,8 @@ class TableViewServiceTest {
         verify(mapper).list(10,7,"contract.ledger");verify(mapper).list(10,7,"project.ledger");
     }
     @Test void newTablesRejectHiddenIdentityAndForeignColumnsBeforeWrites(){
-        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("contract:view","project:view"),Map.of(),Set.of()))){
-            for(var key:List.of("contract.ledger","project.ledger")){
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("contract:view","project:view","resource:person:view","resource:asset:view"),Map.of(),Set.of()))){
+            for(var key:List.of("contract.ledger","project.ledger","resource.person","resource.asset")){
                 var definitions=service.list(key).catalog();var hidden=definitions.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),160)).toList();
                 assertThrows(ApiException.class,()->service.create(key,new TableViewModels.Save("隐藏标识",hidden,false,0)));
                 var wrong=new ArrayList<>(definitions.stream().map(c->new TableViewModels.Column(c.key(),true,160)).toList());
@@ -60,6 +60,17 @@ class TableViewServiceTest {
                 assertThrows(ApiException.class,()->service.create(key,new TableViewModels.Save("未知列",wrong,false,0)));
             }
         }verify(mapper,never()).ensureOwner(anyLong(),anyLong(),anyString());
+    }
+    @Test void resourceCatalogsHaveSeparatePermissionsAndNeverExposeRawIdentity(){
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:person:view"),Map.of(),Set.of()))){
+            assertEquals(List.of("code","name","idNumberMasked","tradeType","projectCode","status"),service.list("resource.person").catalog().stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("resource.asset")).errorCode());
+        }
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:asset:view"),Map.of(),Set.of()))){
+            assertEquals(List.of("code","name","type","plateNo","projectCode","status"),service.list("resource.asset").catalog().stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("resource.person")).errorCode());
+        }
+        verify(mapper).list(10,7,"resource.person");verify(mapper).list(10,7,"resource.asset");
     }
     @Test void staleVersionCannotChangeOtherDefault(){locked();when(mapper.find(10,7,"supplier.master",90)).thenReturn(row(2));
         try(var t=TenantContext.open(10,7);var a=auth()){

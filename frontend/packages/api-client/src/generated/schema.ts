@@ -2324,7 +2324,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        PersonalTableKey: "supplier.master" | "contract.ledger" | "project.ledger";
+        PersonalTableKey: "supplier.master" | "contract.ledger" | "project.ledger" | "resource.person" | "resource.asset";
         PersonalTableColumn: {
             key: string;
             visible: boolean;
@@ -7648,6 +7648,9 @@ export interface operations {
                     "application/json": components["schemas"]["PersonPageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     createSupplierPerson: {
@@ -7753,6 +7756,9 @@ export interface operations {
                     "application/json": components["schemas"]["AssetPageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     createSupplierAsset: {

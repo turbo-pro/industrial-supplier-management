@@ -1140,7 +1140,7 @@ paths:
       tags: [SupplierResource]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/PersonStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
-      responses: { '200': { description: Supplier person page, content: { application/json: { schema: { $ref: '#/components/schemas/PersonPageResponse' } } } } }
+      responses: { '200': { description: Supplier person page, content: { application/json: { schema: { $ref: '#/components/schemas/PersonPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
     post:
       operationId: createSupplierPerson
       tags: [SupplierResource]
@@ -1169,7 +1169,7 @@ paths:
       tags: [SupplierResource]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/AssetStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
-      responses: { '200': { description: Supplier asset page, content: { application/json: { schema: { $ref: '#/components/schemas/AssetPageResponse' } } } } }
+      responses: { '200': { description: Supplier asset page, content: { application/json: { schema: { $ref: '#/components/schemas/AssetPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
     post:
       operationId: createSupplierAsset
       tags: [SupplierResource]
@@ -1620,7 +1620,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
-    PersonalTableKey: { type: string, enum: [supplier.master, contract.ledger, project.ledger] }
+    PersonalTableKey: { type: string, enum: [supplier.master, contract.ledger, project.ledger, resource.person, resource.asset] }
     PersonalTableColumn: { type: object, required: [key, visible, width], properties: { key: { type: string }, visible: { type: boolean }, width: { type: integer, minimum: 80, maximum: 600 } } }
     PersonalTableColumnDefinition: { type: object, required: [key, label, required, width], properties: { key: { type: string }, label: { type: string }, required: { type: boolean }, width: { type: integer } } }
     SavePersonalTableView: { type: object, required: [name, columns, defaultView, version], properties: { name: { type: string, minLength: 1, maxLength: 60 }, columns: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/PersonalTableColumn' } }, defaultView: { type: boolean }, version: { type: integer, minimum: 0 } } }

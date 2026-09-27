@@ -27,7 +27,15 @@ public class TableViewService {
         "project.ledger",new Registration("project:view",List.of(
             new TableViewModels.Definition("projectCode","项目编码",true,150),new TableViewModels.Definition("name","项目/供应商",true,250),
             new TableViewModels.Definition("contractNo","关联合同",false,150),new TableViewModels.Definition("period","计划周期",false,240),
-            new TableViewModels.Definition("status","状态",false,110))));
+            new TableViewModels.Definition("status","状态",false,110))),
+        "resource.person",new Registration("resource:person:view",List.of(
+            new TableViewModels.Definition("code","人员编码",true,140),new TableViewModels.Definition("name","人员/供应商",true,230),
+            new TableViewModels.Definition("idNumberMasked","证件号码",false,180),new TableViewModels.Definition("tradeType","工种",false,130),
+            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100))),
+        "resource.asset",new Registration("resource:asset:view",List.of(
+            new TableViewModels.Definition("code","资产编码",true,140),new TableViewModels.Definition("name","资产/供应商",true,230),
+            new TableViewModels.Definition("type","类型",false,100),new TableViewModels.Definition("plateNo","车牌号",false,130),
+            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100))));
     private final TableViewMapper mapper;private final OperationIdGenerator ids;private final ObjectMapper json;private final AuditService audit;
     public TableViewService(TableViewMapper mapper,OperationIdGenerator ids,ObjectMapper json,AuditService audit){this.mapper=mapper;this.ids=ids;this.json=json;this.audit=audit;}
     public TableViewModels.Page list(String tableKey){var catalog=catalog(tableKey);var i=TenantContext.require();return new TableViewModels.Page(tableKey,catalog,20,mapper.list(i.tenantId(),i.actorId(),tableKey).stream().map(this::view).toList());}
