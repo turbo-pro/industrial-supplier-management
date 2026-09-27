@@ -79,7 +79,7 @@ function switchTab(name:string){void router.push(name==='contracts'?'/projects/c
         <template v-else>{{row[column.key]??'—'}}</template>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="220" fixed="right"><template #default="{row}"><el-button v-if="row.status==='PLANNED'||row.status==='SUSPENDED'" link type="primary" @click="changeProject(row,'ACTIVE')">启动</el-button><template v-if="row.status==='ACTIVE'"><el-button link type="warning" @click="changeProject(row,'SUSPENDED')">暂停</el-button><el-button link type="success" @click="changeProject(row,'COMPLETED')">完成</el-button></template></template></el-table-column>
+    <el-table-column label="操作" width="220" fixed="right"><template #default="{row}"><el-button v-if="row.status==='PLANNED'||row.status==='SUSPENDED'" link type="primary" @click="changeProject(row,'ACTIVE')">{{row.status==='SUSPENDED'?'复工':'开工'}}</el-button><template v-if="row.status==='ACTIVE'"><el-button link type="warning" @click="changeProject(row,'SUSPENDED')">暂停</el-button><el-button link type="success" @click="changeProject(row,'COMPLETED')">完成</el-button></template></template></el-table-column>
   </el-table>
 </el-card>
 <el-pagination style="margin-top:16px" :current-page="query.page+1" :total="total" :page-size="query.size" layout="prev, pager, next" @current-change="(page:number)=>{query.page=page-1;load()}"/>

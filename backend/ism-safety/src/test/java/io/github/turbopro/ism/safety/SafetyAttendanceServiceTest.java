@@ -21,16 +21,18 @@ class SafetyAttendanceServiceTest {
     private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
     private final SafetyAttendanceService service = new SafetyAttendanceService(mapper, credentials, ids, audit,suppliers);
     @org.junit.jupiter.api.BeforeEach void validSupplier(){
-        when(suppliers.activeForNewBusiness(30)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","供应商"));
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.SITE_ENTER)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","供应商"));
         when(credentials.personForEntry(10,99)).thenReturn(person("ACTIVE"));
     }
     @Test void restrictionBlocksCheckInBeforeInsert(){
         when(credentials.person(10,99)).thenReturn(person("ACTIVE"));
-        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.SITE_ENTER)).thenReturn(null);
         try(var tenant=TenantContext.open(10,7);var authorization=auth()){
             assertThrows(ApiException.class,()->service.checkIn(new SafetyAttendanceModels.CheckIn("99","厂区")));
         }
         verify(mapper,never()).checkIn(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString(),anyLong());
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.SITE_ENTER);
+        verify(suppliers,never()).activeForNewBusiness(anyLong());
     }
     @Test void currentExitedPersonBlocksEntryDespiteEarlierActiveRead(){
         when(credentials.person(10,99)).thenReturn(person("ACTIVE"));
@@ -90,7 +92,7 @@ class SafetyAttendanceServiceTest {
         return new SafetyCredentialModels.PersonRef(99, 20, 30, 40L, "P-1", "张三", null, status, 7);
     }
     @Test void restrictionDoesNotBlockCheckOut(){
-        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.SITE_ENTER)).thenReturn(null);
         when(mapper.get(10,100)).thenReturn(new SafetyAttendanceModels.Row(100,20,40,30,99,"P-1","张三","供应商","项目","厂区",LocalDateTime.now(),null,7,null,null,7,0));
         when(mapper.checkOut(10,100,7,"离场",0)).thenReturn(1);
         try(var tenant=TenantContext.open(10,7);var authorization=auth()){

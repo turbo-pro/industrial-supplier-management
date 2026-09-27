@@ -17,7 +17,7 @@ class ProjectServiceTest {
     private final SupplierReferenceService suppliers=mock(SupplierReferenceService.class);
     private final ProjectService service=new ProjectService(mapper,mock(OperationIdGenerator.class),mock(AuditService.class),suppliers);
     @Test void contractDateRangeMustBeValid(){try(var tenant=TenantContext.open(10,7);var auth=auth()){assertThrows(ApiException.class,()->service.createContract(new ProjectModels.SaveContract("C-001","测试合同","30",ProjectModels.ContractType.SERVICE,BigDecimal.TEN,"CNY",LocalDate.now(),LocalDate.now().plusDays(2),LocalDate.now(),"7","50",0)));}verify(mapper,never()).insertContract(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString(),anyString(),anyString(),any(),anyString(),any(),any(),any(),anyLong(),anyLong());}
-    @Test void projectContractMustBelongToSameSupplier(){when(suppliers.activeForNewBusiness(30)).thenReturn(new SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));when(mapper.activeContractSupplier(10,60)).thenReturn(31L);try(var tenant=TenantContext.open(10,7);var auth=auth()){assertThrows(ApiException.class,()->service.createProject(new ProjectModels.SaveProject("P-001","测试项目","30","60",ProjectModels.ProjectType.MAINTENANCE,null,LocalDate.now(),LocalDate.now().plusDays(2),"7",null,null,0)));}verify(mapper,never()).insertProject(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),anyString(),anyString(),any(),any(),any(),anyLong(),any(),any());}
+    @Test void projectContractMustBelongToSameSupplier(){when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PROJECT_CREATE)).thenReturn(new SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));when(mapper.activeContractSupplier(10,60)).thenReturn(31L);try(var tenant=TenantContext.open(10,7);var auth=auth()){assertThrows(ApiException.class,()->service.createProject(new ProjectModels.SaveProject("P-001","测试项目","30","60",ProjectModels.ProjectType.MAINTENANCE,null,LocalDate.now(),LocalDate.now().plusDays(2),"7",null,null,0)));}verify(mapper,never()).insertProject(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),anyString(),anyString(),any(),any(),any(),anyLong(),any(),any());}
     @Test void blacklistedSupplierCannotCreateProject(){try(var tenant=TenantContext.open(10,7);var auth=auth()){assertThrows(ApiException.class,()->service.createProject(new ProjectModels.SaveProject("P-002","测试项目","30",null,ProjectModels.ProjectType.MAINTENANCE,null,LocalDate.now(),LocalDate.now().plusDays(2),"7",null,null,0)));}verify(mapper,never()).insertProject(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),anyString(),anyString(),any(),any(),any(),anyLong(),any(),any());}
     @Test void completedProjectCannotBeRestarted(){when(mapper.project(10,99)).thenReturn(row("COMPLETED"));try(var tenant=TenantContext.open(10,7);var auth=auth()){assertThrows(ApiException.class,()->service.changeProjectStatus(99,new ProjectModels.ChangeProjectStatus(ProjectModels.ProjectStatus.ACTIVE,"重启",1)));}verify(mapper,never()).changeProjectStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());}
     private AuthorizationContext.Scope auth(){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("contract",DataScope.all(),"project",DataScope.all()),Set.of()));}
@@ -29,6 +29,32 @@ class ProjectServiceTest {
             }
         }
         verify(mapper,never()).changeProjectStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.START_WORK);
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESUME_WORK);
+        verify(suppliers,never()).activeForNewBusiness(anyLong());
+    }
+    @Test void allowedStartAndResumeUseDifferentActionsAndPreserveVersion(){
+        var reference=new SupplierReferenceService.Reference(20,"SUP-001","供应商");
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.START_WORK)).thenReturn(reference);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESUME_WORK)).thenReturn(reference);
+        when(mapper.changeProjectStatus(10,7,99,"ACTIVE",null,1)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            for(String status:new String[]{"PLANNED","SUSPENDED"}){
+                when(mapper.project(10,99)).thenReturn(row(status));
+                service.changeProjectStatus(99,new ProjectModels.ChangeProjectStatus(ProjectModels.ProjectStatus.ACTIVE,null,1));
+            }
+        }
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.START_WORK);
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESUME_WORK);
+        verify(mapper,times(2)).changeProjectStatus(10,7,99,"ACTIVE",null,1);
+    }
+    @Test void suspendedProjectCanStillCloseWithoutNewBusinessEligibility(){
+        when(mapper.project(10,99)).thenReturn(row("SUSPENDED"));
+        when(mapper.changeProjectStatus(10,7,99,"CANCELLED","退出处置",1)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            service.changeProjectStatus(99,new ProjectModels.ChangeProjectStatus(ProjectModels.ProjectStatus.CANCELLED,"退出处置",1));
+        }
+        verifyNoInteractions(suppliers);
     }
     @Test void restrictedSupplierCannotActivateDraftContract(){
         var now=LocalDateTime.now();

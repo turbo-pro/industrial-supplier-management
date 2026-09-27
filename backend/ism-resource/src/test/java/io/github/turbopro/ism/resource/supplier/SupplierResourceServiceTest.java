@@ -19,9 +19,9 @@ class SupplierResourceServiceTest {
     private final OperationIdGenerator ids=mock(OperationIdGenerator.class);
     private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
     private final SupplierResourceService service=new SupplierResourceService(mapper,ids,mock(AuditService.class),suppliers);
-    @org.junit.jupiter.api.BeforeEach void validSupplier(){when(suppliers.activeForNewBusiness(30)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));}
+    @org.junit.jupiter.api.BeforeEach void validSupplier(){when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));}
     @Test void restrictedSupplierCannotActivatePeopleOrUseAssets(){
-        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(null);
         when(mapper.person(10,99)).thenReturn(person("PENDING"));
         when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
@@ -32,13 +32,13 @@ class SupplierResourceServiceTest {
         verify(mapper,never()).assetStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
     }
     @Test void restrictedSupplierCanStillHandOverAssets(){
-        when(suppliers.activeForNewBusiness(30)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(null);
         when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
         when(mapper.handoverAsset(10,7,88,"接收人","交接",1)).thenReturn(1);
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
             assertNotNull(service.handoverAsset(88,new SupplierResourceModels.AssetHandoverCommand("交接","接收人",1)));
         }
-        verify(suppliers,never()).activeForNewBusiness(anyLong());
+        verify(suppliers,never()).eligibleForBusiness(anyLong(),any());
     }
 
     @Test void rawIdentityNumberIsNeverPersisted(){

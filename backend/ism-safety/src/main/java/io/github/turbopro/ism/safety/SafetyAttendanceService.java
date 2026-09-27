@@ -41,7 +41,7 @@ public class SafetyAttendanceService {
         if (person == null || person.projectId() == null || !scope().allows(
                 new DataTarget(person.organizationId(), person.projectId(), null, person.createdBy()), identity.actorId()))
             throw new ApiException(CommonErrorCode.NOT_FOUND);
-        if(suppliers.activeForNewBusiness(person.supplierId())==null)
+        if(suppliers.eligibleForBusiness(person.supplierId(),io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.SITE_ENTER)==null)
             throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"供应商无效或存在生效限制，不能入场");
         person=credentialMapper.personForEntry(identity.tenantId(),personId);
         if(person==null || person.projectId()==null || !scope().allows(
