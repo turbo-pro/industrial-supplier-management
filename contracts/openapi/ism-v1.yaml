@@ -1630,7 +1630,7 @@ components:
     PersonalTableViewPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PersonalTableViewPage' } } }] }
     RestrictionExplainAction:
       type: string
-      enum: [QUALIFICATION_APPLY, PROJECT_CREATE, RESOURCE_ASSIGN, SITE_ENTER, START_WORK, RESUME_WORK]
+      enum: [CONTRACT_CREATE, CONTRACT_ACTIVATE, QUALIFICATION_APPLY, PROJECT_CREATE, RESOURCE_ASSIGN, SITE_ENTER, START_WORK, RESUME_WORK]
     RestrictionExplainDecision: { type: string, enum: [ALLOW, WARN, DENY] }
     RestrictionExplanationHit:
       type: object

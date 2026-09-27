@@ -11,7 +11,7 @@ const action=ref<components['schemas']['RestrictionExplainAction']>('PROJECT_CRE
 const result=ref<components['schemas']['RestrictionExplanation']|null>(null);
 const busy=ref(false);
 let requestVersion=0;
-const actions={QUALIFICATION_APPLY:'准入申请',PROJECT_CREATE:'新建项目',RESOURCE_ASSIGN:'资源新增/分配',SITE_ENTER:'现场进场',START_WORK:'项目开工',RESUME_WORK:'项目复工'};
+const actions={CONTRACT_CREATE:'新建合同',CONTRACT_ACTIVATE:'合同生效',QUALIFICATION_APPLY:'准入申请',PROJECT_CREATE:'新建项目',RESOURCE_ASSIGN:'资源新增/分配',SITE_ENTER:'现场进场',START_WORK:'项目开工',RESUME_WORK:'项目复工'};
 const decisions={ALLOW:'企业级检查未命中阻断',WARN:'观察提醒',DENY:'禁止新增业务'};
 async function explain(){
   if(!props.supplier)return;
