@@ -7,8 +7,7 @@ CREATE TABLE per_score_rule (
 
 CREATE TABLE per_supplier_evaluation (
  id BIGINT NOT NULL, tenant_id BIGINT NOT NULL, organization_id BIGINT NOT NULL,
- supplier_id BIGINT NOT NULL, supplier_code VARCHAR(64) NOT NULL,
- supplier_name VARCHAR(200) NOT NULL, period_start DATE NOT NULL, period_end DATE NOT NULL,
+ supplier_id BIGINT NOT NULL, period_start DATE NOT NULL, period_end DATE NOT NULL,
  total_score DECIMAL(5,2) NOT NULL, grade VARCHAR(16) NOT NULL,
  status VARCHAR(24) NOT NULL DEFAULT 'DRAFT',
  quality_ncr_total INT NOT NULL DEFAULT 0, quality_ncr_open INT NOT NULL DEFAULT 0,
