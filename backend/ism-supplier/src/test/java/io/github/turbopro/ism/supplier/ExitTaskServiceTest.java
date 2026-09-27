@@ -15,7 +15,7 @@ class ExitTaskServiceTest {
     AuthorizationContext.Scope auth(DataScope scope){return AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",scope),Set.of()));}
     @Test void usesSessionIdentityScopesAndEscapedKeywordBeforePagination(){
         when(mapper.count(10,7,"ORGANIZATION_SET",Set.of(20L),"%a=%=_==%","OPEN_CONTRACT")).thenReturn(21L);
-        when(mapper.list(10,7,"ORGANIZATION_SET",Set.of(20L),"%a=%=_==%","OPEN_CONTRACT",20,20)).thenReturn(List.of(new ExitTaskModels.Row(100,90,30,"S30","测试供应商",20,"OPEN_CONTRACT",77,"/projects/contracts","处理说明",LocalDateTime.now(),LocalDateTime.now(),2,3)));
+        when(mapper.list(10,7,"ORGANIZATION_SET",Set.of(20L),"%a=%=_==%","OPEN_CONTRACT",20,20)).thenReturn(List.of(new ExitTaskModels.Row(100,90,30,"S30","测试供应商",20,"OPEN_CONTRACT",77,"/projects/contracts","处理说明",LocalDateTime.now(),LocalDateTime.now(),2,3,null,null)));
         try(var identity=TenantContext.open(10,7);var scope=auth(DataScope.organizations(Set.of(20L)))){
             var page=service.mine(" a%_= ","OPEN_CONTRACT",1,20);
             assertEquals(21,page.total());assertEquals("100",page.items().get(0).id());assertEquals("90",page.items().get(0).applicationId());assertEquals(3,page.items().get(0).applicationVersion());

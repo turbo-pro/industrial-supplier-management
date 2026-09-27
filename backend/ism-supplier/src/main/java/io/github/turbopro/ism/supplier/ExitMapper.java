@@ -6,7 +6,11 @@ import java.util.List;
 
 @Mapper
 public interface ExitMapper extends TenantScopedMapper {
-    String ENTITY_FIELDS="id,check_code,source_id,route,state,assignee_id,note,assigned_by,assigned_at,checked_at,cleared_at,version";
+    String ENTITY_FIELDS="id,check_code,source_id,route,state,assignee_id,note,assigned_by,assigned_at,checked_at,cleared_at,version,due_date,last_reminded_at";
+    @Update("UPDATE sup_exit_entity SET due_date=#{dueDate},version=version+1 WHERE tenant_id=#{tenantId} AND application_id=#{applicationId} AND id=#{id} AND state='OPEN' AND version=#{version}")
+    int deadline(long tenantId,long applicationId,long id,java.time.LocalDate dueDate,int version);
+    @Update("UPDATE sup_exit_entity SET last_reminded_at=#{now},version=version+1 WHERE tenant_id=#{tenantId} AND application_id=#{applicationId} AND id=#{id} AND state='OPEN' AND version=#{version}")
+    int reminded(long tenantId,long applicationId,long id,java.time.LocalDateTime now,int version);
     @Select("SELECT COUNT(*) FROM sup_exit_entity WHERE tenant_id=#{tenantId} AND application_id=#{applicationId}")
     long entityCount(long tenantId,long applicationId);
     @Select("SELECT "+ENTITY_FIELDS+" FROM sup_exit_entity WHERE tenant_id=#{tenantId} AND application_id=#{applicationId} ORDER BY check_code,source_id LIMIT #{size} OFFSET #{offset}")

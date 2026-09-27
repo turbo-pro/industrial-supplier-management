@@ -21,7 +21,7 @@ public class ExitTaskService {
         String like=keyword==null||keyword.isBlank()?null:"%"+keyword.trim().replace("=","==").replace("%","=%").replace("_","=_")+"%";
         long total=mapper.count(identity.tenantId(),identity.actorId(),scope.type().name(),scope.organizationIds(),like,type);
         var items=mapper.list(identity.tenantId(),identity.actorId(),scope.type().name(),scope.organizationIds(),like,type,Math.multiplyExact(page,size),size).stream().map(r->new ExitTaskModels.Task(
-            Long.toString(r.id()),Long.toString(r.applicationId()),Long.toString(r.supplierId()),r.supplierCode(),r.supplierName(),Long.toString(r.organizationId()),r.checkCode(),Long.toString(r.sourceId()),r.route(),r.note(),r.assignedAt(),r.checkedAt(),r.version(),r.applicationVersion())).toList();
+            Long.toString(r.id()),Long.toString(r.applicationId()),Long.toString(r.supplierId()),r.supplierCode(),r.supplierName(),Long.toString(r.organizationId()),r.checkCode(),Long.toString(r.sourceId()),r.route(),r.note(),r.assignedAt(),r.checkedAt(),r.version(),r.applicationVersion(),r.dueDate(),r.lastRemindedAt(),r.dueDate()!=null&&r.dueDate().isBefore(RestrictionBusinessDate.today()))).toList();
         return new ExitTaskModels.Page(total,page,size,items);
     }
 }

@@ -26,6 +26,10 @@ public class ExitController {
     public ApiResponse<ExitModels.View> assign(@PathVariable long supplierId,@PathVariable long id,@PathVariable long entityId,@Valid @RequestBody ExitModels.Assign command){return responses.success(service.assign(supplierId,id,entityId,command));}
     @PostMapping("/{id}/cancel") @RequiresPermission("supplier:exit:cancel")
     public ApiResponse<ExitModels.View> cancel(@PathVariable long supplierId,@PathVariable long id,@Valid @RequestBody ExitModels.Version command){return responses.success(service.cancel(supplierId,id,command));}
+    @PostMapping("/{id}/entities/{entityId}/deadline") @RequiresPermission("supplier:exit:assign")
+    public ApiResponse<ExitModels.View> deadline(@PathVariable long supplierId,@PathVariable long id,@PathVariable long entityId,@Valid @RequestBody ExitModels.Deadline command){return responses.success(service.deadline(supplierId,id,entityId,command));}
+    @PostMapping("/{id}/entities/{entityId}/remind") @RequiresPermission("supplier:exit:remind")
+    public ApiResponse<ExitModels.View> remind(@PathVariable long supplierId,@PathVariable long id,@PathVariable long entityId,@Valid @RequestBody ExitModels.Reminder command){return responses.success(service.remind(supplierId,id,entityId,command));}
     @PostMapping("/{id}/review") @RequiresPermission("supplier:exit:review")
     public ApiResponse<ExitModels.View> review(@PathVariable long supplierId,@PathVariable long id,@Valid @RequestBody ExitModels.Review command){return responses.success(service.review(supplierId,id,command));}
 }

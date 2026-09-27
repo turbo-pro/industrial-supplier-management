@@ -37,4 +37,11 @@ class ExitAssignmentNotificationTest {
         try(var ignored=TenantContext.open(10,7)){assertThrows(ApiException.class,this::send);}
         verify(mapper,never()).insertInbox(anyLong(),anyLong(),anyLong(),anyLong());
     }
+    @Test void reminderWithoutDateRendersExplicitUnsetAndUsesCurrentRecipient(){
+        when(mapper.exitReminderTemplate(10)).thenReturn(new MessageModels.TemplateRow(51,"SUPPLIER_EXIT_REMINDER","催办","IN_APP","催办","期限 {{dueDate}}","[\"dueDate\"]","ACTIVE",0));
+        when(mapper.validUsers(10,Set.of(8L))).thenReturn(Set.of(8L));when(ids.nextId()).thenReturn(101L,102L,103L);
+        try(var ignored=TenantContext.open(10,7)){service.notifyExitReminder(30,90,100,"OPEN_CONTRACT",77,8,null);}
+        verify(mapper).ensureExitReminderTemplate(10,101);
+        verify(mapper).insertDelivery(eq(10L),eq(102L),eq(51L),eq(8L),eq("催办"),eq("期限 未设置"),eq("SUPPLIER_EXIT_ENTITY"),eq(100L),any());
+    }
 }

@@ -29,6 +29,8 @@ function label(value:string){return labels[value as keyof typeof labels]??value;
       <el-table-column label="事项类型" width="140"><template #default="{row}">{{label(row.code)}}</template></el-table-column>
       <el-table-column prop="sourceId" label="业务记录 ID" width="180"/>
       <el-table-column prop="note" label="处理说明" min-width="220" show-overflow-tooltip/>
+      <el-table-column label="处置期限" width="150"><template #default="{row}">{{row.dueDate??'未设置'}}<el-tag v-if="row.overdue" type="danger">已逾期</el-tag></template></el-table-column>
+      <el-table-column prop="lastRemindedAt" label="上次催办（UTC）" width="200"/>
       <el-table-column prop="assignedAt" label="分派时间" width="200"/>
       <el-table-column prop="checkedAt" label="最后核验" width="200"/>
       <el-table-column label="操作" width="130" fixed="right"><template #default="{row}"><router-link :to="row.route">业务台账入口</router-link></template></el-table-column>

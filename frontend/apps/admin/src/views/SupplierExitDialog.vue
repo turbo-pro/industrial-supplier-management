@@ -15,6 +15,28 @@ const canApply=ref(false);
 const labels:Record<string,string>={OPEN_CONTRACT:'合同',OPEN_PROJECT:'项目',OPEN_PERSON:'人员',OPEN_ASSET:'车辆设备',OPEN_SAFETY:'安全隐患',OPEN_ATTENDANCE:'现场签到',OPEN_QUALITY:'质量不符合项',OPEN_IMPROVEMENT:'绩效改进'};
 const assignment=ref(false),selectedApplication=ref<Application>(),selectedEntity=ref<Entity>();
 const disposition=reactive({assigneeId:'',note:''});
+const deadlineDialog=ref(false),deadlineForm=reactive({dueDate:'',reason:''});
+function openDeadline(row:Application,entity:Entity){selectedApplication.value=row;selectedEntity.value=entity;Object.assign(deadlineForm,{dueDate:entity.dueDate??'',reason:''});deadlineDialog.value=true;}
+async function saveDeadline(){
+  const row=selectedApplication.value,entity=selectedEntity.value,supplierId=props.supplier?.id;
+  if(!row||!entity||!supplierId)return;
+  if(!deadlineForm.reason.trim()){ElMessage.warning('请填写期限变更原因');return;}
+  busy.value=true;
+  try{const {error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/deadline',{params:{path:{supplierId,id:row.id,entityId:entity.id}},body:{dueDate:deadlineForm.dueDate||null,reason:deadlineForm.reason.trim(),version:entity.version,applicationVersion:row.version}});
+    if(error){ElMessage.error(error.error.message+'；如版本变化，请刷新后重新编辑');return;}
+    deadlineDialog.value=false;ElMessage.success('处置期限已记录，不改变业务结清状态');await load();
+  }catch{ElMessage.error('期限更新失败，请刷新核对');}finally{busy.value=false;}
+}
+async function remind(row:Application,entity:Entity){
+  const supplierId=props.supplier?.id;if(!supplierId)return;
+  try{await ElMessageBox.confirm('向当前责任人发送站内催办？同一事项 24 小时内只能催办一次，不会完成或放行业务。','退出事项催办',{confirmButtonText:'发送催办',cancelButtonText:'取消'});
+    if(supplierId!==props.supplier?.id||!props.modelValue)return;
+    busy.value=true;
+    const {error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/remind',{params:{path:{supplierId,id:row.id,entityId:entity.id}},body:{version:entity.version,applicationVersion:row.version}});
+    if(error){ElMessage.error(error.error.message);return;}
+    ElMessage.success('站内催办已发送');await load();
+  }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('催办失败，请刷新核对');}finally{busy.value=false;}
+}
 const entityPages=ref<Record<string,{page:number;total:number;items:Entity[];loading:boolean}>>({});
 const entityRequests=new Map<string,number>();
 async function loadEntities(row:Application,targetPage:number){
@@ -96,7 +118,7 @@ async function review(row:Application,decision:'APPROVE'|'REJECT'){
     await load();emit('changed');
   }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('审批失败，请刷新核对结果');}finally{busy.value=false;}
 }
-watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;rows.value=[];total.value=0;canApply.value=false;loading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
+watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;rows.value=[];total.value=0;canApply.value=false;loading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
 </script>
 <template>
   <el-dialog v-model="visible" :title="`${supplier?.name??''} · 退出流程`" width="1040px" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
@@ -124,8 +146,10 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPage
             <el-table-column label="核验状态" width="130"><template #default="{row:entity}"><el-tag :type="entity.state==='CLEARED'?'success':'warning'">{{entity.state==='CLEARED'?'已核验结清':'待处置'}}</el-tag></template></el-table-column>
             <el-table-column prop="assigneeId" label="责任人账号 ID" width="180"/>
             <el-table-column prop="note" label="处理说明" min-width="200" show-overflow-tooltip/>
+            <el-table-column label="处置期限" width="150"><template #default="{row:entity}">{{entity.dueDate??'未设置'}}<el-tag v-if="entity.overdue" type="danger">已逾期</el-tag></template></el-table-column>
+            <el-table-column prop="lastRemindedAt" label="上次催办（UTC）" width="200"/>
             <el-table-column prop="clearedAt" label="核验结清时间" width="180"/>
-            <el-table-column label="操作" width="200"><template #default="{row:entity}"><router-link :to="entity.route">业务入口</router-link><el-button v-if="row.status==='SUBMITTED'&&entity.state==='OPEN'" link type="primary" :disabled="busy" @click="openAssign(row,entity)">责任/说明</el-button></template></el-table-column>
+            <el-table-column label="操作" width="320"><template #default="{row:entity}"><router-link :to="entity.route">业务入口</router-link><template v-if="row.status==='SUBMITTED'&&entity.state==='OPEN'"><el-button link type="primary" :disabled="busy" @click="openAssign(row,entity)">责任/说明</el-button><el-button link :disabled="busy" @click="openDeadline(row,entity)">期限</el-button><el-button link type="warning" :disabled="busy||!entity.assigneeId" @click="remind(row,entity)">催办</el-button></template></template></el-table-column>
           </el-table>
           <el-pagination :current-page="(entityPages[row.id]?.page??0)+1" :total="entityPages[row.id]?.total??row.entityTotal" :page-size="20" layout="total, prev, pager, next" :disabled="busy||!!entityPages[row.id]?.loading" @current-change="(value:number)=>loadEntities(row,value-1)"/>
           <el-timeline style="margin-top:16px"><el-timeline-item v-for="event in row.events" :key="event.id" :timestamp="event.createdAt">{{event.action}} · 操作人 {{event.actorId}} · {{event.comment}}</el-timeline-item></el-timeline>
@@ -150,5 +174,10 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;entityPage
     <el-alert title="保存会向本租户有效责任人发送站内通知；通知失败则不会保存。本操作不能手工完成或移交未结业务。" type="warning" :closable="false"/>
     <el-form label-position="top"><el-form-item label="责任人账号 ID"><el-input v-model="disposition.assigneeId" maxlength="19" :disabled="busy"/><el-button link :disabled="busy" @click="disposition.assigneeId=session.actorId??''">分派给我</el-button></el-form-item><el-form-item label="处理说明"><el-input v-model="disposition.note" type="textarea" maxlength="1800" show-word-limit :disabled="busy"/></el-form-item></el-form>
     <template #footer><el-button :disabled="busy" @click="assignment=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveAssignment">保存责任与说明</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="deadlineDialog" title="退出事项处置期限" width="560px" append-to-body :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+    <el-alert title="按中国业务日期计算，今天至一年内；清空日期表示取消期限。所有变更须记录原因，不自动关闭业务。" type="info" :closable="false"/>
+    <el-form label-position="top"><el-form-item label="处置期限"><el-date-picker v-model="deadlineForm.dueDate" type="date" value-format="YYYY-MM-DD" clearable :disabled="busy"/></el-form-item><el-form-item label="变更原因"><el-input v-model="deadlineForm.reason" type="textarea" maxlength="1000" show-word-limit :disabled="busy"/></el-form-item></el-form>
+    <template #footer><el-button :disabled="busy" @click="deadlineDialog=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveDeadline">保存期限</el-button></template>
   </el-dialog>
 </template>

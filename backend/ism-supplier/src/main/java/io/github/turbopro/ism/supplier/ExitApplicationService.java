@@ -115,6 +115,39 @@ public class ExitApplicationService {
         audit("SUPPLIER_EXIT_ENTITY_ASSIGN",applicationId,Map.of("supplierId",supplierId,"entityId",entityId,"code",entity.checkCode(),"sourceId",entity.sourceId(),"assigneeId",assignee));
         return view(require(supplierId,applicationId));
     }
+    @Transactional public ExitModels.View deadline(long supplierId,long applicationId,long entityId,ExitModels.Deadline command){
+        lock(supplierId);var application=pending(supplierId,applicationId,command.applicationVersion());
+        var entity=openEntity(supplierId,applicationId,entityId,command.version());var i=TenantContext.require();
+        var today=RestrictionBusinessDate.today();
+        if(command.dueDate()!=null&&(command.dueDate().isBefore(today)||command.dueDate().isAfter(today.plusYears(1))))throw invalid("处置期限须在今天至一年内");
+        if(command.reason()==null||command.reason().isBlank()||command.reason().length()>1000)throw invalid("期限变更必须填写原因且不超过 1000 字");
+        if(mapper.deadline(i.tenantId(),applicationId,entityId,command.dueDate(),entity.version())!=1)throw conflict();
+        if(mapper.advanceVersion(i.tenantId(),supplierId,applicationId,application.version())!=1)throw conflict();
+        event(applicationId,"ENTITY_DEADLINE",entity.checkCode()+" #"+entity.sourceId()+" 期限："+Objects.toString(command.dueDate(),"清除")+"；"+command.reason().trim());
+        audit("SUPPLIER_EXIT_ENTITY_DEADLINE",applicationId,Map.of("entityId",entityId,"dueDate",Objects.toString(command.dueDate(),"")));
+        return view(require(supplierId,applicationId));
+    }
+    @Transactional public ExitModels.View remind(long supplierId,long applicationId,long entityId,ExitModels.Reminder command){
+        lock(supplierId);var application=pending(supplierId,applicationId,command.applicationVersion());
+        var entity=openEntity(supplierId,applicationId,entityId,command.version());var i=TenantContext.require();
+        if(entity.assigneeId()==null||!assignees.active(entity.assigneeId()))throw invalid("请先分派给本租户有效责任人");
+        var now=java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if(entity.lastRemindedAt()!=null&&entity.lastRemindedAt().isAfter(now.minusHours(24)))throw invalid("同一事项 24 小时内只能催办一次");
+        if(mapper.reminded(i.tenantId(),applicationId,entityId,now,entity.version())!=1)throw conflict();
+        if(mapper.advanceVersion(i.tenantId(),supplierId,applicationId,application.version())!=1)throw conflict();
+        notifications.reminded(supplierId,applicationId,entityId,entity.checkCode(),entity.sourceId(),entity.assigneeId(),entity.dueDate());
+        event(applicationId,"ENTITY_REMIND",entity.checkCode()+" #"+entity.sourceId()+" 催办责任人 "+entity.assigneeId());
+        audit("SUPPLIER_EXIT_ENTITY_REMIND",applicationId,Map.of("entityId",entityId,"assigneeId",entity.assigneeId()));
+        return view(require(supplierId,applicationId));
+    }
+    private ExitModels.EntityRow openEntity(long supplierId,long applicationId,long entityId,int version){
+        var entity=mapper.entity(TenantContext.require().tenantId(),applicationId,entityId);
+        if(entity==null)throw notFound();if(entity.version()!=version)throw conflict();
+        if(!"OPEN".equals(entity.state()))throw invalid("已核验结清事项不能变更期限或催办");
+        var facts=ExitReadinessEvaluator.evaluate(checks,supplierId);
+        if(entityFacts(supplierId,facts).stream().noneMatch(e->e.code().equals(entity.checkCode())&&e.sourceId()==entity.sourceId()))throw invalid("事项已处置或无法核验，请刷新台账");
+        return entity;
+    }
     private List<SupplierExitCheck.Entity> entityFacts(long supplierId,SupplierModels.ExitReadiness facts){
         var codes=ENTITY_CODES;
         var result=new LinkedHashMap<String,SupplierExitCheck.Entity>();
@@ -154,7 +187,7 @@ public class ExitApplicationService {
             mapper.entityCount(tenant,row.id()),mapper.entities(tenant,row.id(),0,20).stream().map(this::entityView).toList(),events,result);
     }
     private ExitModels.Entity entityView(ExitModels.EntityRow e){return new ExitModels.Entity(Long.toString(e.id()),e.checkCode(),Long.toString(e.sourceId()),e.route(),e.state(),
-        e.assigneeId()==null?null:e.assigneeId().toString(),e.note(),e.assignedBy()==null?null:e.assignedBy().toString(),e.assignedAt(),e.checkedAt(),e.clearedAt(),e.version());}
+        e.assigneeId()==null?null:e.assigneeId().toString(),e.note(),e.assignedBy()==null?null:e.assignedBy().toString(),e.assignedAt(),e.checkedAt(),e.clearedAt(),e.version(),e.dueDate(),e.lastRemindedAt(),"OPEN".equals(e.state())&&e.dueDate()!=null&&e.dueDate().isBefore(RestrictionBusinessDate.today()));}
     private void event(long id,String action,String comment){var i=TenantContext.require();mapper.event(ids.nextId(),i.tenantId(),id,action,comment,i.actorId());}
     private void audit(String action,long id,Map<String,Object> after){audit.append(new AuditService.AuditCommand(action,"SUPPLIER_EXIT",id,null,Map.of(),after,null,null));}
     private long fileId(String value){return positiveId(value,"退出依据文件 ID 无效");}

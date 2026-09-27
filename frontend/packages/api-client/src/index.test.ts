@@ -2,6 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { createIsmClient } from './index';
 
 describe('generated ISM client', () => {
+  it('sets or clears an exit deadline and reminds with both versions, not completion',async()=>{
+    const fetchMock=vi.fn<typeof fetch>().mockImplementation(async()=>new Response(JSON.stringify({data:{id:'90',version:3}}),{status:200,headers:{'Content-Type':'application/json'}}));
+    const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});
+    const params={path:{supplierId:'30',id:'90',entityId:'100'}};
+    await client.POST('/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/deadline',{params,body:{dueDate:null,reason:'取消期限',version:0,applicationVersion:2}});
+    expect(await (fetchMock.mock.calls[0]![0] as Request).json()).toEqual({dueDate:null,reason:'取消期限',version:0,applicationVersion:2});
+    await client.POST('/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/remind',{params,body:{version:1,applicationVersion:3}});
+    const request=fetchMock.mock.calls[1]![0] as Request;expect(request.url).toContain('/entities/100/remind');expect(await request.json()).toEqual({version:1,applicationVersion:3});
+  });
   it('loads personal exit tasks with bounded query filters and no recipient override',async()=>{
     const fetchMock=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({data:{total:21,page:1,size:20,items:[]}}),{status:200,headers:{'Content-Type':'application/json'}}));
     const client=createIsmClient({baseUrl:'http://localhost:8080/api',fetch:fetchMock});

@@ -155,6 +155,24 @@ paths:
       parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewExitApplication' } } } }
       responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/deadline:
+    post:
+      operationId: setSupplierExitEntityDeadline
+      tags: [Supplier Exit]
+      description: Set or clear the disposition date with a reason. Date follows Asia/Shanghai, today through one year ahead. Does not clear blockers.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: entityId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExitEntityDeadline' } } } }
+      responses: { '200': { description: Deadline recorded, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/remind:
+    post:
+      operationId: remindSupplierExitEntity
+      tags: [Supplier Exit]
+      description: Send transactional in-app reminder to the current active assignee, once per entity per 24 hours. Both versions are required. No automatic completion or external delivery.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: entityId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExitEntityReminder' } } } }
+      responses: { '200': { description: In-app reminder delivered, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /console/auth/login:
     post:
       operationId: consoleLogin
@@ -1688,7 +1706,9 @@ components:
     ExitEntityPage: { type: object, required: [total, page, size, applicationVersion, items], properties: { total: { type: integer, format: int64 }, page: { type: integer, minimum: 0 }, size: { type: integer, minimum: 1, maximum: 100 }, applicationVersion: { type: integer, minimum: 0 }, items: { type: array, items: { $ref: '#/components/schemas/ExitEntity' } } } }
     ExitEntityPageResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ExitEntityPage' } } }] }
     AssignExitEntity: { type: object, required: [assigneeId, note, version, applicationVersion], properties: { assigneeId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }, note: { type: string, minLength: 1, maxLength: 1800 }, version: { type: integer, minimum: 0 }, applicationVersion: { type: integer, minimum: 0 } } }
-    ExitEntity: { type: object, required: [id, code, sourceId, route, state, checkedAt, version], properties: { id: { type: string }, code: { type: string }, sourceId: { type: string }, route: { type: string }, state: { type: string, enum: [OPEN, CLEARED] }, assigneeId: { type: string, nullable: true }, note: { type: string, nullable: true }, assignedBy: { type: string, nullable: true }, assignedAt: { type: string, format: date-time, nullable: true }, checkedAt: { type: string, format: date-time }, clearedAt: { type: string, format: date-time, nullable: true }, version: { type: integer, minimum: 0 } } }
+    ExitEntityDeadline: { type: object, required: [reason, version, applicationVersion], properties: { dueDate: { type: string, format: date, nullable: true }, reason: { type: string, minLength: 1, maxLength: 1000 }, version: { type: integer, minimum: 0 }, applicationVersion: { type: integer, minimum: 0 } } }
+    ExitEntityReminder: { type: object, required: [version, applicationVersion], properties: { version: { type: integer, minimum: 0 }, applicationVersion: { type: integer, minimum: 0 } } }
+    ExitEntity: { type: object, required: [id, code, sourceId, route, state, checkedAt, version, overdue], properties: { id: { type: string }, code: { type: string }, sourceId: { type: string }, route: { type: string }, state: { type: string, enum: [OPEN, CLEARED] }, assigneeId: { type: string, nullable: true }, note: { type: string, nullable: true }, assignedBy: { type: string, nullable: true }, assignedAt: { type: string, format: date-time, nullable: true }, checkedAt: { type: string, format: date-time }, clearedAt: { type: string, format: date-time, nullable: true }, version: { type: integer, minimum: 0 }, dueDate: { type: string, format: date, nullable: true }, lastRemindedAt: { type: string, format: date-time, nullable: true }, overdue: { type: boolean } } }
     ExitItem: { type: object, required: [id, code, label, route, initialCount, currentCount, checkedAt], properties: { id: { type: string }, code: { type: string }, label: { type: string }, route: { type: string }, initialCount: { type: integer, format: int64 }, currentCount: { type: integer, format: int64 }, checkedAt: { type: string, format: date-time } } }
     ExitEvent: { type: object, required: [id, action, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
     ExitResult: { type: object, required: [id, approvedBy, comment, completionScope, accessRecoveryStatus, effectiveAt], properties: { id: { type: string }, approvedBy: { type: string }, comment: { type: string }, completionScope: { type: string, enum: [LOCAL_BUSINESS] }, accessRecoveryStatus: { type: string, enum: [NOT_VERIFIED] }, effectiveAt: { type: string, format: date-time } } }
@@ -2382,6 +2402,9 @@ components:
         checkedAt: { type: string, format: date-time }
         version: { type: integer, minimum: 0 }
         applicationVersion: { type: integer, minimum: 0 }
+        dueDate: { type: string, format: date, nullable: true }
+        lastRemindedAt: { type: string, format: date-time, nullable: true }
+        overdue: { type: boolean }
     MyExitTaskPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/MyExitTask' } } } } } }]
     MessageTemplateListResponse:

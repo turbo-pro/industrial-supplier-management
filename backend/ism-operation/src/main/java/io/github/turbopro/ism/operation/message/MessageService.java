@@ -6,9 +6,18 @@ import com.fasterxml.jackson.core.type.TypeReference;import com.fasterxml.jackso
  @Transactional public void notifyExitAssignment(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId){
   if(supplierId<=0||applicationId<=0||entityId<=0||sourceId<=0||assigneeId<=0||code==null)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
   long tenant=tenant();mapper.ensureExitAssignmentTemplate(tenant,ids.nextId());var template=mapper.exitAssignmentTemplate(tenant);
-  if(template==null||!"ACTIVE".equals(template.status()))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出分派消息模板不可用");
-  if(!mapper.validUsers(tenant,Set.of(assigneeId)).equals(Set.of(assigneeId)))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"责任人不存在或已停用");
   var variables=Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"code",code,"sourceId",Long.toString(sourceId));
+  deliverExitNotice(template,entityId,assigneeId,variables);
+ }
+ @Transactional public void notifyExitReminder(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId,LocalDate dueDate){
+  if(supplierId<=0||applicationId<=0||entityId<=0||sourceId<=0||assigneeId<=0||code==null)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+  long tenant=tenant();mapper.ensureExitReminderTemplate(tenant,ids.nextId());
+  deliverExitNotice(mapper.exitReminderTemplate(tenant),entityId,assigneeId,Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"code",code,"sourceId",Long.toString(sourceId),"dueDate",dueDate==null?"未设置":dueDate.toString()));
+ }
+ private void deliverExitNotice(MessageModels.TemplateRow template,long entityId,long assigneeId,Map<String,String> variables){
+  long tenant=tenant();
+  if(template==null||!"ACTIVE".equals(template.status()))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出通知模板不可用");
+  if(!mapper.validUsers(tenant,Set.of(assigneeId)).equals(Set.of(assigneeId)))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"责任人不存在或已停用");
   if(!variables.keySet().containsAll(read(template.variableSchema())))throw new ApiException(MessageErrorCode.INVALID_VARIABLES);
   String title=render(template.titleTemplate(),variables),content=render(template.contentTemplate(),variables);
   if(title.length()>200||content.length()>10000)throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出分派消息内容超长");

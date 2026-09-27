@@ -2,6 +2,7 @@ package io.github.turbopro.ism.supplier;
 
 import jakarta.validation.constraints.*;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class ExitModels {
@@ -16,10 +17,13 @@ public final class ExitModels {
     public record Assign(@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String assigneeId,
         @NotBlank @Size(max=1800) String note,@NotNull @PositiveOrZero Integer version,
         @NotNull @PositiveOrZero Integer applicationVersion){}
+    public record Deadline(LocalDate dueDate,@NotBlank @Size(max=1000) String reason,
+        @NotNull @PositiveOrZero Integer version,@NotNull @PositiveOrZero Integer applicationVersion){}
+    public record Reminder(@NotNull @PositiveOrZero Integer version,@NotNull @PositiveOrZero Integer applicationVersion){}
     public record EntityRow(long id,String checkCode,long sourceId,String route,String state,Long assigneeId,
-        String note,Long assignedBy,LocalDateTime assignedAt,LocalDateTime checkedAt,LocalDateTime clearedAt,int version){}
+        String note,Long assignedBy,LocalDateTime assignedAt,LocalDateTime checkedAt,LocalDateTime clearedAt,int version,LocalDate dueDate,LocalDateTime lastRemindedAt){}
     public record Entity(String id,String code,String sourceId,String route,String state,String assigneeId,
-        String note,String assignedBy,LocalDateTime assignedAt,LocalDateTime checkedAt,LocalDateTime clearedAt,int version){}
+        String note,String assignedBy,LocalDateTime assignedAt,LocalDateTime checkedAt,LocalDateTime clearedAt,int version,LocalDate dueDate,LocalDateTime lastRemindedAt,boolean overdue){}
     public record EntityPage(long total,int page,int size,int applicationVersion,List<Entity> items){}
     public record Row(long id,long supplierId,String exitType,String reason,long evidenceFileId,String status,
         long createdBy,LocalDateTime createdAt,Long reviewedBy,LocalDateTime reviewedAt,String reviewComment,int version){}

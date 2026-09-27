@@ -182,6 +182,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/deadline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Set or clear the disposition date with a reason. Date follows Asia/Shanghai, today through one year ahead. Does not clear blockers. */
+        post: operations["setSupplierExitEntityDeadline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/exit-applications/{id}/entities/{entityId}/remind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send transactional in-app reminder to the current active assignee, once per entity per 24 hours. Both versions are required. No automatic completion or external delivery. */
+        post: operations["remindSupplierExitEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/auth/login": {
         parameters: {
             query?: never;
@@ -2466,6 +2500,17 @@ export interface components {
             version: number;
             applicationVersion: number;
         };
+        ExitEntityDeadline: {
+            /** Format: date */
+            dueDate?: string | null;
+            reason: string;
+            version: number;
+            applicationVersion: number;
+        };
+        ExitEntityReminder: {
+            version: number;
+            applicationVersion: number;
+        };
         ExitEntity: {
             id: string;
             code: string;
@@ -2483,6 +2528,11 @@ export interface components {
             /** Format: date-time */
             clearedAt?: string | null;
             version: number;
+            /** Format: date */
+            dueDate?: string | null;
+            /** Format: date-time */
+            lastRemindedAt?: string | null;
+            overdue: boolean;
         };
         ExitItem: {
             id: string;
@@ -4010,6 +4060,11 @@ export interface components {
             checkedAt: string;
             version: number;
             applicationVersion: number;
+            /** Format: date */
+            dueDate?: string | null;
+            /** Format: date-time */
+            lastRemindedAt?: string | null;
+            overdue?: boolean;
         };
         MyExitTaskPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
@@ -4940,6 +4995,72 @@ export interface operations {
         };
         responses: {
             /** @description Local supplier exit application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    setSupplierExitEntityDeadline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                entityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExitEntityDeadline"];
+            };
+        };
+        responses: {
+            /** @description Deadline recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitApplicationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    remindSupplierExitEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                entityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExitEntityReminder"];
+            };
+        };
+        responses: {
+            /** @description In-app reminder delivered */
             200: {
                 headers: {
                     [name: string]: unknown;

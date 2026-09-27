@@ -34,7 +34,7 @@ class ExitApplicationServiceTest {
         public List<Blocker> blockers(long supplierId){var facts=new ArrayList<>(ExitReadinessEvaluatorTest.clear());facts.removeIf(f->f.code().equals("OPEN_CONTRACT"));facts.add(new Blocker("OPEN_CONTRACT","未结束合同",count,"/projects/contracts"));return facts;}
         public List<Entity> entities(long supplierId){return entities;}
     };}
-    ExitModels.EntityRow entity(String state,int version){return new ExitModels.EntityRow(100,"OPEN_CONTRACT",77,"/projects/contracts",state,null,null,null,null,LocalDateTime.now(),null,version);}
+    ExitModels.EntityRow entity(String state,int version){return new ExitModels.EntityRow(100,"OPEN_CONTRACT",77,"/projects/contracts",state,null,null,null,null,LocalDateTime.now(),null,version,null,null);}
     ExitModels.Assign assign(int applicationVersion,int version){return new ExitModels.Assign("8","跟进合同终止",version,applicationVersion);}
     @Test void assignmentAdvancesBothVersionsButNeverClearsLiveBusiness(){setup();
         when(mapper.entity(10,90,100)).thenReturn(entity("OPEN",0));when(assignees.active(8)).thenReturn(true);

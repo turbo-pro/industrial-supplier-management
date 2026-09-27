@@ -717,8 +717,26 @@ class B0InfrastructureIT {
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isOne();
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"说明不能放行",assigned.version()))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(0))).isInstanceOf(ApiException.class);
+                    var dueDate=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).plusDays(1);
+                    var timed=exitApplicationService.deadline(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Deadline(dueDate,"约定合同处置期限",assigned.entities().get(0).version(),assigned.version()));
+                    assertThat(timed.version()).isEqualTo(3);assertThat(timed.entities().get(0).dueDate()).isEqualTo(dueDate);assertThat(timed.localReady()).isFalse();
+                    assertThat(exitTasks(tenantId,9976,DataScope.all()).items().get(0).dueDate()).isEqualTo(dueDate);
+                    jdbcTemplate.update("UPDATE sup_exit_entity SET due_date=? WHERE id=?",dueDate.minusDays(2),entityId);
+                    assertThat(exitTasks(tenantId,9976,DataScope.all()).items().get(0).overdue()).isTrue();
+                    jdbcTemplate.update("UPDATE sup_exit_entity SET due_date=? WHERE id=?",dueDate,entityId);
+                    var reminderTemplate=messageService.create(new MessageModels.SaveTemplate("SUPPLIER_EXIT_REMINDER","退出事项催办","IN_APP","退出事项催办","供应商 {{supplierId}} / {{applicationId}} / {{code}} / {{sourceId}} / {{dueDate}}",Set.of("supplierId","applicationId","code","sourceId","dueDate"),0));
+                    jdbcTemplate.update("UPDATE msg_template SET status='DISABLED' WHERE id=?",Long.parseLong(reminderTemplate.id()));
+                    var reminderCommand=new io.github.turbopro.ism.supplier.ExitModels.Reminder(timed.entities().get(0).version(),timed.version());
+                    assertThatThrownBy(()->exitApplicationService.remind(supplierId,finalExitId,entityId,reminderCommand)).isInstanceOf(ApiException.class);
+                    assertThat(exitApplicationService.get(supplierId,finalExitId).version()).isEqualTo(timed.version());
+                    assertThat(exitApplicationService.get(supplierId,finalExitId).entities().get(0).lastRemindedAt()).isNull();
+                    jdbcTemplate.update("UPDATE msg_template SET status='ACTIVE' WHERE id=?",Long.parseLong(reminderTemplate.id()));
+                    var reminded=exitApplicationService.remind(supplierId,finalExitId,entityId,reminderCommand);
+                    assertThat(reminded.version()).isEqualTo(4);assertThat(reminded.entities().get(0).lastRemindedAt()).isNotNull();assertThat(reminded.localReady()).isFalse();
+                    assertThatThrownBy(()->exitApplicationService.remind(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Reminder(reminded.entities().get(0).version(),reminded.version()))).isInstanceOf(ApiException.class);
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isEqualTo(2);
                     jdbcTemplate.update("UPDATE prj_contract SET status='TERMINATED' WHERE id=9975");
-                    var ready=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(assigned.version()));
+                    var ready=exitApplicationService.recheck(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Version(reminded.version()));
                     assertThat(ready.localReady()).isTrue();
                     assertThat(ready.entities().get(0).state()).isEqualTo("CLEARED");assertThat(ready.entities().get(0).clearedAt()).isNotNull();assertThat(ready.entities().get(0).assigneeId()).isEqualTo("9976");
                     assertThat(ready.entities().get(0).note()).isEqualTo("跟进合同结束，不手工清除阻断");
@@ -727,7 +745,7 @@ class B0InfrastructureIT {
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
                     assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
-                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","RECHECK","BUSINESS_CLOSE");
+                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","ENTITY_DEADLINE","ENTITY_REMIND","RECHECK","BUSINESS_CLOSE");
                     assertThat(exitApplicationService.list(supplierId,0,20).total()).isEqualTo(3);
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"重复",closed.version()))).isInstanceOf(ApiException.class);
                 }
@@ -744,7 +762,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",tenantId);
             jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976",tenantId);
-            jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ASSIGNMENT'",tenantId);
+            jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code IN ('SUPPLIER_EXIT_ASSIGNMENT','SUPPLIER_EXIT_REMINDER')",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);
