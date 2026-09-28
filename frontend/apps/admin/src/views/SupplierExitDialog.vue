@@ -19,6 +19,30 @@ const failureRows=ref<ReminderFailure[]>([]),failurePage=ref(0),failureTotal=ref
 const archive=ref<LocalArchive>(),archiveVisible=ref(false),archiveLoading=ref(false);
 const recovery=ref<RecoveryInventory>(),recoveryVisible=ref(false),recoveryLoading=ref(false);
 const recoveryChannels:Record<string,string>={PORTAL_ACCOUNT:'供应商门户账号',DOOR_ACCESS:'外部门禁权限',API_CREDENTIAL:'接口凭证'};
+type RecoveryTask=components['schemas']['ExitAccessRecoveryTask'];
+const discoveryTask=ref<RecoveryTask>(),discoveryDialog=ref(false),discoveryBusy=ref(false);
+const discoveryForm=reactive({finding:'PRESENT' as 'PRESENT'|'ABSENT',evidenceFileId:'',note:''});
+function openDiscovery(task:RecoveryTask){
+  discoveryTask.value=task;discoveryForm.finding=(task.finding as 'PRESENT'|'ABSENT')??'PRESENT';
+  discoveryForm.evidenceFileId=task.evidenceFileId??'';discoveryForm.note=task.discoveryNote??'';discoveryDialog.value=true;
+}
+async function saveDiscovery(){
+  const supplierId=props.supplier?.id,inventory=recovery.value,task=discoveryTask.value;
+  if(!supplierId||!inventory||!task)return;
+  if(!/^[1-9]\d{0,18}$/.test(discoveryForm.evidenceFileId)||!discoveryForm.note.trim()){
+    ElMessage.warning('请选择已上传的有效证据文件并填写核查说明');return;
+  }
+  discoveryBusy.value=true;
+  try{
+    const {data,error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/discovery',{
+      params:{path:{supplierId,id:inventory.applicationId,taskId:task.id}},
+      body:{finding:discoveryForm.finding,evidenceFileId:discoveryForm.evidenceFileId,note:discoveryForm.note.trim(),version:task.version}
+    });
+    if(error){ElMessage.error(error.error.message+'；如记录已变化，请刷新后重试');return;}
+    recovery.value=data?.data;discoveryDialog.value=false;
+    ElMessage.success('核查发现已留痕；外部回收仍未核验');
+  }catch{ElMessage.error('保存核查发现失败，请刷新核对');}finally{discoveryBusy.value=false;}
+}
 async function viewRecovery(row:Application){
   const supplierId=props.supplier?.id;if(!supplierId||row.status!=='BUSINESS_CLOSED')return;
   const version=requestVersion;recoveryLoading.value=true;recovery.value=undefined;
@@ -256,7 +280,21 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
       <el-alert title="仅生成核查目录：尚未发现或绑定外部账号，也未执行门户、门禁或凭证回收。不得将本地退出视为外部回收完成。" type="warning" :closable="false"/>
       <p>退出申请 {{recovery.applicationId}} · 外部访问状态：未核验</p>
       <el-alert v-if="recovery.tasks.length===0" title="历史退出记录未建立核查目录，外部访问仍未核验；不得视为无需回收。" type="error" :closable="false"/>
-      <el-table :data="recovery.tasks"><el-table-column label="核查渠道"><template #default="{row:task}">{{recoveryChannels[task.channel]??task.channel}}</template></el-table-column><el-table-column label="当前状态" width="150">待确认实际账号/权限</el-table-column><el-table-column prop="createdAt" label="创建时间" width="200"/></el-table>
+      <el-table :data="recovery.tasks" row-key="id">
+        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.discoveryNote">核查说明：{{task.discoveryNote}} · 证据文件 {{task.evidenceFileId}}</p><el-timeline><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item></el-timeline></template></el-table-column>
+        <el-table-column label="核查渠道"><template #default="{row:task}">{{recoveryChannels[task.channel]??task.channel}}</template></el-table-column>
+        <el-table-column label="发现记录" width="150"><template #default="{row:task}">{{task.finding==='PRESENT'?'发现访问记录':task.finding==='ABSENT'?'未发现访问记录':'待核查'}}</template></el-table-column>
+        <el-table-column label="操作" width="110"><template #default="{row:task}"><el-button link type="primary" @click="openDiscovery(task)">记录发现</el-button></template></el-table-column>
+      </el-table>
     </template>
+  </el-dialog>
+  <el-dialog v-model="discoveryDialog" :title="`${recoveryChannels[discoveryTask?.channel??'']??'外部访问'} · 核查发现`" width="560px" append-to-body :close-on-click-modal="false">
+    <el-alert title="仅记录是否发现外部账号或权限，不代表账号已停用或回收；不得填写口令、密钥等秘密。" type="warning" :closable="false"/>
+    <el-form label-position="top">
+      <el-form-item label="核查结论"><el-radio-group v-model="discoveryForm.finding"><el-radio value="PRESENT">发现访问记录</el-radio><el-radio value="ABSENT">未发现访问记录</el-radio></el-radio-group></el-form-item>
+      <el-form-item label="证据文件 ID"><el-input v-model="discoveryForm.evidenceFileId" maxlength="19"/></el-form-item>
+      <el-form-item label="核查说明"><el-input v-model="discoveryForm.note" type="textarea" maxlength="1000" show-word-limit/></el-form-item>
+    </el-form>
+    <template #footer><el-button :disabled="discoveryBusy" @click="discoveryDialog=false">取消</el-button><el-button type="primary" :loading="discoveryBusy" @click="saveDiscovery">保存发现记录</el-button></template>
   </el-dialog>
 </template>

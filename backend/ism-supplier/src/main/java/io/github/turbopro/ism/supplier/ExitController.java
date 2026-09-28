@@ -22,6 +22,9 @@ public class ExitController {
     public ApiResponse<ExitArchiveModels.View> archive(@PathVariable long supplierId,@PathVariable long id){return responses.success(archives.get(supplierId,id));}
     @GetMapping("/{id}/access-recovery") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitAccessRecoveryModels.Inventory> accessRecovery(@PathVariable long supplierId,@PathVariable long id){return responses.success(recovery.inventory(supplierId,id));}
+    @PostMapping("/{id}/access-recovery/{taskId}/discovery") @RequiresPermission("supplier:exit:review")
+    public ApiResponse<ExitAccessRecoveryModels.Inventory> recordDiscovery(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
+        @Valid @RequestBody ExitAccessRecoveryModels.RecordFinding command){return responses.success(recovery.record(supplierId,id,taskId,command));}
     @GetMapping("/{id}/entities") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitModels.EntityPage> entities(@PathVariable long supplierId,@PathVariable long id,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.entities(supplierId,id,page,size));}
     @PostMapping @RequiresPermission("supplier:exit:create")

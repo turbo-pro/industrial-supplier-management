@@ -661,7 +661,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
                 assertThat(manualClearanceMapper.resubmit(tenantId,supplierId,fileId,"退出前重新核验",1,2)).isOne();
                 assertThat(manualClearanceMapper.review(tenantId,supplierId,"APPROVED","财务核验通过",2,3)).isOne();
-                var exitPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                var exitPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of("supplier:exit:review"),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
                 var previewTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
                 var exitSubmitTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
                 exitSubmitTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -821,6 +821,22 @@ class B0InfrastructureIT {
                     assertThat(recovery.tasks()).extracting(io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Task::status)
                         .containsOnly("DISCOVERY_REQUIRED");
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_recovery_task WHERE tenant_id=? AND application_id=?",Integer.class,tenantId,finalExitId)).isEqualTo(3);
+                    long recoveryTaskId=Long.parseLong(recovery.tasks().get(0).id());
+                    var discovered=exitAccessRecoveryService.record(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RecordFinding(
+                            io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.PRESENT,Long.toString(fileId),"发现待回收账号，不含口令",0));
+                    assertThat(discovered.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(discovered.tasks().get(0).status()).isEqualTo("DISCOVERY_RECORDED");
+                    assertThat(discovered.tasks().get(0).finding()).isEqualTo("PRESENT");
+                    assertThat(discovered.tasks().get(0).version()).isOne();
+                    assertThat(discovered.tasks().get(0).events()).hasSize(1);
+                    assertThatThrownBy(()->exitAccessRecoveryService.record(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RecordFinding(
+                            io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.ABSENT,Long.toString(fileId),"过期版本",0))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.record(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RecordFinding(
+                            io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.ABSENT,"999999999999","不存在的证据",1))).isInstanceOf(ApiException.class);
+                    assertThat(jdbcTemplate.queryForObject("SELECT access_recovery_status FROM sup_exit_result WHERE tenant_id=? AND application_id=?",String.class,tenantId,finalExitId)).isEqualTo("NOT_VERIFIED");
                     var archive=exitArchiveService.get(supplierId,finalExitId);
                     assertThat(archive.integrityVerified()).isTrue();
                     assertThat(archive.scope()).isEqualTo("LOCAL_RECORD_METADATA");
@@ -845,6 +861,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_event WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_task WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_restriction_gate_hit WHERE tenant_id=?", tenantId);

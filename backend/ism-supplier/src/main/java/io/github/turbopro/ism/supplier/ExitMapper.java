@@ -50,8 +50,16 @@ public interface ExitMapper extends TenantScopedMapper {
     int insertResult(long id,long tenantId,long applicationId,long supplierId,long actorId,String comment);
     @Insert("INSERT INTO sup_exit_access_recovery_task(id,tenant_id,application_id,supplier_id,channel,created_by) VALUES(#{id},#{tenantId},#{applicationId},#{supplierId},#{channel},#{actorId})")
     int insertAccessRecoveryTask(long id,long tenantId,long applicationId,long supplierId,String channel,long actorId);
-    @Select("SELECT id,channel,status,created_at FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} ORDER BY channel")
+    @Select("SELECT id,channel,status,finding,evidence_file_id,discovery_note,discovered_by,discovered_at,version,created_at FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} ORDER BY channel")
     List<ExitAccessRecoveryModels.TaskRow> accessRecoveryTasks(long tenantId,long supplierId,long applicationId);
+    @Select("SELECT id,channel,status,finding,evidence_file_id,discovery_note,discovered_by,discovered_at,version,created_at FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} FOR UPDATE")
+    ExitAccessRecoveryModels.TaskRow lockAccessRecoveryTask(long tenantId,long supplierId,long applicationId,long taskId);
+    @Update("UPDATE sup_exit_access_recovery_task SET status='DISCOVERY_RECORDED',finding=#{finding},evidence_file_id=#{fileId},discovery_note=#{note},discovered_by=#{actorId},discovered_at=CURRENT_TIMESTAMP(3),version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND version=#{version}")
+    int recordAccessRecoveryFinding(long tenantId,long supplierId,long applicationId,long taskId,String finding,long fileId,String note,long actorId,int version);
+    @Insert("INSERT INTO sup_exit_access_recovery_event(id,tenant_id,task_id,finding,evidence_file_id,note,actor_id) VALUES(#{id},#{tenantId},#{taskId},#{finding},#{fileId},#{note},#{actorId})")
+    int insertAccessRecoveryEvent(long id,long tenantId,long taskId,String finding,long fileId,String note,long actorId);
+    @Select("SELECT id,task_id,finding,evidence_file_id,note,actor_id,created_at FROM sup_exit_access_recovery_event WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY created_at,id")
+    List<ExitAccessRecoveryModels.EventRow> accessRecoveryEvents(long tenantId,long taskId);
     @Select("SELECT id,approved_by,comment,completion_scope,access_recovery_status,effective_at FROM sup_exit_result WHERE tenant_id=#{tenantId} AND application_id=#{applicationId}")
     ExitModels.ResultRow findResult(long tenantId,long applicationId);
     @Insert("INSERT INTO sup_exit_event(id,tenant_id,application_id,action,comment,actor_id) VALUES(#{id},#{tenantId},#{applicationId},#{action},#{comment},#{actorId})")

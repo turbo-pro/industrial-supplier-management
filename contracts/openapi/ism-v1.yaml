@@ -186,6 +186,14 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: Unverified external access discovery inventory, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/discovery:
+    post:
+      operationId: recordSupplierExitAccessDiscovery
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: taskId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RecordExitAccessFinding' } } } }
+      responses: { '200': { description: Discovery recorded; external recovery still not verified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{supplierId}/exit-applications/{id}/recheck:
     post:
       operationId: recheckSupplierExitApplication
@@ -1837,12 +1845,37 @@ components:
     ExitLocalArchiveResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ExitLocalArchive' } } } ] }
     ExitAccessRecoveryTask:
       type: object
-      required: [id, channel, status, createdAt]
+      required: [id, channel, status, version, createdAt, events]
       properties:
         id: { type: string }
         channel: { type: string, enum: [PORTAL_ACCOUNT, DOOR_ACCESS, API_CREDENTIAL] }
-        status: { type: string, enum: [DISCOVERY_REQUIRED] }
+        status: { type: string, enum: [DISCOVERY_REQUIRED, DISCOVERY_RECORDED] }
+        finding: { type: string, enum: [PRESENT, ABSENT], nullable: true }
+        evidenceFileId: { type: string, nullable: true }
+        discoveryNote: { type: string, nullable: true }
+        discoveredBy: { type: string, nullable: true }
+        discoveredAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
+        events: { type: array, items: { $ref: '#/components/schemas/ExitAccessRecoveryEvent' } }
+    ExitAccessRecoveryEvent:
+      type: object
+      required: [id, finding, evidenceFileId, note, actorId, createdAt]
+      properties:
+        id: { type: string }
+        finding: { type: string, enum: [PRESENT, ABSENT] }
+        evidenceFileId: { type: string }
+        note: { type: string }
+        actorId: { type: string }
+        createdAt: { type: string, format: date-time }
+    RecordExitAccessFinding:
+      type: object
+      required: [finding, evidenceFileId, note, version]
+      properties:
+        finding: { type: string, enum: [PRESENT, ABSENT] }
+        evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        note: { type: string, minLength: 1, maxLength: 1000 }
+        version: { type: integer, minimum: 0 }
     ExitAccessRecoveryInventory:
       type: object
       required: [supplierId, applicationId, accessRecoveryStatus, tasks]

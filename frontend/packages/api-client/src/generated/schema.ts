@@ -200,6 +200,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/discovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recordSupplierExitAccessDiscovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
         parameters: {
             query?: never;
@@ -2776,9 +2792,35 @@ export interface components {
             /** @enum {string} */
             channel: "PORTAL_ACCOUNT" | "DOOR_ACCESS" | "API_CREDENTIAL";
             /** @enum {string} */
-            status: "DISCOVERY_REQUIRED";
+            status: "DISCOVERY_REQUIRED" | "DISCOVERY_RECORDED";
+            /** @enum {string|null} */
+            finding?: "PRESENT" | "ABSENT" | null;
+            evidenceFileId?: string | null;
+            discoveryNote?: string | null;
+            discoveredBy?: string | null;
+            /** Format: date-time */
+            discoveredAt?: string | null;
+            version: number;
             /** Format: date-time */
             createdAt: string;
+            events: components["schemas"]["ExitAccessRecoveryEvent"][];
+        };
+        ExitAccessRecoveryEvent: {
+            id: string;
+            /** @enum {string} */
+            finding: "PRESENT" | "ABSENT";
+            evidenceFileId: string;
+            note: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RecordExitAccessFinding: {
+            /** @enum {string} */
+            finding: "PRESENT" | "ABSENT";
+            evidenceFileId: string;
+            note: string;
+            version: number;
         };
         ExitAccessRecoveryInventory: {
             supplierId: string;
@@ -5345,6 +5387,38 @@ export interface operations {
             };
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    recordSupplierExitAccessDiscovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordExitAccessFinding"];
+            };
+        };
+        responses: {
+            /** @description Discovery recorded; external recovery still not verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     recheckSupplierExitApplication: {
