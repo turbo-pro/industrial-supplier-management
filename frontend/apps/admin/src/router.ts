@@ -20,6 +20,7 @@ export default createRouter({history:createWebHistory(),routes:[
   {path:'/',redirect:'/suppliers/master'},
   {path:'/messages/inbox',component:InboxPage,meta:{title:'我的消息'}},
   {path:'/search',component:BusinessSearchPage,meta:{title:'业务全局搜索'}},
+  {path:'/resources/search',component:BusinessSearchPage,meta:{title:'业务全局搜索'}},
   {path:'/suppliers/exit-tasks',component:ExitTaskPage,meta:{title:'我的退出待办'}},
   {path:'/suppliers/exit-monitor',component:ExitMonitorPage,meta:{title:'退出处置监控'}},
   {path:'/suppliers/master',component:SupplierMasterPage,meta:{title:'供应商档案'}},

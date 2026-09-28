@@ -1330,9 +1330,10 @@ class B0InfrastructureIT {
 
     @Test
     void shouldSearchOnlyAuthorizedTenantResourcesAndPersistPersonalSchemes(){
-        long tenantId=125L,userId=126L,organizationId=127L;
+        long tenantId=125L,userId=126L,otherUserId=128L,organizationId=127L;
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",tenantId,"SEARCH_IT","Search Tenant","ACTIVE");
         jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,?)",userId,tenantId,"search.user","Searchable User",passwordEncoder.encode("Search#123456"),"ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,?)",otherUserId,tenantId,"search.other","Other User",passwordEncoder.encode("Search#123456"),"ACTIVE");
         jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",organizationId,tenantId,"SEARCH_SITE","Searchable Site","SITE","ACTIVE");
         var permissions=new PermissionSnapshot(Set.of("iam:user:view","iam:organization:view"),Map.of("iam:user",DataScope.all(),"iam:organization",DataScope.all()),Set.of());
         try(var tenant=TenantContext.open(tenantId,userId);var authorization=AuthorizationContext.open(permissions)){
@@ -1342,11 +1343,28 @@ class B0InfrastructureIT {
             assertThat(result.items()).extracting(SearchModels.SearchItem::title).containsExactlyInAnyOrder("Searchable User","Searchable Site");
             var saved=searchService.create(new SearchModels.SaveSearch("常用搜索",query,true,0));
             assertThat(saved.defaultSearch()).isTrue();assertThat(searchService.saved()).extracting(SearchModels.SavedView::name).containsExactly("常用搜索");
-            searchService.delete(Long.parseLong(saved.id()),saved.version());assertThat(searchService.saved()).isEmpty();
+            var second=searchService.create(new SearchModels.SaveSearch("合同搜索",query,true,0));
+            assertThat(searchService.saved()).filteredOn(SearchModels.SavedView::defaultSearch).extracting(SearchModels.SavedView::id).containsExactly(second.id());
+            var refreshed=searchService.saved().stream().filter(s->s.id().equals(saved.id())).findFirst().orElseThrow();
+            assertThat(refreshed.version()).isGreaterThan(saved.version());
+            assertThatThrownBy(()->searchService.update(Long.parseLong(saved.id()),new SearchModels.SaveSearch("过期更新",query,true,saved.version()))).isInstanceOf(ApiException.class);
+            assertThat(searchService.saved()).filteredOn(SearchModels.SavedView::defaultSearch).extracting(SearchModels.SavedView::id).containsExactly(second.id());
+            try(var other=TenantContext.open(tenantId,otherUserId)){
+                assertThat(searchService.saved()).isEmpty();
+                assertThatThrownBy(()->searchService.update(Long.parseLong(second.id()),new SearchModels.SaveSearch("越权更新",query,true,second.version()))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->searchService.delete(Long.parseLong(second.id()),second.version())).isInstanceOf(ApiException.class);
+            }
+            var updated=searchService.update(Long.parseLong(refreshed.id()),new SearchModels.SaveSearch("常用搜索-重命名",query,true,refreshed.version()));
+            assertThat(updated.name()).isEqualTo("常用搜索-重命名");
+            assertThat(searchService.saved()).filteredOn(SearchModels.SavedView::defaultSearch).extracting(SearchModels.SavedView::id).containsExactly(updated.id());
+            assertThatThrownBy(()->searchService.delete(Long.parseLong(updated.id()),refreshed.version())).isInstanceOf(ApiException.class);
+            searchService.delete(Long.parseLong(updated.id()),updated.version());
+            searchService.delete(Long.parseLong(second.id()),searchService.saved().stream().filter(s->s.id().equals(second.id())).findFirst().orElseThrow().version());
+            assertThat(searchService.saved()).isEmpty();
         }finally{
             jdbcTemplate.update("DELETE FROM src_saved_search WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM iam_organization WHERE id=?",organizationId);
-            jdbcTemplate.update("DELETE FROM iam_user WHERE id=?",userId);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?)",userId,otherUserId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?",tenantId);
         }
     }

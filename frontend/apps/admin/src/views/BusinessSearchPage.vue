@@ -1,25 +1,80 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 
 type EntityType=components['schemas']['SearchEntityType'];
 type SearchItem=components['schemas']['SearchItem'];
+type SavedSearch=components['schemas']['SavedSearch'];
 const businessTypes:EntityType[]=['SUPPLIER','CONTRACT','PROJECT'];
 const labels:Record<string,string>={SUPPLIER:'供应商',CONTRACT:'合同',PROJECT:'项目'};
 const session=useSessionStore(),router=useRouter();
 const query=reactive({keyword:'',types:[...businessTypes] as EntityType[],status:'',from:'',to:'',page:0,size:20});
 const rows=ref<SearchItem[]>([]),hasMore=ref(false),searchedTypes=ref<EntityType[]>([]),loading=ref(false);
+const saved=ref<SavedSearch[]>([]),selectedId=ref(''),schemeBusy=ref(false),schemeAvailable=ref(true),makeDefault=ref(false);
 let sequence=0;
+function validFilters(){if(!query.keyword.trim()&&!query.status.trim()&&!query.from&&!query.to){ElMessage.warning('请输入关键词或高级筛选条件');return false;}if(query.types.length===0){ElMessage.warning('请选择至少一类业务对象');return false;}if(query.from&&query.to&&query.from>query.to){ElMessage.warning('开始时间不能晚于结束时间');return false;}return true;}
+function snapshot(){return{keyword:query.keyword.trim(),types:[...query.types],statuses:query.status.trim()?[query.status.trim()]:[],updatedFrom:query.from?`${query.from}T00:00:00`:undefined,updatedTo:query.to?`${query.to}T23:59:59`:undefined,page:0,size:query.size};}
+async function loadSaved(){
+  try{const {data,error}=await session.client.GET('/search/saved');
+    if(error){schemeAvailable.value=false;saved.value=[];return;}
+    schemeAvailable.value=true;saved.value=data?.data??[];
+    if(selectedId.value&&!saved.value.some(s=>s.id===selectedId.value))selectedId.value='';
+  }catch{schemeAvailable.value=false;saved.value=[];}
+}
+function applyScheme(scheme:SavedSearch){
+  if(!scheme.query.types.length||scheme.query.types.some(type=>!businessTypes.includes(type))||scheme.query.statuses.length>1){ElMessage.warning('此方案包含当前页面尚未支持的搜索条件');return;}
+  query.keyword=scheme.query.keyword;query.types=[...scheme.query.types];query.status=scheme.query.statuses[0]??'';
+  query.from=scheme.query.updatedFrom?.slice(0,10)??'';query.to=scheme.query.updatedTo?.slice(0,10)??'';
+  query.page=0;makeDefault.value=scheme.defaultSearch;selectedId.value=scheme.id;
+  rows.value=[];hasMore.value=false;searchedTypes.value=[];
+}
+function chooseScheme(){const scheme=saved.value.find(s=>s.id===selectedId.value);if(scheme)applyScheme(scheme);}
+async function createScheme(){
+  if(!schemeAvailable.value||!validFilters())return;
+  let name:string;
+  try{name=(await ElMessageBox.prompt('输入搜索方案名称','保存当前搜索条件',{inputValidator:(value:string)=>!!value.trim()&&value.trim().length<=100||'名称须为 1–100 字'})).value.trim();}catch{return;}
+  schemeBusy.value=true;
+  try{const {data,error}=await session.client.POST('/search/saved',{body:{name,query:snapshot(),defaultSearch:makeDefault.value,version:0}});
+    if(error){ElMessage.error(error.error.message);await loadSaved();return;}
+    await loadSaved();selectedId.value=data?.data?.id??'';ElMessage.success('搜索方案已保存');
+  }catch{ElMessage.error('保存搜索方案失败，请重试');}finally{schemeBusy.value=false;}
+}
+async function updateScheme(){
+  const current=saved.value.find(s=>s.id===selectedId.value);if(!current||!validFilters())return;
+  schemeBusy.value=true;
+  try{const {error}=await session.client.PUT('/search/saved/{id}',{params:{path:{id:current.id}},body:{name:current.name,query:snapshot(),defaultSearch:makeDefault.value,version:current.version}});
+    if(error){ElMessage.error(error.error.message);await loadSaved();return;}
+    await loadSaved();ElMessage.success('搜索方案已更新');
+  }catch{ElMessage.error('更新搜索方案失败，请重试');}finally{schemeBusy.value=false;}
+}
+async function renameScheme(){
+  const current=saved.value.find(s=>s.id===selectedId.value);if(!current)return;
+  let name:string;
+  try{name=(await ElMessageBox.prompt('输入新名称','重命名搜索方案',{inputValue:current.name,inputValidator:(value:string)=>!!value.trim()&&value.trim().length<=100||'名称须为 1–100 字'})).value.trim();}catch{return;}
+  if(name===current.name)return;
+  schemeBusy.value=true;
+  try{const {error}=await session.client.PUT('/search/saved/{id}',{params:{path:{id:current.id}},body:{name,query:current.query,defaultSearch:current.defaultSearch,version:current.version}});
+    if(error){ElMessage.error(error.error.message);await loadSaved();return;}
+    await loadSaved();ElMessage.success('搜索方案已重命名');
+  }catch{ElMessage.error('重命名失败，请重试');}finally{schemeBusy.value=false;}
+}
+async function deleteScheme(){
+  const current=saved.value.find(s=>s.id===selectedId.value);if(!current)return;
+  try{await ElMessageBox.confirm(`删除个人搜索方案“${current.name}”？`,'删除确认',{type:'warning'});}catch{return;}
+  schemeBusy.value=true;
+  try{const {error}=await session.client.DELETE('/search/saved/{id}',{params:{path:{id:current.id},query:{version:current.version}}});
+    if(error){ElMessage.error(error.error.message);await loadSaved();return;}
+    selectedId.value='';makeDefault.value=false;await loadSaved();ElMessage.success('搜索方案已删除');
+  }catch{ElMessage.error('删除搜索方案失败，请重试');}finally{schemeBusy.value=false;}
+}
 async function search(){
-  if(!query.keyword.trim()&&!query.status.trim()&&!query.from&&!query.to){ElMessage.warning('请输入关键词或高级筛选条件');return;}
-  if(query.types.length===0){ElMessage.warning('请选择至少一类业务对象');return;}
-  if(query.from&&query.to&&query.from>query.to){ElMessage.warning('开始时间不能晚于结束时间');return;}
+  if(!validFilters())return;
   const current=++sequence;loading.value=true;
   try{
-    const {data,error}=await session.client.POST('/search',{body:{keyword:query.keyword.trim(),types:query.types,statuses:query.status.trim()?[query.status.trim()]:[],updatedFrom:query.from?`${query.from}T00:00:00`:undefined,updatedTo:query.to?`${query.to}T23:59:59`:undefined,page:query.page,size:query.size}});
+    const {data,error}=await session.client.POST('/search',{body:{...snapshot(),page:query.page}});
     if(current!==sequence)return;
     if(error){rows.value=[];hasMore.value=false;ElMessage.error(error.error.message);return;}
     rows.value=data?.data?.items??[];hasMore.value=data?.data?.hasMore??false;searchedTypes.value=data?.data?.searchedTypes??[];
@@ -29,6 +84,9 @@ async function search(){
 function submit(){query.page=0;void search();}
 function open(row:SearchItem){void router.push({path:row.route,query:{keyword:row.type==='SUPPLIER'?row.subtitle:row.title}});}
 watch(()=>session.currentOrganization?.id,()=>{sequence++;rows.value=[];hasMore.value=false;searchedTypes.value=[];query.page=0;});
+watch(()=>session.actorId,()=>{selectedId.value='';saved.value=[];void loadSaved();});
+onMounted(async()=>{await loadSaved();const defaultScheme=saved.value.find(s=>s.defaultSearch);if(defaultScheme)applyScheme(defaultScheme);});
+onBeforeUnmount(()=>{sequence++;});
 </script>
 <template>
   <div class="page">
@@ -41,6 +99,13 @@ watch(()=>session.currentOrganization?.id,()=>{sequence++;rows.value=[];hasMore.
         <el-form-item label="更新时间"><el-date-picker v-model="query.from" type="date" value-format="YYYY-MM-DD" placeholder="开始" style="width:145px"/> — <el-date-picker v-model="query.to" type="date" value-format="YYYY-MM-DD" placeholder="结束" style="width:145px"/></el-form-item>
         <el-form-item><el-button type="primary" :loading="loading" @click="submit">搜索</el-button></el-form-item>
       </el-form>
+    </el-card>
+    <el-card shadow="never" class="filter-card">
+      <el-form inline><el-form-item label="个人搜索方案"><el-select v-model="selectedId" clearable placeholder="选择已有方案" style="width:240px" :disabled="!schemeAvailable||schemeBusy" @change="chooseScheme"><el-option v-for="scheme in saved" :key="scheme.id" :label="`${scheme.name}${scheme.defaultSearch?' · 默认':''}`" :value="scheme.id"/></el-select></el-form-item>
+        <el-form-item><el-checkbox v-model="makeDefault" :disabled="!schemeAvailable||schemeBusy">设为默认</el-checkbox></el-form-item>
+        <el-form-item><el-button :disabled="!schemeAvailable||schemeBusy" @click="createScheme">另存为</el-button><el-button :disabled="!schemeAvailable||!selectedId||schemeBusy" @click="updateScheme">更新条件</el-button><el-button :disabled="!schemeAvailable||!selectedId||schemeBusy" @click="renameScheme">重命名</el-button><el-button type="danger" plain :disabled="!schemeAvailable||!selectedId||schemeBusy" @click="deleteScheme">删除方案</el-button></el-form-item>
+      </el-form>
+      <div v-if="!schemeAvailable" class="subtext">当前账号无个人搜索方案管理权限，仍可在授权范围内直接搜索。</div>
     </el-card>
     <el-alert v-if="searchedTypes.length && searchedTypes.length<query.types.length" title="部分对象因权限或数据范围不足未检索" type="info" :closable="false" style="margin-bottom:12px"/>
     <el-card shadow="never" class="table-card">
