@@ -9,6 +9,11 @@ import java.util.List;
 public interface ConfigurationMapper extends TenantScopedMapper {
     @Select("SELECT COUNT(*) FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0")
     int activeTenantUser(long tenantId,long userId);
+    String ESCALATION_USER_FILTER=" FROM iam_user WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND deleted=0 AND (#{keyword}='' OR INSTR(LOWER(username),LOWER(#{keyword}))>0 OR INSTR(LOWER(display_name),LOWER(#{keyword}))>0 OR CAST(id AS CHAR)=#{keyword})";
+    @Select("SELECT COUNT(*)"+ESCALATION_USER_FILTER)
+    long countEscalationUsers(long tenantId,String keyword);
+    @Select("SELECT id,username,display_name"+ESCALATION_USER_FILTER+" ORDER BY display_name,id LIMIT #{size} OFFSET #{offset}")
+    List<ConfigurationModels.EscalationUserRow> escalationUsers(long tenantId,String keyword,int offset,int size);
     @Select("SELECT setting_value FROM cfg_tenant_setting WHERE tenant_id=#{tenantId} AND setting_key=#{key} FOR UPDATE")
     String currentSettingValue(long tenantId,String key);
     @Select("""

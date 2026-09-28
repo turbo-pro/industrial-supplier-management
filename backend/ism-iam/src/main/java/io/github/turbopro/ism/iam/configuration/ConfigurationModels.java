@@ -21,4 +21,7 @@ public final class ConfigurationModels {
     public record DictionaryItemRow(Long id,String itemCode,String itemLabel,String itemValue,int sortOrder,String status,int version,String source) {}
     public record SettingRow(String settingKey,String valueType,String settingValue,int version) {}
     public record SettingDefinitionRow(String settingKey,String valueType,String defaultValue) {}
+    public record EscalationUserRow(long id,String username,String displayName) {}
+    public record EscalationUser(String id,String username,String displayName) {}
+    public record EscalationUserPage(long total,int page,int size,List<EscalationUser> items) {}
 }

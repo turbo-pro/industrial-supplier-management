@@ -850,6 +850,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/configuration/settings/exit-escalation-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listExitEscalationUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configuration/settings/{settingKey}": {
         parameters: {
             query?: never;
@@ -4356,6 +4372,21 @@ export interface components {
             value: string;
             version: number;
         };
+        EscalationUser: {
+            id: string;
+            username: string;
+            displayName: string;
+        };
+        EscalationUserPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["EscalationUser"][];
+        };
+        EscalationUserPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["EscalationUserPage"];
+        };
         UpdateTenantSetting: {
             value: string;
             version: number;
@@ -6506,6 +6537,33 @@ export interface operations {
                     "application/json": components["schemas"]["SettingListResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    listExitEscalationUsers: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active users of the current tenant eligible to receive exit escalation notices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EscalationUserPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
         };

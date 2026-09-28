@@ -781,6 +781,8 @@ class B0InfrastructureIT {
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",Integer.class,tenantId)).isEqualTo(2);
                     jdbcTemplate.update("UPDATE cfg_tenant_setting SET setting_value='24' WHERE tenant_id=? AND setting_key='exit.autoReminderIntervalHours'",tenantId);
                     jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(9979,?,'exit-escalation','升级接收人','not-a-login-password','ACTIVE')",tenantId);
+                    assertThat(configurationService.escalationUsers("9979",0,20).items()).singleElement().satisfies(user->{assertThat(user.id()).isEqualTo("9979");assertThat(user.displayName()).isEqualTo("升级接收人");});
+                    assertThat(configurationService.escalationUsers("exit-",0,20).items()).extracting(ConfigurationModels.EscalationUser::id).contains("9976","9979").doesNotContain("9977","9978");
                     jdbcTemplate.update("INSERT INTO cfg_tenant_setting(id,tenant_id,setting_key,value_type,setting_value) VALUES(?,?,?,?,?)",99413,tenantId,"exit.escalationRecipientId","INTEGER","9979");
                     jdbcTemplate.update("INSERT INTO cfg_tenant_setting(id,tenant_id,setting_key,value_type,setting_value) VALUES(?,?,?,?,?)",99414,tenantId,"exit.escalationAfterDays","INTEGER","1");
                     exitAutoReminderWorker.poll();

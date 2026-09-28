@@ -9,6 +9,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ConfigurationServiceTest {
+    @Test void escalationDirectoryIsBoundedAndTenantScoped(){
+        var mapper=mock(ConfigurationMapper.class);var service=new ConfigurationService(mapper,mock(SystemConfigurationMapper.class),mock(OperationIdGenerator.class));
+        when(mapper.countEscalationUsers(10,"张")).thenReturn(1L);
+        when(mapper.escalationUsers(10,"张",0,20)).thenReturn(java.util.List.of(new ConfigurationModels.EscalationUserRow(99,"zhang","张经理")));
+        try(var tenant=TenantContext.open(10,7)){
+            var page=service.escalationUsers(" 张 ",0,20);
+            assertEquals(1,page.total());assertEquals("99",page.items().get(0).id());
+            assertThrows(ApiException.class,()->service.escalationUsers("",0,51));
+            assertThrows(ApiException.class,()->service.escalationUsers("x".repeat(101),0,20));
+        }
+        verify(mapper).countEscalationUsers(10,"张");
+        verify(mapper).escalationUsers(10,"张",0,20);
+        verifyNoMoreInteractions(mapper);
+    }
     @Test void escalationPolicyRejectsInvalidRecipientAndThreshold(){
         var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
         when(definitions.settingType("exit.escalationRecipientId")).thenReturn("INTEGER");

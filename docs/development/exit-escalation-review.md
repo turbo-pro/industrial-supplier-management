@@ -7,3 +7,5 @@ V47 增加租户配置 `exit.escalationRecipientId`（默认 `0`，关闭）和 
 验收：`ExitDeadlineReminderTest` 覆盖阈值、不改派；`ExitAssignmentNotificationTest` 覆盖独立模板与收件人；`ConfigurationServiceTest` 覆盖配置边界与无效用户；`B0InfrastructureIT` 在隔离 MySQL 中验证 V47 迁移和双收件箱。`./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test verify` 重跑通过（`B0InfrastructureIT` 15 项、0 失败/错误）；`corepack pnpm --filter @ism/admin build` 通过，当前 Node 20.12.0 低于 Vite 提示的最低版本，需升级本机 Node。首次完整集成测试因本次新增测试用户清理遗漏触发外键错误，已修复并重跑通过。
 
 限制：目前是一层、租户级升级负责人，不是组织逐级上报链；没有跨业务统一任务中心或外部渠道。配置接收人后若被停用，需管理员修正配置或恢复账号，失败台账可见。
+
+后续补全配置可用性：`GET /api/configuration/settings/exit-escalation-users` 仅授权 `system:setting:view` 的租户用户可查，按本租户有效且未删除的账号过滤，支持姓名、用户名或精确 ID 搜索及 1–50 条分页，只返回 ID、用户名、显示名。管理配置页改为搜索选择，不再要求人工查找账号 ID；原有写入时的租户/账号有效性复核不变。`ConfigurationServiceTest` 验证分页边界和租户参数；`B0InfrastructureIT` 在隔离 MySQL 验证有效、停用和外租户过滤。OpenAPI 契约及生成的 TypeScript 类型同步，完整 Maven 集成验证与管理端构建通过。暂未做真实浏览器交互 E2E；本机 Node 20.12.0 仍低于 Vite 建议版本。

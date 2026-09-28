@@ -31,6 +31,14 @@ public class ConfigurationService {
     @Transactional
     public void removeItem(String typeCode,String itemCode,int version){long tenantId=tenant();requireType(tenantId,typeCode);if(mapper.deleteItem(tenantId,typeCode,itemCode,version)!=1)throw new ApiException(CommonErrorCode.CONFLICT);}
     public List<ConfigurationModels.SettingView> settings(){var overrides=mapper.tenantSettings(tenant()).stream().collect(Collectors.toMap(ConfigurationModels.SettingRow::settingKey,Function.identity()));return systemMapper.settings().stream().map(definition->{var value=overrides.get(definition.settingKey());return value==null?new ConfigurationModels.SettingView(definition.settingKey(),definition.valueType(),definition.defaultValue(),0):new ConfigurationModels.SettingView(value.settingKey(),value.valueType(),value.settingValue(),value.version());}).toList();}
+    public ConfigurationModels.EscalationUserPage escalationUsers(String keyword,int page,int size){
+        if(page<0||page>10000||size<1||size>50||keyword!=null&&keyword.length()>100)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        long tenantId=tenant();String search=keyword==null?"":keyword.trim();
+        return new ConfigurationModels.EscalationUserPage(mapper.countEscalationUsers(tenantId,search),page,size,
+            mapper.escalationUsers(tenantId,search,Math.multiplyExact(page,size),size).stream()
+                .map(row->new ConfigurationModels.EscalationUser(Long.toString(row.id()),row.username(),row.displayName())).toList());
+    }
     @Transactional
     public ConfigurationModels.SettingView updateSetting(String key,ConfigurationModels.UpdateSetting command){
         long tenantId=tenant();String type=systemMapper.settingType(key);

@@ -681,6 +681,20 @@ paths:
         '200': { description: Effective tenant settings, content: { application/json: { schema: { $ref: '#/components/schemas/SettingListResponse' } } } }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '403': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/settings/exit-escalation-users:
+    get:
+      operationId: listExitEscalationUsers
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200': { description: Active users of the current tenant eligible to receive exit escalation notices, content: { application/json: { schema: { $ref: '#/components/schemas/EscalationUserPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /configuration/settings/{settingKey}:
     put:
       operationId: updateTenantSetting
@@ -2604,6 +2618,23 @@ components:
         valueType: { type: string, enum: [STRING, URL, INTEGER] }
         value: { type: string }
         version: { type: integer }
+    EscalationUser:
+      type: object
+      required: [id, username, displayName]
+      properties:
+        id: { type: string, pattern: '^[1-9][0-9]*$' }
+        username: { type: string }
+        displayName: { type: string }
+    EscalationUserPage:
+      type: object
+      required: [total, page, size, items]
+      properties:
+        total: { type: integer, format: int64, minimum: 0 }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1 }
+        items: { type: array, items: { $ref: '#/components/schemas/EscalationUser' } }
+    EscalationUserPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/EscalationUserPage' } } }]
     UpdateTenantSetting:
       type: object
       required: [value, version]

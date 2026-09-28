@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -10,6 +10,24 @@ const reminderInterval=ref<components['schemas']['TenantSetting']>();
 const escalationRecipient=ref<components['schemas']['TenantSetting']>();
 const escalationDays=ref<components['schemas']['TenantSetting']>();
 const recipientId=ref('0'),afterDays=ref(3);
+type EscalationUser=components['schemas']['EscalationUser'];
+const userOptions=ref<EscalationUser[]>([]),selectedUser=ref<EscalationUser>(),usersLoading=ref(false);
+const displayedUsers=computed(()=>selectedUser.value&&!userOptions.value.some(user=>user.id===selectedUser.value?.id)
+  ? [selectedUser.value,...userOptions.value] : userOptions.value);
+let usersRequest=0;
+async function searchEscalationUsers(keyword=''){
+  const request=++usersRequest;usersLoading.value=true;
+  try{
+    const {data,error}=await session.client.GET('/configuration/settings/exit-escalation-users',{params:{query:{keyword,page:0,size:50}}});
+    if(request!==usersRequest)return;
+    if(error){userOptions.value=[];ElMessage.error(error.error.message);return;}
+    userOptions.value=data?.data?.items??[];
+    if(recipientId.value!=='0')selectedUser.value=userOptions.value.find(user=>user.id===recipientId.value)??selectedUser.value;
+  }catch{if(request===usersRequest){userOptions.value=[];ElMessage.error('升级接收人列表加载失败');}}
+  finally{if(request===usersRequest)usersLoading.value=false;}
+}
+function changeRecipient(value:string){selectedUser.value=displayedUsers.value.find(user=>user.id===value);}
+function recipientDropdownVisible(visible:boolean){if(visible)void searchEscalationUsers();}
 const days=ref(7),enabled=ref(false),hours=ref(24),loading=ref(false),saving=ref(false);
 async function load(){
   loading.value=true;
@@ -24,7 +42,8 @@ async function load(){
     escalationDays.value=data?.data?.find(item=>item.key==='exit.escalationAfterDays');
     if(reminderEnabled.value)enabled.value=reminderEnabled.value.value==='1';
     if(reminderInterval.value)hours.value=Number(reminderInterval.value.value);
-    if(escalationRecipient.value)recipientId.value=escalationRecipient.value.value;
+    if(escalationRecipient.value){recipientId.value=escalationRecipient.value.value;
+      if(recipientId.value!=='0')void searchEscalationUsers(recipientId.value);else void searchEscalationUsers();}
     if(escalationDays.value)afterDays.value=Number(escalationDays.value.value);
   }catch{ElMessage.error('网络异常，配置加载失败');}finally{loading.value=false;}
 }
@@ -112,7 +131,12 @@ onMounted(load);
       <template #header>退出处置 · 逾期升级</template>
       <el-alert title="默认关闭。须先启用自动催办；达到逾期天数后，随自动催办向指定本租户有效用户发送站内升级通知。不会自动改派或关闭事项。0 表示关闭升级。" type="info" :closable="false"/>
       <el-form v-if="escalationRecipient&&escalationDays" label-position="top" style="margin-top:16px">
-        <el-form-item label="升级接收人用户 ID（0 为关闭）"><el-input v-model="recipientId" :disabled="saving"/></el-form-item>
+        <el-form-item label="升级接收人（仅本租户有效用户）">
+          <el-select v-model="recipientId" filterable remote :remote-method="searchEscalationUsers" :loading="usersLoading" :disabled="saving" style="width:360px" @visible-change="recipientDropdownVisible" @change="changeRecipient">
+            <el-option label="关闭升级" value="0"/>
+            <el-option v-for="user in displayedUsers" :key="user.id" :label="`${user.displayName} (${user.username})`" :value="user.id"/>
+          </el-select>
+        </el-form-item>
         <el-form-item label="逾期满多少天升级"><el-input-number v-model="afterDays" :min="1" :max="365" :precision="0" :disabled="saving"/></el-form-item>
         <el-button type="primary" :loading="saving" @click="saveEscalation">保存升级策略</el-button>
       </el-form>
