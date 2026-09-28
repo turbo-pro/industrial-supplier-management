@@ -84,6 +84,23 @@ class TableViewServiceTest {
         }
         verify(mapper).list(10,7,"resource.person");verify(mapper).list(10,7,"resource.asset");
     }
+    @Test void qualityAndPerformanceCatalogsAreIsolatedAndEnforceRequiredColumns(){
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("quality:ncr:view"),Map.of(),Set.of()))){
+            var quality=service.list("quality.ncr").catalog();
+            assertEquals(List.of("ncrNo","title","severity","quantity","deadline","status"),quality.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("performance.evaluation")).errorCode());
+            var hidden=quality.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.create("quality.ncr",new TableViewModels.Save("隐藏编号",hidden,false,0))).errorCode());
+        }
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("performance:evaluation:view","table:view:manage","table:view:publish"),Map.of(),Set.of()))){
+            var performance=service.list("performance.evaluation").catalog();
+            assertEquals(List.of("supplierName","period","score","facts","status"),performance.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("quality.ncr")).errorCode());
+            var hidden=performance.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.createShared("performance.evaluation",new TableViewModels.Save("隐藏供应商",hidden,false,0))).errorCode());
+        }
+        verify(mapper,never()).ensureOwner(anyLong(),anyLong(),anyString());
+    }
     @Test void staleVersionCannotChangeOtherDefault(){locked();when(mapper.find(10,7,"supplier.master",90)).thenReturn(row(2));
         try(var t=TenantContext.open(10,7);var a=auth()){
             assertEquals(CommonErrorCode.CONFLICT,assertThrows(ApiException.class,()->service.update("supplier.master",90,save(1))).errorCode());

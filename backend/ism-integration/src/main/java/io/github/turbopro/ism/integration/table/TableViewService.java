@@ -18,24 +18,32 @@ public class TableViewService {
         new TableViewModels.Definition("type","类型",false,110),new TableViewModels.Definition("riskLevel","风险",false,90),
         new TableViewModels.Definition("status","状态",false,110),new TableViewModels.Definition("updatedAt","更新时间",false,180));
     private record Registration(String permission,List<TableViewModels.Definition> columns){}
-    private static final Map<String,Registration> TABLES=Map.of(
-        "supplier.master",new Registration("supplier:master:view",SUPPLIER_COLUMNS),
-        "contract.ledger",new Registration("contract:view",List.of(
+    private static final Map<String,Registration> TABLES=Map.ofEntries(
+        Map.entry("supplier.master",new Registration("supplier:master:view",SUPPLIER_COLUMNS)),
+        Map.entry("contract.ledger",new Registration("contract:view",List.of(
             new TableViewModels.Definition("contractNo","合同编号",true,160),new TableViewModels.Definition("name","合同/供应商",true,250),
             new TableViewModels.Definition("amount","金额",false,150),new TableViewModels.Definition("period","期限",false,240),
-            new TableViewModels.Definition("status","状态",false,110))),
-        "project.ledger",new Registration("project:view",List.of(
+            new TableViewModels.Definition("status","状态",false,110)))),
+        Map.entry("project.ledger",new Registration("project:view",List.of(
             new TableViewModels.Definition("projectCode","项目编码",true,150),new TableViewModels.Definition("name","项目/供应商",true,250),
             new TableViewModels.Definition("contractNo","关联合同",false,150),new TableViewModels.Definition("period","计划周期",false,240),
-            new TableViewModels.Definition("status","状态",false,110))),
-        "resource.person",new Registration("resource:person:view",List.of(
+            new TableViewModels.Definition("status","状态",false,110)))),
+        Map.entry("resource.person",new Registration("resource:person:view",List.of(
             new TableViewModels.Definition("code","人员编码",true,140),new TableViewModels.Definition("name","人员/供应商",true,230),
             new TableViewModels.Definition("idNumberMasked","证件号码",false,180),new TableViewModels.Definition("tradeType","工种",false,130),
-            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100))),
-        "resource.asset",new Registration("resource:asset:view",List.of(
+            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100)))),
+        Map.entry("resource.asset",new Registration("resource:asset:view",List.of(
             new TableViewModels.Definition("code","资产编码",true,140),new TableViewModels.Definition("name","资产/供应商",true,230),
             new TableViewModels.Definition("type","类型",false,100),new TableViewModels.Definition("plateNo","车牌号",false,130),
-            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100))));
+            new TableViewModels.Definition("projectCode","所属项目",false,140),new TableViewModels.Definition("status","状态",false,100)))),
+        Map.entry("quality.ncr",new Registration("quality:ncr:view",List.of(
+            new TableViewModels.Definition("ncrNo","编号",true,150),new TableViewModels.Definition("title","不符合项/项目/供应商",true,230),
+            new TableViewModels.Definition("severity","等级",false,100),new TableViewModels.Definition("quantity","缺陷/验收",false,150),
+            new TableViewModels.Definition("deadline","整改期限",false,130),new TableViewModels.Definition("status","状态",false,120)))),
+        Map.entry("performance.evaluation",new Registration("performance:evaluation:view",List.of(
+            new TableViewModels.Definition("supplierName","供应商",true,200),new TableViewModels.Definition("period","评价周期",true,230),
+            new TableViewModels.Definition("score","总分/等级",false,130),new TableViewModels.Definition("facts","质量/安全事实",false,190),
+            new TableViewModels.Definition("status","状态",false,120)))));
     private final TableViewMapper mapper;private final OperationIdGenerator ids;private final ObjectMapper json;private final AuditService audit;
     public TableViewService(TableViewMapper mapper,OperationIdGenerator ids,ObjectMapper json,AuditService audit){this.mapper=mapper;this.ids=ids;this.json=json;this.audit=audit;}
     public TableViewModels.Page list(String tableKey){var catalog=catalog(tableKey);var i=TenantContext.require();return new TableViewModels.Page(tableKey,catalog,20,

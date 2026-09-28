@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import PersonalTableViews from '../components/PersonalTableViews.vue';
 
 type Evaluation = components['schemas']['PerformanceEvaluation'];
 type Supplier = components['schemas']['SupplierSummary'];
@@ -14,6 +15,10 @@ const session = useSessionStore();
 const dimensions: Dimension[] = ['QUALITY', 'DELIVERY', 'SAFETY', 'SERVICE'];
 const labels = { QUALITY: '质量', DELIVERY: '交付', SAFETY: '安全', SERVICE: '服务' };
 const statuses = { DRAFT: '草稿', SUBMITTED: '待审核', APPROVED: '已批准', REJECTED: '已驳回' };
+const columnDefinitions = [{ key: 'supplierName', label: '供应商', required: true, width: 200 }, { key: 'period', label: '评价周期', required: true, width: 230 },
+  { key: 'score', label: '总分/等级', required: false, width: 130 }, { key: 'facts', label: '质量/安全事实', required: false, width: 190 },
+  { key: 'status', label: '状态', required: false, width: 120 }];
+const tableColumns = ref(columnDefinitions.map(c => ({ key: c.key, visible: true, width: c.width })));
 const rows = ref<Evaluation[]>([]);
 const suppliers = ref<Supplier[]>([]);
 const events = ref<Event[]>([]);
@@ -184,12 +189,8 @@ onMounted(() => { load(); loadRule(); });
   <div class="page">
     <div class="page-heading"><div><h1>供应商绩效</h1><p>四维评分、事实快照、权重配置与独立审核</p></div><div><el-button @click="openRule">权重配置</el-button><el-button type="primary" @click="openCreate">新建评价</el-button></div></div>
     <el-card shadow="never" class="filter-card"><el-form inline><el-form-item label="供应商 ID"><el-input v-model="filter.supplierId" clearable /></el-form-item><el-form-item label="状态"><el-select v-model="filter.status" clearable style="width:140px"><el-option v-for="(label,key) in statuses" :key="key" :label="label" :value="key" /></el-select></el-form-item><el-button type="primary" @click="filter.page=0;load()">查询</el-button></el-form></el-card>
-    <el-card shadow="never" class="table-card"><el-table v-loading="loading" :data="rows">
-      <el-table-column label="供应商" min-width="180"><template #default="{row}"><strong>{{row.supplierName}}</strong><div class="subtext">{{row.supplierCode}}</div></template></el-table-column>
-      <el-table-column label="评价周期" width="230"><template #default="{row}">{{row.periodStart}} 至 {{row.periodEnd}}</template></el-table-column>
-      <el-table-column label="总分/等级" width="115"><template #default="{row}">{{row.totalScore}} / {{row.grade}}</template></el-table-column>
-      <el-table-column label="质量/安全事实" min-width="170"><template #default="{row}">质量 {{row.qualityNcrOpen}}/{{row.qualityNcrTotal}} 未关闭<br />安全 {{row.safetyIssueOpen}}/{{row.safetyIssueTotal}} 未关闭</template></el-table-column>
-      <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="row.status==='APPROVED'?'success':row.status==='REJECTED'?'danger':'warning'">{{statuses[row.status as keyof typeof statuses]}}</el-tag></template></el-table-column>
+    <el-card shadow="never" class="table-card"><PersonalTableViews table-key="performance.evaluation" :defaults="columnDefinitions" @change="tableColumns=$event"/><el-table :key="tableColumns.map(c=>c.key+':'+c.visible+':'+c.width).join('|')" v-loading="loading" :data="rows">
+      <el-table-column v-for="column in tableColumns.filter(c=>c.visible)" :key="column.key" :label="columnDefinitions.find(c=>c.key===column.key)?.label" :width="column.width"><template #default="{row}"><template v-if="column.key==='supplierName'"><strong>{{row.supplierName}}</strong><div class="subtext">{{row.supplierCode}}</div></template><template v-else-if="column.key==='period'">{{row.periodStart}} 至 {{row.periodEnd}}</template><template v-else-if="column.key==='score'">{{row.totalScore}} / {{row.grade}}</template><template v-else-if="column.key==='facts'">质量 {{row.qualityNcrOpen}}/{{row.qualityNcrTotal}} 未关闭<br/>安全 {{row.safetyIssueOpen}}/{{row.safetyIssueTotal}} 未关闭</template><el-tag v-else-if="column.key==='status'" :type="row.status==='APPROVED'?'success':row.status==='REJECTED'?'danger':'warning'">{{statuses[row.status as keyof typeof statuses]}}</el-tag></template></el-table-column>
       <el-table-column label="操作" width="250"><template #default="{row}"><el-button link @click="showDetail(row)">详情</el-button><el-button v-if="row.status==='DRAFT'||row.status==='REJECTED'" link type="primary" @click="openEdit(row)">编辑</el-button><el-button v-if="row.status==='DRAFT'" link type="primary" @click="submit(row)">提交</el-button><template v-if="row.status==='SUBMITTED' && row.createdBy !== session.actorId"><el-button link type="success" @click="review(row,'APPROVE')">批准</el-button><el-button link type="danger" @click="review(row,'REJECT')">驳回</el-button></template><span v-else-if="row.status==='SUBMITTED'">待其他用户审核</span></template></el-table-column>
     </el-table><div class="pagination"><el-pagination :current-page="filter.page+1" :total="total" :page-size="filter.size" layout="total, prev, pager, next" @current-change="(page: number) => {filter.page=page-1;load()}" /></div></el-card>
     <el-dialog v-model="ruleDialog" title="租户绩效权重配置" width="570px"><p>四项权重合计必须为 100。修改后只影响新建评价，历史评价保留原权重。</p><el-form label-position="top"><el-row :gutter="16"><el-col :span="12"><el-form-item label="质量权重"><el-input-number v-model="ruleForm.qualityWeight" :min="0" :max="100" /></el-form-item></el-col><el-col :span="12"><el-form-item label="交付权重"><el-input-number v-model="ruleForm.deliveryWeight" :min="0" :max="100" /></el-form-item></el-col><el-col :span="12"><el-form-item label="安全权重"><el-input-number v-model="ruleForm.safetyWeight" :min="0" :max="100" /></el-form-item></el-col><el-col :span="12"><el-form-item label="服务权重"><el-input-number v-model="ruleForm.serviceWeight" :min="0" :max="100" /></el-form-item></el-col></el-row></el-form><template #footer><el-button @click="ruleDialog=false">取消</el-button><el-button type="primary" @click="saveRule">保存权重</el-button></template></el-dialog>

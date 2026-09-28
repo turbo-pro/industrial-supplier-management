@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import PersonalTableViews from '../components/PersonalTableViews.vue';
 
 type Ncr = components['schemas']['QualityNcr'];
 type Project = components['schemas']['ProjectSummary'];
@@ -26,6 +27,10 @@ const action = reactive({ rootCause: '', correction: '', preventiveAction: '', f
 const states = { OPEN: '待整改', PENDING_REVIEW: '待复验', CLOSED: '已关闭' };
 const severities = { LOW: '低', MEDIUM: '中', HIGH: '高', CRITICAL: '重大' };
 const categories = { MATERIAL: '来料', PROCESS: '过程', DELIVERY: '交付', DOCUMENT: '文件', OTHER: '其他' };
+const columnDefinitions = [{ key: 'ncrNo', label: '编号', required: true, width: 150 }, { key: 'title', label: '不符合项/项目/供应商', required: true, width: 230 },
+  { key: 'severity', label: '等级', required: false, width: 100 }, { key: 'quantity', label: '缺陷/验收', required: false, width: 150 },
+  { key: 'deadline', label: '整改期限', required: false, width: 130 }, { key: 'status', label: '状态', required: false, width: 120 }];
+const tableColumns = ref(columnDefinitions.map(c => ({ key: c.key, visible: true, width: c.width })));
 
 async function load() {
   loading.value = true;
@@ -120,13 +125,8 @@ onMounted(load);
       <el-form-item label="状态"><el-select v-model="filter.status" clearable style="width:140px"><el-option v-for="(label,key) in states" :key="key" :label="label" :value="key" /></el-select></el-form-item>
       <el-button type="primary" @click="filter.page=0;load()">查询</el-button>
     </el-form></el-card>
-    <el-card shadow="never" class="table-card"><el-table v-loading="loading" :data="rows">
-      <el-table-column prop="ncrNo" label="编号" width="150" />
-      <el-table-column label="不符合项" min-width="230"><template #default="{row}"><strong>{{row.title}}</strong><div class="subtext">{{row.projectName}} · {{row.supplierName}}</div></template></el-table-column>
-      <el-table-column label="等级" width="80"><template #default="{row}">{{severities[row.severity as keyof typeof severities]}}</template></el-table-column>
-      <el-table-column label="缺陷/验收" width="140"><template #default="{row}">{{row.defectiveQuantity}} / {{row.inspectedQuantity}} {{row.unit}}</template></el-table-column>
-      <el-table-column prop="deadline" label="整改期限" width="120" />
-      <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="row.overdue?'danger':row.status==='CLOSED'?'success':'warning'">{{row.overdue?'已逾期':states[row.status as keyof typeof states]}}</el-tag></template></el-table-column>
+    <el-card shadow="never" class="table-card"><PersonalTableViews table-key="quality.ncr" :defaults="columnDefinitions" @change="tableColumns=$event"/><el-table :key="tableColumns.map(c=>c.key+':'+c.visible+':'+c.width).join('|')" v-loading="loading" :data="rows">
+      <el-table-column v-for="column in tableColumns.filter(c=>c.visible)" :key="column.key" :label="columnDefinitions.find(c=>c.key===column.key)?.label" :width="column.width"><template #default="{row}"><template v-if="column.key==='title'"><strong>{{row.title}}</strong><div class="subtext">{{row.projectName}} · {{row.supplierName}}</div></template><template v-else-if="column.key==='severity'">{{severities[row.severity as keyof typeof severities]}}</template><template v-else-if="column.key==='quantity'">{{row.defectiveQuantity}} / {{row.inspectedQuantity}} {{row.unit}}</template><el-tag v-else-if="column.key==='status'" :type="row.overdue?'danger':row.status==='CLOSED'?'success':'warning'">{{row.overdue?'已逾期':states[row.status as keyof typeof states]}}</el-tag><template v-else>{{row[column.key]??'—'}}</template></template></el-table-column>
       <el-table-column label="操作" width="210"><template #default="{row}"><el-button v-if="row.status==='OPEN'" link type="primary" @click="openAction(row)">提交措施</el-button><template v-if="row.status==='PENDING_REVIEW'"><el-button link type="success" @click="verify(row,'PASS')">通过</el-button><el-button link type="danger" @click="verify(row,'REJECT')">驳回</el-button></template><el-button link @click="showEvents(row)">历程</el-button></template></el-table-column>
     </el-table><div class="pagination"><el-pagination :current-page="filter.page+1" :total="total" :page-size="filter.size" layout="total, prev, pager, next" @current-change="(page: number) => {filter.page=page-1;load()}" /></div></el-card>
     <el-dialog v-model="createDialog" title="登记质量不符合项" width="760px"><el-form label-position="top"><el-row :gutter="16">
