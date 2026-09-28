@@ -1,6 +1,6 @@
 # 个人表格列方案
 
-对应完整推进计划 B2-07 的个人方案部分。当前接入供应商档案 `supplier.master`、合同台账 `contract.ledger`、项目台账 `project.ledger`，并提供通用列方案 API、受控列目录及可复用 `PersonalTableViews` 管理组件。公共/租户级方案和其余业务表接入未完成，不能将 B2-07 整包标为完成。合同/项目接入详见 [台账验收](ledger-table-views-review.md)。
+对应完整推进计划 B2-07 的个人方案部分。当前接入供应商档案 `supplier.master`、合同台账 `contract.ledger`、项目台账 `project.ledger`，并提供通用列方案 API、受控列目录及可复用 `PersonalTableViews` 管理组件。后续已将此组件接入人员/车辆设备，并补 [租户共享方案](tenant-shared-table-views-review.md)；其他业务表与真实后端浏览器 E2E 未完成，不能将 B2-07 整包标为完成。合同/项目接入详见 [台账验收](ledger-table-views-review.md)。
 
 ## 可独立验收的行为
 

@@ -36,7 +36,19 @@ class TableViewServiceTest {
     }verifyNoInteractions(mapper);}
     @Test void privateListUsesOnlyCurrentIdentity(){try(var t=TenantContext.open(10,7);var a=auth()){
         assertEquals(6,service.list("supplier.master").catalog().size());
-    }verify(mapper).list(10,7,"supplier.master");}
+        assertFalse(service.list("supplier.master").canPublish());
+    }verify(mapper,times(2)).list(10,7,"supplier.master");}
+    @Test void sharedViewsRequireSeparatePublishPermissionAndRegisteredBusinessTable(){
+        try(var t=TenantContext.open(10,7);var a=auth()){
+            assertThrows(ApiException.class,()->service.createShared("supplier.master",save(0)));
+            assertThrows(ApiException.class,()->service.updateShared("supplier.master",90,save(0)));
+            assertThrows(ApiException.class,()->service.deleteShared("supplier.master",90,0));
+        }
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("table:view:manage","table:view:publish"),Map.of(),Set.of()))){
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.createShared("supplier.master",save(0))).errorCode());
+        }
+        verify(mapper,never()).ensureOwner(anyLong(),eq(0L),anyString());
+    }
     @Test void catalogRequiresEachTablesOwnBusinessPermission(){
         try(var t=TenantContext.open(10,7);var a=auth()){
             for(var key:List.of("contract.ledger","project.ledger","resource.person","resource.asset"))assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list(key)).errorCode());

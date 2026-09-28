@@ -13,5 +13,6 @@ public final class TableViewModels {
                        boolean defaultView,@PositiveOrZero int version){}
     public record Row(long id,String viewName,String columnsJson,boolean defaultView,int version,LocalDateTime updatedAt){}
     public record View(String id,String name,List<Column> columns,boolean defaultView,int version,LocalDateTime updatedAt){}
-    public record Page(String tableKey,List<Definition> catalog,int maxPersonalViews,List<View> views){}
+    public record Page(String tableKey,List<Definition> catalog,int maxPersonalViews,List<View> views,
+                       List<View> sharedViews,boolean canPublish){}
 }

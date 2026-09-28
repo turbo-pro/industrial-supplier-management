@@ -52,6 +52,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/table-views/{tableKey}/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Publish a tenant-shared view; requires table:view:manage, independent table:view:publish, and the registered table's view permission. */
+        post: operations["createTenantSharedTableView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/table-views/{tableKey}/shared/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateTenantSharedTableView"];
+        post?: never;
+        delete: operations["deleteTenantSharedTableView"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/restriction-explanation": {
         parameters: {
             query?: never;
@@ -2456,6 +2489,8 @@ export interface components {
             catalog: components["schemas"]["PersonalTableColumnDefinition"][];
             maxPersonalViews: number;
             views: components["schemas"]["PersonalTableView"][];
+            sharedViews: components["schemas"]["PersonalTableView"][];
+            canPublish: boolean;
         };
         PersonalTableViewResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["PersonalTableView"];
@@ -4674,7 +4709,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Registered columns and current user's private views */
+            /** @description Registered columns */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4765,6 +4800,98 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    createTenantSharedTableView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tableKey: components["schemas"]["PersonalTableKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePersonalTableView"];
+            };
+        };
+        responses: {
+            /** @description Published shared view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTableViewResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateTenantSharedTableView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tableKey: components["schemas"]["PersonalTableKey"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePersonalTableView"];
+            };
+        };
+        responses: {
+            /** @description Updated shared view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTableViewResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    deleteTenantSharedTableView: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                tableKey: components["schemas"]["PersonalTableKey"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted shared view */
             200: {
                 headers: {
                     [name: string]: unknown;

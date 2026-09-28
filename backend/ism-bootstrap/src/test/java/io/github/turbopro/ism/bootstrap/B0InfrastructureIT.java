@@ -1315,6 +1315,7 @@ class B0InfrastructureIT {
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantA,"TABLE_VIEW_A","列方案租户 A");
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantB,"TABLE_VIEW_B","列方案租户 B");
         var permission=new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","resource:person:view","resource:asset:view","table:view:manage"),Map.of(),Set.of());
+        var publisherPermission=new PermissionSnapshot(Set.of("supplier:master:view","table:view:manage","table:view:publish"),Map.of(),Set.of());
         var columns=List.of("code","name","type","riskLevel","status","updatedAt").stream().map(k->new io.github.turbopro.ism.integration.table.TableViewModels.Column(k,!k.equals("type"),160)).toList();
         String firstId,secondId;
         try {
@@ -1390,6 +1391,33 @@ class B0InfrastructureIT {
                     tableViewService.delete(resourceKey,Long.parseLong(resourceView.id()),1);
                     assertThat(tableViewService.list(resourceKey).views()).isEmpty();
                 }
+            }
+            String sharedId;
+            try(var tenant=TenantContext.open(tenantA,owner);var authorization=AuthorizationContext.open(publisherPermission)){
+                var shared=tableViewService.createShared(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("租户通用",columns,true,0));
+                sharedId=shared.id();
+                assertThat(tableViewService.list(key).canPublish()).isTrue();
+                assertThat(tableViewService.list(key).sharedViews()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(sharedId);
+                assertThat(tableViewService.list(key).views()).filteredOn(io.github.turbopro.ism.integration.table.TableViewModels.View::defaultView).hasSize(1);
+                assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND operator_id=? AND action='TABLE_VIEW_SHARED_CREATE'",Long.class,tenantA,owner)).isOne();
+                assertThatThrownBy(()->tableViewService.createShared(key,new io.github.turbopro.ism.integration.table.TableViewModels.Save("租户通用",columns,false,0))).isInstanceOf(ApiException.class);
+            }
+            try(var tenant=TenantContext.open(tenantA,otherOwner);var authorization=AuthorizationContext.open(permission)){
+                assertThat(tableViewService.list(key).sharedViews()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(sharedId);
+                assertThat(tableViewService.list(key).canPublish()).isFalse();
+                assertThatThrownBy(()->tableViewService.updateShared(key,Long.parseLong(sharedId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("越权修改",columns,false,0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->tableViewService.delete(key,Long.parseLong(sharedId),0)).isInstanceOf(ApiException.class);
+            }
+            try(var tenant=TenantContext.open(tenantB,owner);var authorization=AuthorizationContext.open(publisherPermission)){
+                assertThat(tableViewService.list(key).sharedViews()).isEmpty();
+                assertThatThrownBy(()->tableViewService.updateShared(key,Long.parseLong(sharedId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("跨租户修改",columns,false,0))).isInstanceOf(ApiException.class);
+            }
+            try(var tenant=TenantContext.open(tenantA,owner);var authorization=AuthorizationContext.open(publisherPermission)){
+                var updated=tableViewService.updateShared(key,Long.parseLong(sharedId),new io.github.turbopro.ism.integration.table.TableViewModels.Save("租户通用",columns,false,0));
+                assertThat(updated.version()).isOne();
+                assertThatThrownBy(()->tableViewService.deleteShared(key,Long.parseLong(sharedId),0)).isInstanceOf(ApiException.class);
+                tableViewService.deleteShared(key,Long.parseLong(sharedId),1);
+                assertThat(tableViewService.list(key).sharedViews()).isEmpty();
             }
         }finally{
             jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id IN (?,?)",tenantA,tenantB);
