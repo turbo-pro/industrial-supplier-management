@@ -101,6 +101,23 @@ class TableViewServiceTest {
         }
         verify(mapper,never()).ensureOwner(anyLong(),anyLong(),anyString());
     }
+    @Test void safetyIssueAndAttendanceCatalogsHaveSeparateReadRightsAndFixedIdentityColumns(){
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:issue:view"),Map.of(),Set.of()))){
+            var issue=service.list("safety.issue").catalog();
+            assertEquals(List.of("issueNo","title","severity","deadline","status"),issue.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("safety.attendance")).errorCode());
+            var hidden=issue.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.create("safety.issue",new TableViewModels.Save("隐藏编号",hidden,false,0))).errorCode());
+        }
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:attendance:view"),Map.of(),Set.of()))){
+            var attendance=service.list("safety.attendance").catalog();
+            assertEquals(List.of("personName","supplierName","projectName","siteName","checkInAt","checkOutAt","status"),attendance.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("safety.issue")).errorCode());
+            var hidden=attendance.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.create("safety.attendance",new TableViewModels.Save("隐藏人员",hidden,false,0))).errorCode());
+        }
+        verify(mapper,never()).ensureOwner(anyLong(),anyLong(),anyString());
+    }
     @Test void staleVersionCannotChangeOtherDefault(){locked();when(mapper.find(10,7,"supplier.master",90)).thenReturn(row(2));
         try(var t=TenantContext.open(10,7);var a=auth()){
             assertEquals(CommonErrorCode.CONFLICT,assertThrows(ApiException.class,()->service.update("supplier.master",90,save(1))).errorCode());

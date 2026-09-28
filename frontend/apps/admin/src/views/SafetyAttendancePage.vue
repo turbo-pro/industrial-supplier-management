@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import PersonalTableViews from '../components/PersonalTableViews.vue';
 
 type Attendance = components['schemas']['SafetyAttendance'];
 type Person = components['schemas']['SupplierPerson'];
@@ -15,6 +16,11 @@ const persons = ref<Person[]>([]);
 const total = ref(0);
 const query = reactive({ personId: '', openOnly: false, page: 0, size: 20 });
 const form = reactive({ personId: '', siteName: '' });
+const columnDefinitions = [{ key: 'personName', label: '人员', required: true, width: 190 }, { key: 'supplierName', label: '供应商', required: false, width: 180 },
+  { key: 'projectName', label: '项目', required: false, width: 180 }, { key: 'siteName', label: '现场位置', required: true, width: 160 },
+  { key: 'checkInAt', label: '签到时间', required: false, width: 190 }, { key: 'checkOutAt', label: '签退时间', required: false, width: 190 },
+  { key: 'status', label: '状态', required: false, width: 110 }];
+const tableColumns = ref(columnDefinitions.map(c => ({ key: c.key, visible: true, width: c.width })));
 
 async function load() {
   loading.value = true;
@@ -87,15 +93,10 @@ onMounted(load);
       </el-form>
     </el-card>
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="loading" :data="rows">
-        <el-table-column label="人员" min-width="160"><template #default="{row}">{{ row.personName }}<div class="subtext">{{ row.personCode }}</div></template></el-table-column>
-        <el-table-column prop="supplierName" label="供应商" min-width="160" />
-        <el-table-column prop="projectName" label="项目" min-width="160" />
-        <el-table-column prop="siteName" label="现场位置" min-width="150" />
-        <el-table-column prop="checkInAt" label="签到时间" min-width="170" />
-        <el-table-column prop="checkOutAt" label="签退时间" min-width="170" />
-        <el-table-column label="状态" width="100"><template #default="{row}"><el-tag :type="row.checkOutAt?'info':'success'">{{row.checkOutAt?'已签退':'在场'}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="100"><template #default="{row}"><el-button v-if="!row.checkOutAt" link type="primary" @click="checkOut(row)">签退</el-button></template></el-table-column>
+      <PersonalTableViews table-key="safety.attendance" :defaults="columnDefinitions" @change="tableColumns=$event"/>
+      <el-table :key="tableColumns.map(c=>c.key+':'+c.visible+':'+c.width).join('|')" v-loading="loading" :data="rows">
+        <el-table-column v-for="column in tableColumns.filter(c=>c.visible)" :key="column.key" :label="columnDefinitions.find(c=>c.key===column.key)?.label" :width="column.width"><template #default="{row}"><template v-if="column.key==='personName'">{{row.personName}}<div class="subtext">{{row.personCode}}</div></template><el-tag v-else-if="column.key==='status'" :type="row.checkOutAt?'info':'success'">{{row.checkOutAt?'已签退':'在场'}}</el-tag><template v-else>{{row[column.key]??'—'}}</template></template></el-table-column>
+        <el-table-column label="操作" width="100" fixed="right"><template #default="{row}"><el-button v-if="!row.checkOutAt" link type="primary" @click="checkOut(row)">签退</el-button></template></el-table-column>
       </el-table>
       <div class="pagination"><el-pagination :current-page="query.page+1" :total="total" :page-size="query.size" layout="total, prev, pager, next" @current-change="(page: number) => {query.page=page-1;load()}" /></div>
     </el-card>

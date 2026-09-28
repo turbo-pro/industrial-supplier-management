@@ -43,7 +43,16 @@ public class TableViewService {
         Map.entry("performance.evaluation",new Registration("performance:evaluation:view",List.of(
             new TableViewModels.Definition("supplierName","供应商",true,200),new TableViewModels.Definition("period","评价周期",true,230),
             new TableViewModels.Definition("score","总分/等级",false,130),new TableViewModels.Definition("facts","质量/安全事实",false,190),
-            new TableViewModels.Definition("status","状态",false,120)))));
+            new TableViewModels.Definition("status","状态",false,120)))),
+        Map.entry("safety.issue",new Registration("safety:issue:view",List.of(
+            new TableViewModels.Definition("issueNo","隐患编号",true,150),new TableViewModels.Definition("title","隐患/项目/供应商",true,260),
+            new TableViewModels.Definition("severity","等级",false,100),new TableViewModels.Definition("deadline","整改期限",false,130),
+            new TableViewModels.Definition("status","状态",false,120)))),
+        Map.entry("safety.attendance",new Registration("safety:attendance:view",List.of(
+            new TableViewModels.Definition("personName","人员",true,190),new TableViewModels.Definition("supplierName","供应商",false,180),
+            new TableViewModels.Definition("projectName","项目",false,180),new TableViewModels.Definition("siteName","现场位置",true,160),
+            new TableViewModels.Definition("checkInAt","签到时间",false,190),new TableViewModels.Definition("checkOutAt","签退时间",false,190),
+            new TableViewModels.Definition("status","状态",false,110)))));
     private final TableViewMapper mapper;private final OperationIdGenerator ids;private final ObjectMapper json;private final AuditService audit;
     public TableViewService(TableViewMapper mapper,OperationIdGenerator ids,ObjectMapper json,AuditService audit){this.mapper=mapper;this.ids=ids;this.json=json;this.audit=audit;}
     public TableViewModels.Page list(String tableKey){var catalog=catalog(tableKey);var i=TenantContext.require();return new TableViewModels.Page(tableKey,catalog,20,
