@@ -1383,6 +1383,21 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'MAINTENANCE',CURRENT_DATE,CURRENT_DATE,9,9,9)",row[0]+20,row[1],row[2],row[0],"BIZ-P"+row[0],"Business Project "+row[0]);
                 jdbcTemplate.update("INSERT INTO res_supplier_person(id,tenant_id,organization_id,supplier_id,project_id,person_code,person_name,id_type,id_number_hash,id_number_masked,mobile,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Person','NATIONAL_ID',?,'********1234','13800000000',9,9)",row[0]+30,row[1],row[2],row[0],row[0]+20,"BIZ-PER"+row[0],String.format("%064d",row[0]));
                 jdbcTemplate.update("INSERT INTO res_supplier_asset(id,tenant_id,organization_id,supplier_id,project_id,asset_code,asset_name,asset_type,plate_no,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Asset','VEHICLE',?,9,9)",row[0]+40,row[1],row[2],row[0],row[0]+20,"BIZ-A"+row[0],"BIZ-PLATE"+row[0]);
+                jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,9,'search-evidence.pdf','application/pdf',1,?,'LOCAL',?,'ACTIVE')",row[0]+70,row[1],String.format("%064d",row[0]+70),"search/"+row[0]);
+                jdbcTemplate.update("INSERT INTO saf_issue(id,tenant_id,organization_id,project_id,supplier_id,issue_no,title,category,severity,description,discovered_at,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Safety','GENERAL','LOW','Fixture',CURRENT_TIMESTAMP,CURRENT_DATE,9,9,9)",row[0]+50,row[1],row[2],row[0]+20,row[0],"BIZ-SAFE"+row[0]);
+                jdbcTemplate.update("INSERT INTO qua_nonconformance(id,tenant_id,organization_id,project_id,supplier_id,ncr_no,title,category,severity,description,inspection_date,inspected_quantity,defective_quantity,unit,evidence_file_id,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Quality','PRODUCT','LOW','Fixture',CURRENT_DATE,10,1,'件',?,CURRENT_DATE,9,9,9)",row[0]+60,row[1],row[2],row[0]+20,row[0],"BIZ-NCR"+row[0],row[0]+70);
+            }
+            var issueTypes=Set.of(SearchModels.EntityType.SAFETY_ISSUE,SearchModels.EntityType.QUALITY_NCR);
+            var issueRequest=new SearchModels.SearchRequest("BIZ-",issueTypes,Set.of(),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:issue:view","quality:ncr:view"),Map.of("safety:issue",DataScope.projects(Set.of(98141L)),"quality:ncr",DataScope.organizations(Set.of(orgA))),Set.of()))){
+                assertThat(searchService.search(issueRequest).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98171","98181");
+                assertThat(searchService.search(issueRequest).items()).extracting(SearchModels.SearchItem::route).contains("/safety/issues","/quality/nonconformances");
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("quality:ncr:view"),Map.of("quality:ncr",DataScope.owned()),Set.of()))){
+                assertThat(searchService.search(issueRequest).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98181","98182");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:issue:view","quality:ncr:view"),Map.of("safety:issue",DataScope.all(),"quality:ncr",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(issueRequest).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98173","98183");
             }
             var types=Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT,SearchModels.EntityType.PERSON,SearchModels.EntityType.ASSET);
             var request=new SearchModels.SearchRequest("BIZ-",types,Set.of(),null,null,0,20);
@@ -1411,6 +1426,9 @@ class B0InfrastructureIT {
                 assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143","98153","98163");
             }
         }finally{
+            jdbcTemplate.update("DELETE FROM qua_nonconformance WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM saf_issue WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM res_supplier_asset WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id IN (?,?)",tenantA,tenantB);

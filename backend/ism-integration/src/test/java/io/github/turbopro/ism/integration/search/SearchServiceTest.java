@@ -63,4 +63,19 @@ class SearchServiceTest {
             verifyNoInteractions(mapper);
         }
     }
+    @Test void issueSearchUsesSeparatePermissionsAndScopes(){
+        when(mapper.safetyIssues(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("PROJECT_SET"),eq(Set.of()),eq(Set.of(31L)),eq(9L)))
+            .thenReturn(List.of(new SearchModels.SearchRow(71,"SAFETY_ISSUE","隐患甲","SAFE-71 · 供应商甲","OPEN","/safety/issues",LocalDateTime.of(2026,1,1,0,0),18L,9L)));
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:issue:view"),Map.of("safety:issue",DataScope.projects(Set.of(31L)),"quality:ncr",DataScope.all()),Set.of()))){
+            var result=service.search(new SearchModels.SearchRequest("甲",Set.of(SearchModels.EntityType.SAFETY_ISSUE,SearchModels.EntityType.QUALITY_NCR),Set.of(),null,null,0,20));
+            assertThat(result.searchedTypes()).containsExactly(SearchModels.EntityType.SAFETY_ISSUE);
+            assertThat(result.items()).extracting(SearchModels.SearchItem::id).containsExactly("71");
+            verify(mapper,never()).qualityNcrs(anyLong(),anyString(),anySet(),any(),any(),anyInt(),anyString(),anySet(),anySet(),anyLong());
+        }
+        clearInvocations(mapper);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:issue:view","quality:ncr:view"),Map.of("safety:issue",DataScope.projects(Set.of()),"quality:ncr",DataScope.organizations(Set.of())),Set.of()))){
+            assertThat(service.search(new SearchModels.SearchRequest("甲",Set.of(SearchModels.EntityType.SAFETY_ISSUE,SearchModels.EntityType.QUALITY_NCR),Set.of(),null,null,0,20)).items()).isEmpty();
+            verifyNoInteractions(mapper);
+        }
+    }
 }
