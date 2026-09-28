@@ -11,6 +11,11 @@ import org.springframework.web.bind.annotation.*;
 public class ExitTaskController {
     private final ExitTaskService service;private final ApiResponseFactory responses;
     public ExitTaskController(ExitTaskService service,ApiResponseFactory responses){this.service=service;this.responses=responses;}
+    @GetMapping("/monitor") @RequiresPermission("supplier:exit:monitor")
+    public ApiResponse<ExitTaskModels.MonitorPage> monitor(@RequestParam(required=false) @Size(max=100) String keyword,
+        @RequestParam(required=false) String code,@RequestParam(defaultValue="false") boolean unassignedOnly,
+        @RequestParam(defaultValue="false") boolean overdueOnly,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,
+        @RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.monitor(keyword,code,unassignedOnly,overdueOnly,page,size));}
     @GetMapping("/mine") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitTaskModels.Page> mine(@RequestParam(required=false) @Size(max=100) String keyword,
         @RequestParam(required=false) String code,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,

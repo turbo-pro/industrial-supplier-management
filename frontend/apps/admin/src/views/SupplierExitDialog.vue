@@ -6,7 +6,7 @@ import { useSessionStore } from '../stores/session';
 type Application=components['schemas']['ExitApplication'];
 type Entity=components['schemas']['ExitEntity'];
 type ReminderFailure=components['schemas']['ExitReminderFailure'];
-const props=defineProps<{modelValue:boolean;supplier:components['schemas']['SupplierSummary']|null}>();
+const props=defineProps<{modelValue:boolean;supplier:Pick<components['schemas']['SupplierSummary'],'id'|'name'>|null}>();
 const emit=defineEmits<{ 'update:modelValue':[value:boolean];changed:[] }>();
 const visible=computed({get:()=>props.modelValue,set:(value:boolean)=>emit('update:modelValue',value)});
 const session=useSessionStore(),rows=ref<Application[]>([]),page=ref(0),total=ref(0),loading=ref(false),busy=ref(false);

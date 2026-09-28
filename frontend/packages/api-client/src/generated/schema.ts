@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/supplier-exit-tasks/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Open submitted-exit disposition snapshots across suppliers within live supplier data scope; requires supplier:exit:monitor. This is read-only, not a completion or external recovery signal. */
+        get: operations["monitorSupplierExitTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/supplier-exit-tasks/mine": {
         parameters: {
             query?: never;
@@ -4158,6 +4175,37 @@ export interface components {
                 items: components["schemas"]["MyExitTask"][];
             };
         };
+        ExitMonitorItem: {
+            id: string;
+            applicationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            organizationId: string;
+            code: string;
+            sourceId: string;
+            route: string;
+            note?: string | null;
+            assigneeId?: string | null;
+            /** Format: date-time */
+            assignedAt?: string | null;
+            /** Format: date-time */
+            checkedAt: string;
+            /** Format: date */
+            dueDate?: string | null;
+            /** Format: date-time */
+            lastRemindedAt?: string | null;
+            overdue: boolean;
+        };
+        ExitMonitorPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["ExitMonitorItem"][];
+            };
+        };
         MessageTemplateListResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["MessageTemplate"][];
         };
@@ -4669,6 +4717,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    monitorSupplierExitTasks: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                code?: "OPEN_CONTRACT" | "OPEN_PROJECT" | "OPEN_PERSON" | "OPEN_ASSET" | "OPEN_SAFETY" | "OPEN_ATTENDANCE" | "OPEN_QUALITY" | "OPEN_IMPROVEMENT";
+                unassignedOnly?: boolean;
+                overdueOnly?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped live open disposition snapshot page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitMonitorPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
     listMySupplierExitTasks: {
         parameters: {
             query?: {

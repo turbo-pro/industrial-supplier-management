@@ -6,6 +6,24 @@ info:
 servers:
   - url: /api
 paths:
+  /supplier-exit-tasks/monitor:
+    get:
+      operationId: monitorSupplierExitTasks
+      tags: [Supplier Exit]
+      description: Open submitted-exit disposition snapshots across suppliers within live supplier data scope; requires supplier:exit:monitor. This is read-only, not a completion or external recovery signal.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: code, in: query, schema: { type: string, enum: [OPEN_CONTRACT, OPEN_PROJECT, OPEN_PERSON, OPEN_ASSET, OPEN_SAFETY, OPEN_ATTENDANCE, OPEN_QUALITY, OPEN_IMPROVEMENT] } }
+        - { name: unassignedOnly, in: query, schema: { type: boolean, default: false } }
+        - { name: overdueOnly, in: query, schema: { type: boolean, default: false } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Scoped live open disposition snapshot page, content: { application/json: { schema: { $ref: '#/components/schemas/ExitMonitorPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /supplier-exit-tasks/mine:
     get:
       operationId: listMySupplierExitTasks
@@ -2441,6 +2459,28 @@ components:
         overdue: { type: boolean }
     MyExitTaskPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/MyExitTask' } } } } } }]
+    ExitMonitorItem:
+      type: object
+      required: [id, applicationId, supplierId, supplierCode, supplierName, organizationId, code, sourceId, route, checkedAt, overdue]
+      properties:
+        id: { type: string }
+        applicationId: { type: string }
+        supplierId: { type: string }
+        supplierCode: { type: string }
+        supplierName: { type: string }
+        organizationId: { type: string }
+        code: { type: string }
+        sourceId: { type: string }
+        route: { type: string }
+        note: { type: string, nullable: true }
+        assigneeId: { type: string, nullable: true }
+        assignedAt: { type: string, format: date-time, nullable: true }
+        checkedAt: { type: string, format: date-time }
+        dueDate: { type: string, format: date, nullable: true }
+        lastRemindedAt: { type: string, format: date-time, nullable: true }
+        overdue: { type: boolean }
+    ExitMonitorPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/ExitMonitorItem' } } } } } }]
     MessageTemplateListResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MessageTemplate' } } } }]
     MessageTemplateResponse:

@@ -29,4 +29,29 @@ class ExitTaskServiceTest {
         try(var identity=TenantContext.open(10,7);var scope=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of(),Set.of()))){assertTrue(service.mine(" "," ",0,20).items().isEmpty());}
         verify(mapper).count(10,7,"NONE",Set.of(),null,null);verify(mapper).list(10,7,"NONE",Set.of(),null,null,0,20);
     }
+    @Test void monitorRequiresIndependentPermissionAndRespectsLiveSupplierScope(){
+        try(var identity=TenantContext.open(10,7);var scope=auth(DataScope.all())){
+            assertEquals(io.github.turbopro.ism.common.api.error.CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.monitor(null,null,false,false,0,20)).errorCode());
+        }
+        verifyNoInteractions(mapper);
+        var permissions=new PermissionSnapshot(Set.of("supplier:exit:monitor"),Map.of("supplier:master",DataScope.organizations(Set.of(20L))),Set.of());
+        when(mapper.monitorCount(eq(10L),eq(7L),eq("ORGANIZATION_SET"),eq(Set.of(20L)),eq("%a=%=_==%"),eq("OPEN_CONTRACT"),eq(true),eq(false),any())).thenReturn(1L);
+        when(mapper.monitorList(eq(10L),eq(7L),eq("ORGANIZATION_SET"),eq(Set.of(20L)),eq("%a=%=_==%"),eq("OPEN_CONTRACT"),eq(true),eq(false),any(),eq(0),eq(20))).thenReturn(List.of(
+            new ExitTaskModels.MonitorRow(100,90,30,"S30","测试供应商",20,"OPEN_CONTRACT",77,"/projects/contracts",null,null,null,LocalDateTime.now(),null,null)));
+        try(var identity=TenantContext.open(10,7);var scope=AuthorizationContext.open(permissions)){
+            var result=service.monitor(" a%_= ","OPEN_CONTRACT",true,false,0,20);
+            assertEquals(1,result.total());assertNull(result.items().get(0).assigneeId());assertFalse(result.items().get(0).overdue());
+            assertEquals("30",result.items().get(0).supplierId());
+        }
+    }
+    @Test void monitorRejectsBadFiltersAndDoesNotBypassMissingDataScope(){
+        var permission=new PermissionSnapshot(Set.of("supplier:exit:monitor"),Map.of(),Set.of());
+        try(var identity=TenantContext.open(10,7);var scope=AuthorizationContext.open(permission)){
+            assertThrows(ApiException.class,()->service.monitor(null,"UNKNOWN",false,false,0,20));
+            assertThrows(ApiException.class,()->service.monitor("x".repeat(101),null,false,false,0,20));
+            assertThrows(ApiException.class,()->service.monitor(null,null,false,false,-1,20));
+            assertTrue(service.monitor(null,null,false,false,0,20).items().isEmpty());
+        }
+        verify(mapper).monitorCount(eq(10L),eq(7L),eq("NONE"),eq(Set.of()),isNull(),isNull(),eq(false),eq(false),any());
+    }
 }

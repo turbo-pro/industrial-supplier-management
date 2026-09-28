@@ -19,7 +19,7 @@
 
 ## 退出检查覆盖
 
-逐实体责任分派已接入事务性站内通知与管理端个人收件箱，见 [通知验收](exit-assignment-notification-review.md)。当前责任人实时退出待办已接入，见 [待办验收](my-exit-tasks-review.md)，由申请/实体当前状态过滤失效事项，不将历史消息等同于实时待办。期限与人工站内催办已接入，见 [期限催办验收](exit-deadline-reminder-review.md)；逾期站内自动催办与租户开关/间隔见 [自动催办验收](exit-auto-reminder-review.md)，供应商范围失败记录见 [台账验收](exit-reminder-failure-ledger-review.md)。统一跨业务人工待办、集中监控及升级链仍缺。
+逐实体责任分派已接入事务性站内通知与管理端个人收件箱，见 [通知验收](exit-assignment-notification-review.md)。当前责任人实时退出待办已接入，见 [待办验收](my-exit-tasks-review.md)，由申请/实体当前状态过滤失效事项，不将历史消息等同于实时待办。期限与人工站内催办已接入，见 [期限催办验收](exit-deadline-reminder-review.md)；逾期站内自动催办与租户开关/间隔见 [自动催办验收](exit-auto-reminder-review.md)，供应商范围失败记录见 [台账验收](exit-reminder-failure-ledger-review.md)。跨供应商当前未结事项集中监控已接入，见 [监控验收](exit-monitor-review.md)；统一跨业务人工待办及升级链仍缺。
 
 合同/项目未结束、人员未离场、车辆设备未交接、现场未签退、质量不符合项/安全隐患未关闭、绩效改进未验收、财务未核验均阻止退出。财务默认 ERP 模式未知即阻断；显式人工模式须证据与独立复核。资产退役不等于交接。
 

@@ -684,6 +684,9 @@ class B0InfrastructureIT {
                     assertThat(blocked.items()).filteredOn(item->item.code().equals("OPEN_CONTRACT")).singleElement().satisfies(item->{assertThat(item.initialCount()).isZero();assertThat(item.currentCount()).isOne();});
                     assertThat(blocked.entities()).singleElement().satisfies(entity->{assertThat(entity.code()).isEqualTo("OPEN_CONTRACT");assertThat(entity.sourceId()).isEqualTo("9975");assertThat(entity.state()).isEqualTo("OPEN");});
                     var entity=blocked.entities().get(0);long entityId=Long.parseLong(entity.id());
+                    assertThat(exitMonitor(tenantId,4,DataScope.all(),true,false).items()).singleElement().satisfies(item->{assertThat(item.id()).isEqualTo(entity.id());assertThat(item.assigneeId()).isNull();});
+                    assertThat(exitMonitor(tenantId,4,DataScope.none(),false,false).total()).isZero();
+                    assertThat(exitMonitor(89781,4,DataScope.all(),false,false).total()).isZero();
                     assertThat(blocked.entityTotal()).isOne();assertThat(exitApplicationService.entities(supplierId,finalExitId,0,20).items()).hasSize(1);
                     assertThat(exitApplicationService.entities(supplierId,finalExitId,1,20).items()).isEmpty();
                     for(String invalidOwner:List.of("9977","9978","9979"))assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign(invalidOwner,"不能越权分派",entity.version(),blocked.version()))).isInstanceOf(ApiException.class);
@@ -698,6 +701,9 @@ class B0InfrastructureIT {
                     assertThat(assigned.entities().get(0).assigneeId()).isEqualTo("9976");assertThat(assigned.entities().get(0).state()).isEqualTo("OPEN");
                     long taskOrganization=supplierMapper.find(tenantId,supplierId).organizationId();
                     assertThat(exitTasks(tenantId,9976,DataScope.all()).items()).singleElement().satisfies(task->{assertThat(task.id()).isEqualTo(entity.id());assertThat(task.sourceId()).isEqualTo("9975");assertThat(task.applicationVersion()).isEqualTo(2);});
+                    assertThat(exitMonitor(tenantId,4,DataScope.all(),true,false).total()).isZero();
+                    assertThat(exitMonitor(tenantId,4,DataScope.organizations(Set.of(taskOrganization)),false,false).total()).isOne();
+                    assertThat(exitMonitor(tenantId,4,DataScope.organizations(Set.of(taskOrganization+100000)),false,false).total()).isZero();
                     assertThat(exitTasks(tenantId,4,DataScope.all()).total()).isZero();
                     assertThat(exitTasks(89781,9976,DataScope.all()).total()).isZero();
                     assertThat(exitTasks(tenantId,9976,DataScope.none()).total()).isZero();
@@ -725,6 +731,7 @@ class B0InfrastructureIT {
                     assertThat(exitTasks(tenantId,9976,DataScope.all()).items().get(0).dueDate()).isEqualTo(dueDate);
                     jdbcTemplate.update("UPDATE sup_exit_entity SET due_date=? WHERE id=?",dueDate.minusDays(2),entityId);
                     assertThat(exitTasks(tenantId,9976,DataScope.all()).items().get(0).overdue()).isTrue();
+                    assertThat(exitMonitor(tenantId,4,DataScope.all(),false,true).items()).singleElement().satisfies(item->{assertThat(item.id()).isEqualTo(entity.id());assertThat(item.overdue()).isTrue();});
                     jdbcTemplate.update("UPDATE sup_exit_entity SET due_date=? WHERE id=?",dueDate,entityId);
                     var reminderTemplate=messageService.create(new MessageModels.SaveTemplate("SUPPLIER_EXIT_REMINDER","退出事项催办","IN_APP","退出事项催办","供应商 {{supplierId}} / {{applicationId}} / {{code}} / {{sourceId}} / {{dueDate}}",Set.of("supplierId","applicationId","code","sourceId","dueDate"),0));
                     jdbcTemplate.update("UPDATE msg_template SET status='DISABLED' WHERE id=?",Long.parseLong(reminderTemplate.id()));
@@ -777,6 +784,7 @@ class B0InfrastructureIT {
                     assertThat(ready.entities().get(0).state()).isEqualTo("CLEARED");assertThat(ready.entities().get(0).clearedAt()).isNotNull();assertThat(ready.entities().get(0).assigneeId()).isEqualTo("9976");
                     assertThat(ready.entities().get(0).note()).isEqualTo("跟进合同结束，不手工清除阻断");
                     assertThat(exitTasks(tenantId,9976,DataScope.all()).total()).isZero();
+                    assertThat(exitMonitor(tenantId,4,DataScope.all(),false,false).total()).isZero();
                     assertThatThrownBy(()->exitApplicationService.assign(supplierId,finalExitId,entityId,new io.github.turbopro.ism.supplier.ExitModels.Assign("9976","不改结清历史",ready.entities().get(0).version(),ready.version()))).isInstanceOf(ApiException.class);
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
@@ -1595,6 +1603,11 @@ class B0InfrastructureIT {
     private io.github.turbopro.ism.supplier.ExitTaskModels.Page exitTasks(long tenantId,long actorId,DataScope scope){
         try(var identity=TenantContext.open(tenantId,actorId);var authorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of(),Map.of("supplier:master",scope),Set.of()))){
             return exitTaskService.mine(null,null,0,20);
+        }
+    }
+    private io.github.turbopro.ism.supplier.ExitTaskModels.MonitorPage exitMonitor(long tenantId,long actorId,DataScope scope,boolean unassignedOnly,boolean overdueOnly){
+        try(var identity=TenantContext.open(tenantId,actorId);var authorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of("supplier:exit:monitor"),Map.of("supplier:master",scope),Set.of()))){
+            return exitTaskService.monitor(null,null,unassignedOnly,overdueOnly,0,20);
         }
     }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 import type { components } from '@ism/api-client';
@@ -10,8 +11,8 @@ import PersonalTableViews from '../components/PersonalTableViews.vue';
 const columnDefinitions=[{key:'code',label:'供应商编码',required:true,width:160},{key:'name',label:'供应商名称',required:true,width:240},{key:'type',label:'类型',required:false,width:110},{key:'riskLevel',label:'风险',required:false,width:90},{key:'status',label:'状态',required:false,width:110},{key:'updatedAt',label:'更新时间',required:false,width:180}];
 const tableColumns=ref(columnDefinitions.map(c=>({key:c.key,visible:true,width:c.width})));
 type Summary=components['schemas']['SupplierSummary'];type Status=components['schemas']['SupplierStatus'];
-const session=useSessionStore();const loading=ref(false);const saving=ref(false);const dialog=ref(false);const rows=ref<Summary[]>([]);const total=ref(0);
-const exitDialog=ref(false);const exitRow=ref<Summary|null>(null);
+const session=useSessionStore();const route=useRoute();const loading=ref(false);const saving=ref(false);const dialog=ref(false);const rows=ref<Summary[]>([]);const total=ref(0);
+const exitDialog=ref(false);const exitRow=ref<Pick<Summary,'id'|'name'>|null>(null);
 const restrictionDialog=ref(false);const restrictionRow=ref<Summary|null>(null);
 function previewExit(row:Summary){exitRow.value=row;exitDialog.value=true;}
 const query=reactive<{keyword:string;status?:Status;page:number;size:number}>({keyword:'',status:undefined,page:0,size:20});
@@ -26,7 +27,11 @@ const financeDialog=ref(false),financeBusy=ref(false),finance=ref<components['sc
 async function openFinance(row:Summary){const {data,error}=await session.client.GET('/suppliers/{id}/financial-clearance',{params:{path:{id:row.id}}});if(error){ElMessage.error(error.error.message);return;}financeSupplier.value=row;finance.value=data?.data??null;financeForm.evidenceFileId=data?.data?.record?.evidenceFileId??'';financeForm.statement=data?.data?.record?.statement??'';financeDialog.value=true;}
 async function submitFinance(){if(!financeSupplier.value||!financeForm.evidenceFileId||!financeForm.statement.trim())return;financeBusy.value=true;try{const {data,error}=await session.client.POST('/suppliers/{id}/financial-clearance',{params:{path:{id:financeSupplier.value.id}},body:{...financeForm,version:finance.value?.record?.version??0}});if(error)ElMessage.error(error.error.message);else{finance.value=data?.data??null;ElMessage.success('已提交，须由另一名复核人确认');}}finally{financeBusy.value=false;}}
 async function reviewFinance(decision:'APPROVE'|'REJECT'|'REVOKE'){if(!financeSupplier.value||!finance.value?.record)return;try{const comment=(await ElMessageBox.prompt('请填写复核结论；批准表示人工核验，不代表 ERP 已结清','财务复核',{inputValidator:(value:string)=>!!value.trim()||'结论不能为空'})).value;financeBusy.value=true;const {data,error}=await session.client.POST('/suppliers/{id}/financial-clearance/review',{params:{path:{id:financeSupplier.value.id}},body:{decision,comment,version:finance.value.record.version}});if(error)ElMessage.error(error.error.message);else{finance.value=data?.data??null;ElMessage.success('复核结果已记录');}}catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('操作失败，请重试');}finally{financeBusy.value=false;}}
-onMounted(load);
+onMounted(async()=>{await load();const id=route.query.exitSupplierId;if(typeof id!=='string'||!/^[1-9][0-9]*$/.test(id))return;
+  const {data,error}=await session.client.GET('/suppliers/{id}',{params:{path:{id}}});
+  if(error||!data?.data){ElMessage.error('供应商读取失败或无权访问');return;}
+  exitRow.value={id:data.data.id,name:data.data.name};exitDialog.value=true;
+});
 </script>
 <template><div class="page"><div class="page-heading"><div><h1>供应商档案</h1><p>统一维护供应商基础信息、归属组织、风险等级与生命周期状态</p></div><el-button type="primary" :icon="Plus" @click="openCreate">新建供应商</el-button></div>
   <el-card shadow="never" class="filter-card"><el-form inline><el-form-item label="关键词"><el-input v-model="query.keyword" clearable placeholder="编码、名称、信用代码" :prefix-icon="Search" @keyup.enter="query.page=0;load()"/></el-form-item><el-form-item label="状态"><el-select v-model="query.status" clearable placeholder="全部状态" style="width:150px"><el-option v-for="(name,key) in statusNames" :key="key" :label="name" :value="key"/></el-select></el-form-item><el-form-item><el-button type="primary" @click="query.page=0;load()">查询</el-button><el-button :icon="Refresh" @click="query.keyword='';query.status=undefined;query.page=0;load()">重置</el-button></el-form-item></el-form></el-card>
