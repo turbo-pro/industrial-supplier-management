@@ -6,6 +6,7 @@ import { useSessionStore } from '../stores/session';
 type Application=components['schemas']['ExitApplication'];
 type Entity=components['schemas']['ExitEntity'];
 type ReminderFailure=components['schemas']['ExitReminderFailure'];
+type LocalArchive=components['schemas']['ExitLocalArchive'];
 const props=defineProps<{modelValue:boolean;supplier:Pick<components['schemas']['SupplierSummary'],'id'|'name'>|null}>();
 const emit=defineEmits<{ 'update:modelValue':[value:boolean];changed:[] }>();
 const visible=computed({get:()=>props.modelValue,set:(value:boolean)=>emit('update:modelValue',value)});
@@ -14,6 +15,18 @@ const form=reactive({type:'NORMAL' as 'NORMAL'|'ELIMINATION',reason:'',evidenceF
 const states={SUBMITTED:'处置中 / 待独立审批',REJECTED:'已驳回',CANCELLED:'已撤回',BUSINESS_CLOSED:'本地业务已关闭'};
 const canApply=ref(false);
 const failureRows=ref<ReminderFailure[]>([]),failurePage=ref(0),failureTotal=ref(0),failureLoading=ref(false);
+const archive=ref<LocalArchive>(),archiveVisible=ref(false),archiveLoading=ref(false);
+async function viewArchive(row:Application){
+  const supplierId=props.supplier?.id;if(!supplierId||row.status!=='BUSINESS_CLOSED')return;
+  const version=requestVersion;archiveLoading.value=true;archive.value=undefined;
+  try{
+    const {data,error}=await session.client.GET('/suppliers/{supplierId}/exit-applications/{id}/archive',{params:{path:{supplierId,id:row.id}}});
+    if(version!==requestVersion||supplierId!==props.supplier?.id||!props.modelValue)return;
+    if(error){ElMessage.error(error.error.message);return;}
+    archive.value=data?.data;archiveVisible.value=true;
+  }catch{if(version===requestVersion)ElMessage.error('封存校验加载失败，请重试');}
+  finally{archiveLoading.value=false;}
+}
 async function loadFailures(targetPage=0){
   const supplierId=props.supplier?.id;if(!supplierId)return;
   const version=requestVersion,sequence=++failureRequestVersion;failureLoading.value=true;
@@ -132,7 +145,7 @@ async function review(row:Application,decision:'APPROVE'|'REJECT'){
     await load();emit('changed');
   }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('审批失败，请刷新核对结果');}finally{busy.value=false;}
 }
-watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureRequestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;rows.value=[];total.value=0;canApply.value=false;loading.value=false;failureRows.value=[];failureTotal.value=0;failurePage.value=0;failureLoading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
+watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureRequestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;archiveVisible.value=false;archive.value=undefined;rows.value=[];total.value=0;canApply.value=false;loading.value=false;failureRows.value=[];failureTotal.value=0;failurePage.value=0;failureLoading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
 </script>
 <template>
   <el-dialog v-model="visible" :title="`${supplier?.name??''} · 退出流程`" width="1040px" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
@@ -162,6 +175,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
       <el-table-column type="expand">
         <template #default="{row}">
           <el-alert v-if="row.result" title="完成范围：本地业务。外部访问回收：未核验。" type="warning" :closable="false"/>
+          <el-button v-if="row.status==='BUSINESS_CLOSED'" :loading="archiveLoading" style="margin:10px 0" @click="viewArchive(row)">查看本地证据封存校验</el-button>
           <el-table :data="row.items">
             <el-table-column prop="label" label="处置检查项"/><el-table-column prop="initialCount" label="初始数量" width="100"/>
             <el-table-column prop="currentCount" label="当前数量" width="100"/><el-table-column prop="checkedAt" label="核验时间" width="200"/>
@@ -207,5 +221,19 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
     <el-alert title="按中国业务日期计算，今天至一年内；清空日期表示取消期限。所有变更须记录原因，不自动关闭业务。" type="info" :closable="false"/>
     <el-form label-position="top"><el-form-item label="处置期限"><el-date-picker v-model="deadlineForm.dueDate" type="date" value-format="YYYY-MM-DD" clearable :disabled="busy"/></el-form-item><el-form-item label="变更原因"><el-input v-model="deadlineForm.reason" type="textarea" maxlength="1000" show-word-limit :disabled="busy"/></el-form-item></el-form>
     <template #footer><el-button :disabled="busy" @click="deadlineDialog=false">取消</el-button><el-button type="primary" :loading="busy" @click="saveDeadline">保存期限</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="archiveVisible" title="本地退出证据封存校验" width="620px" append-to-body>
+    <template v-if="archive">
+      <el-alert :title="archive.integrityVerified?'本地记录校验一致':'本地记录校验不一致，请联系管理员核查'" :type="archive.integrityVerified?'success':'error'" :closable="false"/>
+      <p>此清单仅封存本地数据库记录的摘要和数量，不复制依据文件，也不证明外部账号、门禁或接口凭证已回收。</p>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="申请 ID">{{archive.applicationId}}</el-descriptions-item>
+        <el-descriptions-item label="依据文件 ID">{{archive.evidenceFileId}}</el-descriptions-item>
+        <el-descriptions-item label="处置检查 / 逐实体 / 事件">{{archive.itemCount}} / {{archive.entityCount}} / {{archive.eventCount}}</el-descriptions-item>
+        <el-descriptions-item label="封存时间">{{archive.sealedAt}}</el-descriptions-item>
+        <el-descriptions-item label="SHA-256 摘要"><span style="overflow-wrap:anywhere">{{archive.digestSha256}}</span></el-descriptions-item>
+        <el-descriptions-item label="外部访问回收">未核验</el-descriptions-item>
+      </el-descriptions>
+    </template>
   </el-dialog>
 </template>

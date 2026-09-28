@@ -172,6 +172,13 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: Local supplier exit application, content: { application/json: { schema: { $ref: '#/components/schemas/ExitApplicationResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/archive:
+    get:
+      operationId: getSupplierExitLocalArchive
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Local database evidence seal and live integrity check; external access remains unverified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitLocalArchiveResponse' } } } }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{supplierId}/exit-applications/{id}/recheck:
     post:
       operationId: recheckSupplierExitApplication
@@ -1794,6 +1801,26 @@ components:
     ExitItem: { type: object, required: [id, code, label, route, initialCount, currentCount, checkedAt], properties: { id: { type: string }, code: { type: string }, label: { type: string }, route: { type: string }, initialCount: { type: integer, format: int64 }, currentCount: { type: integer, format: int64 }, checkedAt: { type: string, format: date-time } } }
     ExitEvent: { type: object, required: [id, action, actorId, createdAt], properties: { id: { type: string }, action: { type: string }, comment: { type: string }, actorId: { type: string }, createdAt: { type: string, format: date-time } } }
     ExitResult: { type: object, required: [id, approvedBy, comment, completionScope, accessRecoveryStatus, effectiveAt], properties: { id: { type: string }, approvedBy: { type: string }, comment: { type: string }, completionScope: { type: string, enum: [LOCAL_BUSINESS] }, accessRecoveryStatus: { type: string, enum: [NOT_VERIFIED] }, effectiveAt: { type: string, format: date-time } } }
+    ExitLocalArchive:
+      type: object
+      required: [id, applicationId, supplierId, resultId, evidenceFileId, schemaVersion, digestSha256, itemCount, entityCount, eventCount, sealedBy, sealedAt, integrityVerified, scope, externalAccessStatus]
+      properties:
+        id: { type: string }
+        applicationId: { type: string }
+        supplierId: { type: string }
+        resultId: { type: string }
+        evidenceFileId: { type: string }
+        schemaVersion: { type: integer, enum: [1] }
+        digestSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        itemCount: { type: integer, minimum: 0 }
+        entityCount: { type: integer, format: int64, minimum: 0 }
+        eventCount: { type: integer, minimum: 0 }
+        sealedBy: { type: string }
+        sealedAt: { type: string, format: date-time }
+        integrityVerified: { type: boolean }
+        scope: { type: string, enum: [LOCAL_RECORD_METADATA] }
+        externalAccessStatus: { type: string, enum: [NOT_VERIFIED] }
+    ExitLocalArchiveResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ExitLocalArchive' } } } ] }
     ExitApplication: { type: object, required: [id, supplierId, type, reason, evidenceFileId, status, createdBy, createdAt, version, localReady, items, entityTotal, entities, events], properties: { id: { type: string }, supplierId: { type: string }, type: { type: string, enum: [NORMAL, ELIMINATION] }, reason: { type: string }, evidenceFileId: { type: string }, status: { type: string, enum: [SUBMITTED, REJECTED, CANCELLED, BUSINESS_CLOSED] }, createdBy: { type: string }, createdAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer }, localReady: { type: boolean, description: Last persisted local facts; approval always checks again }, items: { type: array, items: { $ref: '#/components/schemas/ExitItem' } }, entityTotal: { type: integer, format: int64 }, entities: { type: array, items: { $ref: '#/components/schemas/ExitEntity' } }, events: { type: array, items: { $ref: '#/components/schemas/ExitEvent' } }, result: { nullable: true, allOf: [{ $ref: '#/components/schemas/ExitResult' }] } } }
     ExitApplicationPage: { type: object, required: [total, page, size, canApply, items], properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, canApply: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/ExitApplication' } } } }
     ExitApplicationResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ExitApplication' } } }] }

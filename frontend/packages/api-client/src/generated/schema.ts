@@ -168,6 +168,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierExitLocalArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
         parameters: {
             query?: never;
@@ -2698,6 +2714,31 @@ export interface components {
             /** Format: date-time */
             effectiveAt: string;
         };
+        ExitLocalArchive: {
+            id: string;
+            applicationId: string;
+            supplierId: string;
+            resultId: string;
+            evidenceFileId: string;
+            /** @enum {integer} */
+            schemaVersion: 1;
+            digestSha256: string;
+            itemCount: number;
+            /** Format: int64 */
+            entityCount: number;
+            eventCount: number;
+            sealedBy: string;
+            /** Format: date-time */
+            sealedAt: string;
+            integrityVerified: boolean;
+            /** @enum {string} */
+            scope: "LOCAL_RECORD_METADATA";
+            /** @enum {string} */
+            externalAccessStatus: "NOT_VERIFIED";
+        };
+        ExitLocalArchiveResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ExitLocalArchive"];
+        };
         ExitApplication: {
             id: string;
             supplierId: string;
@@ -5202,6 +5243,32 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierExitLocalArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local database evidence seal and live integrity check; external access remains unverified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitLocalArchiveResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     recheckSupplierExitApplication: {

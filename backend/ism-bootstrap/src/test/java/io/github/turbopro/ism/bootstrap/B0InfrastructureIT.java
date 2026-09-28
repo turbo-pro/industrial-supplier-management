@@ -217,6 +217,7 @@ class B0InfrastructureIT {
     @Autowired private SupplierReferenceService supplierReferenceService;
     @Autowired private io.github.turbopro.ism.supplier.RestrictionGateHitService restrictionGateHitService;
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
+    @Autowired private io.github.turbopro.ism.supplier.ExitArchiveService exitArchiveService;
     @Autowired private io.github.turbopro.ism.supplier.ExitTaskService exitTaskService;
     @Autowired private ExitAutoReminderWorker exitAutoReminderWorker;
     @Autowired private io.github.turbopro.ism.supplier.ExitReminderFailureService exitReminderFailureService;
@@ -811,6 +812,13 @@ class B0InfrastructureIT {
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
                     assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    var archive=exitArchiveService.get(supplierId,finalExitId);
+                    assertThat(archive.integrityVerified()).isTrue();
+                    assertThat(archive.scope()).isEqualTo("LOCAL_RECORD_METADATA");
+                    assertThat(archive.externalAccessStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(archive.entityCount()).isOne();
+                    jdbcTemplate.update("UPDATE sup_exit_event SET comment=CONCAT(comment,'!') WHERE tenant_id=? AND application_id=? AND action='BUSINESS_CLOSE'",tenantId,finalExitId);
+                    assertThat(exitArchiveService.get(supplierId,finalExitId).integrityVerified()).isFalse();
                     assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","ENTITY_DEADLINE","ENTITY_REMIND","AUTO_ENTITY_REMIND","RECHECK","BUSINESS_CLOSE");
                     assertThat(exitApplicationService.list(supplierId,0,20).total()).isEqualTo(3);
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"重复",closed.version()))).isInstanceOf(ApiException.class);
@@ -818,6 +826,7 @@ class B0InfrastructureIT {
                 try(var other=TenantContext.open(tenantId+100000,4);var authorization=AuthorizationContext.open(exitPermissions)){
                     assertThatThrownBy(()->exitApplicationService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitReminderFailureService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitArchiveService.get(supplierId,finalExitId)).isInstanceOf(ApiException.class);
                 }
                 assertThat(supplierMapper.find(tenantId,supplierId).status()).isEqualTo("EXITED");
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
@@ -836,6 +845,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_reminder_failure WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_exit_archive WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_result WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_item WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_application WHERE tenant_id=?", tenantId);

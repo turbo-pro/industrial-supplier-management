@@ -15,10 +15,11 @@ public class ExitApplicationService {
     private final ExitMapper mapper;private final SupplierMapper suppliers;private final SupplierService scope;
     private final AppealEvidenceVerifier evidence;private final List<SupplierExitCheck> checks;
     private final OperationIdGenerator ids;private final AuditService audit;private final ExitAssigneeVerifier assignees;private final ExitAssignmentNotifier notifications;
+    private final ExitArchiveService archives;
     public ExitApplicationService(ExitMapper mapper,SupplierMapper suppliers,SupplierService scope,
-        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees,ExitAssignmentNotifier notifications){
+        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees,ExitAssignmentNotifier notifications,ExitArchiveService archives){
         this.mapper=mapper;this.suppliers=suppliers;this.scope=scope;this.evidence=evidence;
-        this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.assignees=assignees;this.notifications=notifications;
+        this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.assignees=assignees;this.notifications=notifications;this.archives=archives;
     }
     public ExitModels.Page list(long supplierId,int page,int size){
         var supplier=scope.get(supplierId);long tenant=TenantContext.require().tenantId();
@@ -77,6 +78,7 @@ public class ExitApplicationService {
         finish(supplierId,id,"BUSINESS_CLOSED",command.comment().trim(),command.version());
         mapper.insertResult(ids.nextId(),i.tenantId(),id,supplierId,i.actorId(),command.comment().trim());
         event(id,"BUSINESS_CLOSE",command.comment().trim());
+        archives.seal(supplierId,id);
         audit("SUPPLIER_EXIT_BUSINESS_CLOSE",id,Map.of("supplierId",supplierId,"fromStatus",current.status(),"toStatus","EXITED","completionScope","LOCAL_BUSINESS","accessRecoveryStatus","NOT_VERIFIED"));
         return view(require(supplierId,id));
     }

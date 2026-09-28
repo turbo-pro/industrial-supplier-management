@@ -1,0 +1,23 @@
+CREATE TABLE sup_exit_archive (
+ id BIGINT NOT NULL,
+ tenant_id BIGINT NOT NULL,
+ application_id BIGINT NOT NULL,
+ supplier_id BIGINT NOT NULL,
+ result_id BIGINT NOT NULL,
+ evidence_file_id BIGINT NOT NULL,
+ schema_version INT NOT NULL DEFAULT 1,
+ digest_sha256 CHAR(64) NOT NULL,
+ item_count INT NOT NULL,
+ entity_count BIGINT NOT NULL,
+ event_count INT NOT NULL,
+ sealed_by BIGINT NOT NULL,
+ sealed_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ PRIMARY KEY(id),
+ UNIQUE KEY uk_exit_archive_application(tenant_id,application_id),
+ KEY idx_exit_archive_supplier(tenant_id,supplier_id),
+ CONSTRAINT fk_exit_archive_application FOREIGN KEY(application_id) REFERENCES sup_exit_application(id),
+ CONSTRAINT fk_exit_archive_result FOREIGN KEY(result_id) REFERENCES sup_exit_result(id),
+ CONSTRAINT fk_exit_archive_evidence FOREIGN KEY(evidence_file_id) REFERENCES res_file_object(id),
+ CONSTRAINT chk_exit_archive_digest CHECK(digest_sha256 REGEXP '^[0-9a-f]{64}$'),
+ CONSTRAINT chk_exit_archive_counts CHECK(item_count>=0 AND entity_count>=0 AND event_count>=0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

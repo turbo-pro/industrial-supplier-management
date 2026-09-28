@@ -30,6 +30,8 @@ public interface ExitMapper extends TenantScopedMapper {
     String FIELDS="id,supplier_id,exit_type,reason,evidence_file_id,status,created_by,created_at,reviewed_by,reviewed_at,review_comment,version";
     @Select("SELECT "+FIELDS+" FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} FOR UPDATE")
     ExitModels.Row get(long tenantId,long supplierId,long id);
+    @Select("SELECT "+FIELDS+" FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id}")
+    ExitModels.Row archiveApplication(long tenantId,long supplierId,long id);
     @Select("SELECT "+FIELDS+" FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} ORDER BY created_at DESC,id DESC LIMIT #{size} OFFSET #{offset}")
     List<ExitModels.Row> list(long tenantId,long supplierId,int offset,int size);
     @Select("SELECT COUNT(*) FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId}")

@@ -18,7 +18,8 @@ class ExitApplicationServiceTest {
     final OperationIdGenerator ids=mock(OperationIdGenerator.class);final SupplierModels.SupplierRow current=mock(SupplierModels.SupplierRow.class);
     final ExitAssigneeVerifier assignees=mock(ExitAssigneeVerifier.class);
     final ExitAssignmentNotifier notifications=mock(ExitAssignmentNotifier.class);
-    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees,notifications);}
+    final ExitArchiveService archives=mock(ExitArchiveService.class);
+    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees,notifications,archives);}
     void setup(){
         when(suppliers.findForNewBusiness(10,30)).thenReturn(current);when(current.status()).thenReturn("ACTIVE");
         when(current.organizationId()).thenReturn(20L);when(current.createdBy()).thenReturn(7L);
@@ -112,6 +113,7 @@ class ExitApplicationServiceTest {
         when(ids.nextId()).thenReturn(100L);
         try(var t=TenantContext.open(10,8);var a=auth()){assertEquals("BUSINESS_CLOSED",service(List.of(id->ExitReadinessEvaluatorTest.clear())).review(30,90,approve()).status());}
         verify(suppliers).completeExit(10,8,30,0);verify(mapper).insertResult(100,10,90,30,8,"核验通过");
+        verify(archives).seal(30,90);
     }
     @Test void staleOrTerminalReviewNeverMutatesSupplier(){setup();try(var t=TenantContext.open(10,8);var a=auth()){
         when(mapper.get(10,30,90)).thenReturn(row("SUBMITTED",1));assertThrows(ApiException.class,()->service(List.of()).review(30,90,approve()));
