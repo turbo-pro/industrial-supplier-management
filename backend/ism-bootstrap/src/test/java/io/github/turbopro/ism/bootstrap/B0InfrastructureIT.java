@@ -1352,6 +1352,45 @@ class B0InfrastructureIT {
     }
 
     @Test
+    void shouldSearchBusinessRecordsWithTenantPermissionAndObjectScope(){
+        long tenantA=98101,tenantB=98102,orgA=98111,orgOther=98112,orgB=98113;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,'Search Business A','ACTIVE')",tenantA,"SEARCH_BIZ_A");
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,'Search Business B','ACTIVE')",tenantB,"SEARCH_BIZ_B");
+        try{
+            for(long[] row:new long[][]{{orgA,tenantA},{orgOther,tenantA},{orgB,tenantB}})
+                jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,'SITE','ACTIVE')",row[0],row[1],"SEARCH_"+row[0],"Search Site "+row[0]);
+            for(long[] row:new long[][]{{98121,tenantA,orgA},{98122,tenantA,orgOther},{98123,tenantB,orgB}}){
+                jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,?,?,'MANUFACTURER',9,9)",row[0],row[1],row[2],"BIZ-S"+row[0],"Business Supplier "+row[0]);
+                jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'SERVICE',10,CURRENT_DATE,CURRENT_DATE,9,1,9,9)",row[0]+10,row[1],row[2],row[0],"BIZ-C"+row[0],"Business Contract "+row[0]);
+                jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'MAINTENANCE',CURRENT_DATE,CURRENT_DATE,9,9,9)",row[0]+20,row[1],row[2],row[0],"BIZ-P"+row[0],"Business Project "+row[0]);
+            }
+            var types=Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT);
+            var request=new SearchModels.SearchRequest("BIZ-",types,Set.of(),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(request).items()).hasSize(6).noneMatch(item->item.id().startsWith("98123"));
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::route).contains("/suppliers/master","/projects/contracts","/projects/ledger");
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.organizations(Set.of(orgA)),"contract",DataScope.organizations(Set.of(orgA)),"project",DataScope.projects(Set.of(98141L))),Set.of()))){
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98121","98131","98141");
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.created()),Set.of()))){
+                var result=searchService.search(request);
+                assertThat(result.searchedTypes()).containsExactly(SearchModels.EntityType.SUPPLIER);
+                assertThat(result.items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98121","98122");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143");
+            }
+        }finally{
+            jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM prj_contract WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)",tenantA,tenantB);
+        }
+    }
+
+    @Test
     void shouldPersistPrivateTableViewsWithDefaultVersionAndConcurrencyGuards() throws Exception {
         long tenantA=87001,tenantB=87002,owner=87011,otherOwner=87012;
         String key="supplier.master";

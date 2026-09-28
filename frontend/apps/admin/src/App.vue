@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Fold, FullScreen, SwitchButton } from '@element-plus/icons-vue';
+import { Fold, FullScreen, Search, SwitchButton } from '@element-plus/icons-vue';
 import { useSessionStore } from './stores/session';
 const session=useSessionStore();const router=useRouter();const collapsed=ref(false);const submitting=ref(false);const form=reactive({tenantCode:'demo',username:'admin',password:'Admin@123456'});
 async function login(){submitting.value=true;try{await session.login(form);await router.replace('/suppliers/master');ElMessage.success('登录成功');}catch(e){ElMessage.error(e instanceof Error?e.message:'登录失败');}finally{submitting.value=false;}}
@@ -23,6 +23,6 @@ function route(path:string){return router.resolve(path).matched.some(r=>r.path==
         </el-menu>
       </nav>
     </el-aside>
-    <el-container><el-header class="topbar"><div class="topbar-left"><el-button text :icon="Fold" @click="collapsed=!collapsed"/><el-breadcrumb separator="/"><el-breadcrumb-item>供应商管理平台</el-breadcrumb-item><el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><el-select :model-value="session.currentOrganization?.id" style="width:220px" @change="session.switchOrganization"><el-option v-for="item in session.organizationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><span class="user-name">租户管理员</span><el-button text :icon="SwitchButton" @click="logout">退出</el-button></div></el-header><el-main class="content"><router-view /></el-main></el-container>
+    <el-container><el-header class="topbar"><div class="topbar-left"><el-button text :icon="Fold" @click="collapsed=!collapsed"/><el-breadcrumb separator="/"><el-breadcrumb-item>供应商管理平台</el-breadcrumb-item><el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><el-button text :icon="Search" @click="router.push('/search')">业务搜索</el-button><el-select :model-value="session.currentOrganization?.id" style="width:220px" @change="session.switchOrganization"><el-option v-for="item in session.organizationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><span class="user-name">租户管理员</span><el-button text :icon="SwitchButton" @click="logout">退出</el-button></div></el-header><el-main class="content"><router-view /></el-main></el-container>
   </el-container>
 </template>

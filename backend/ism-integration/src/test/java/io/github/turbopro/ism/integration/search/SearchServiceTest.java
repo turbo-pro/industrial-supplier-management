@@ -32,4 +32,20 @@ class SearchServiceTest {
             assertThatThrownBy(()->service.search(new SearchModels.SearchRequest("x",Set.of(),Set.of(),LocalDateTime.of(2026,2,1,0,0),LocalDateTime.of(2026,1,1,0,0),0,20))).isInstanceOf(ApiException.class);
         }
     }
+    @Test void searchesBusinessTypesUsingTheirOwnPermissionAndDataScope(){
+        when(mapper.suppliers(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("CREATED"),eq(Set.of()),eq(9L))).thenReturn(List.of(new SearchModels.SearchRow(11,"SUPPLIER","供应商甲","SUP-11","ACTIVE","/suppliers/master",LocalDateTime.of(2026,1,1,0,0),18L,9L)));
+        when(mapper.projects(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("PROJECT_SET"),eq(Set.of()),eq(Set.of(31L)),eq(9L))).thenReturn(List.of(new SearchModels.SearchRow(31,"PROJECT","项目甲","PRJ-31","ACTIVE","/projects/ledger",LocalDateTime.of(2026,1,2,0,0),18L,9L)));
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","project:view"),Map.of("supplier:master",DataScope.created(),"project",DataScope.projects(Set.of(31L)),"contract",DataScope.all()),Set.of()))){
+            var result=service.search(new SearchModels.SearchRequest("甲",Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT),Set.of(),null,null,0,20));
+            assertThat(result.searchedTypes()).containsExactlyInAnyOrder(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.PROJECT);
+            assertThat(result.items()).extracting(SearchModels.SearchItem::id).containsExactly("31","11");
+            verify(mapper,never()).contracts(anyLong(),anyString(),anySet(),any(),any(),anyInt(),anyString(),anySet(),anyLong());
+        }
+    }
+    @Test void emptyBusinessScopeDoesNotIssueSearchSql(){
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.none(),"contract",DataScope.organizations(Set.of()),"project",DataScope.projects(Set.of())),Set.of()))){
+            var result=service.search(new SearchModels.SearchRequest("甲",Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT),Set.of(),null,null,0,20));
+            assertThat(result.searchedTypes()).isEmpty();assertThat(result.items()).isEmpty();verifyNoInteractions(mapper);
+        }
+    }
 }

@@ -4074,7 +4074,7 @@ export interface components {
             data?: components["schemas"]["WorkflowTask"][];
         };
         /** @enum {string} */
-        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK";
+        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK" | "SUPPLIER" | "CONTRACT" | "PROJECT";
         SearchRequest: {
             keyword: string;
             types: components["schemas"]["SearchEntityType"][];
