@@ -29,6 +29,34 @@ public interface SearchMapper extends TenantScopedMapper {
     List<SearchModels.SearchRow> contracts(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,long actorId);
     @Select("<script>SELECT p.id,'PROJECT' entity_type,p.project_name title,CONCAT(p.project_code,' · ',s.supplier_name) subtitle,p.status,'/projects/ledger' route,p.updated_at,p.organization_id,p.manager_id owner_id FROM prj_project p JOIN sup_supplier s ON s.id=p.supplier_id AND s.tenant_id=p.tenant_id WHERE p.tenant_id=#{tenantId} AND (p.project_name LIKE #{keyword} ESCAPE '=' OR p.project_code LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=')<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND p.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'PROJECT_SET'\"> AND p.id IN <foreach collection='projectIds' item='x' open='(' separator=',' close=')'>#{x}</foreach></when><when test=\"scopeType == 'OWNED'\"> AND p.manager_id=#{actorId}</when><when test=\"scopeType == 'CREATED'\"> AND p.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose><if test='statuses != null and !statuses.isEmpty()'> AND p.status IN <foreach collection='statuses' item='v' open='(' separator=',' close=')'>#{v}</foreach></if><if test='from != null'> AND p.updated_at &gt;= #{from}</if><if test='to != null'> AND p.updated_at &lt;= #{to}</if> ORDER BY p.updated_at DESC,p.id DESC LIMIT #{limit}</script>")
     List<SearchModels.SearchRow> projects(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,java.util.Set<Long> projectIds,long actorId);
+    @Select("""
+        <script>SELECT x.id,'PERSON' entity_type,x.person_name title,CONCAT(x.person_code,' · ',s.supplier_name) subtitle,
+        x.status,'/resources/persons' route,x.updated_at,x.organization_id,NULL owner_id
+        FROM res_supplier_person x JOIN sup_supplier s ON s.id=x.supplier_id AND s.tenant_id=x.tenant_id
+        WHERE x.tenant_id=#{tenantId} AND (x.person_name LIKE #{keyword} ESCAPE '=' OR x.person_code LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=')
+        <choose><when test="scopeType == 'TENANT_ALL'"></when>
+        <when test="scopeType == 'ORGANIZATION_SET'"> AND x.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when>
+        <when test="scopeType == 'PROJECT_SET'"> AND x.project_id IN <foreach collection='projectIds' item='p' open='(' separator=',' close=')'>#{p}</foreach></when>
+        <when test="scopeType == 'CREATED'"> AND x.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>
+        <if test='statuses != null and !statuses.isEmpty()'> AND x.status IN <foreach collection='statuses' item='v' open='(' separator=',' close=')'>#{v}</foreach></if>
+        <if test='from != null'> AND x.updated_at &gt;= #{from}</if><if test='to != null'> AND x.updated_at &lt;= #{to}</if>
+        ORDER BY x.updated_at DESC,x.id DESC LIMIT #{limit}</script>
+        """)
+    List<SearchModels.SearchRow> persons(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,java.util.Set<Long> projectIds,long actorId);
+    @Select("""
+        <script>SELECT x.id,'ASSET' entity_type,x.asset_name title,CONCAT(x.asset_code,' · ',s.supplier_name) subtitle,
+        x.status,'/resources/assets' route,x.updated_at,x.organization_id,NULL owner_id
+        FROM res_supplier_asset x JOIN sup_supplier s ON s.id=x.supplier_id AND s.tenant_id=x.tenant_id
+        WHERE x.tenant_id=#{tenantId} AND (x.asset_name LIKE #{keyword} ESCAPE '=' OR x.asset_code LIKE #{keyword} ESCAPE '=' OR x.plate_no LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=')
+        <choose><when test="scopeType == 'TENANT_ALL'"></when>
+        <when test="scopeType == 'ORGANIZATION_SET'"> AND x.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when>
+        <when test="scopeType == 'PROJECT_SET'"> AND x.project_id IN <foreach collection='projectIds' item='p' open='(' separator=',' close=')'>#{p}</foreach></when>
+        <when test="scopeType == 'CREATED'"> AND x.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>
+        <if test='statuses != null and !statuses.isEmpty()'> AND x.status IN <foreach collection='statuses' item='v' open='(' separator=',' close=')'>#{v}</foreach></if>
+        <if test='from != null'> AND x.updated_at &gt;= #{from}</if><if test='to != null'> AND x.updated_at &lt;= #{to}</if>
+        ORDER BY x.updated_at DESC,x.id DESC LIMIT #{limit}</script>
+        """)
+    List<SearchModels.SearchRow> assets(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,java.util.Set<Long> projectIds,long actorId);
     @Select("SELECT id,search_name,query_json,is_default default_search,version,updated_at FROM src_saved_search WHERE tenant_id=#{tenantId} AND owner_id=#{ownerId} ORDER BY is_default DESC,updated_at DESC,id DESC")List<SearchModels.SavedRow> saved(long tenantId,long ownerId);
     @Select("SELECT id,search_name,query_json,is_default default_search,version,updated_at FROM src_saved_search WHERE tenant_id=#{tenantId} AND owner_id=#{ownerId} AND id=#{id}")SearchModels.SavedRow savedOne(long tenantId,long ownerId,long id);
     @Insert("INSERT INTO src_saved_search(id,tenant_id,owner_id,search_name,query_json,is_default) VALUES(#{id},#{tenantId},#{ownerId},#{name},CAST(#{query} AS JSON),#{defaultSearch})")int insertSaved(long tenantId,long ownerId,long id,String name,String query,boolean defaultSearch);

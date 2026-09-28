@@ -1381,25 +1381,38 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,?,?,'MANUFACTURER',9,9)",row[0],row[1],row[2],"BIZ-S"+row[0],"Business Supplier "+row[0]);
                 jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'SERVICE',10,CURRENT_DATE,CURRENT_DATE,9,1,9,9)",row[0]+10,row[1],row[2],row[0],"BIZ-C"+row[0],"Business Contract "+row[0]);
                 jdbcTemplate.update("INSERT INTO prj_project(id,tenant_id,organization_id,supplier_id,project_code,project_name,project_type,planned_start_date,planned_end_date,manager_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'MAINTENANCE',CURRENT_DATE,CURRENT_DATE,9,9,9)",row[0]+20,row[1],row[2],row[0],"BIZ-P"+row[0],"Business Project "+row[0]);
+                jdbcTemplate.update("INSERT INTO res_supplier_person(id,tenant_id,organization_id,supplier_id,project_id,person_code,person_name,id_type,id_number_hash,id_number_masked,mobile,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Person','NATIONAL_ID',?,'********1234','13800000000',9,9)",row[0]+30,row[1],row[2],row[0],row[0]+20,"BIZ-PER"+row[0],String.format("%064d",row[0]));
+                jdbcTemplate.update("INSERT INTO res_supplier_asset(id,tenant_id,organization_id,supplier_id,project_id,asset_code,asset_name,asset_type,plate_no,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Asset','VEHICLE',?,9,9)",row[0]+40,row[1],row[2],row[0],row[0]+20,"BIZ-A"+row[0],"BIZ-PLATE"+row[0]);
             }
-            var types=Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT);
+            var types=Set.of(SearchModels.EntityType.SUPPLIER,SearchModels.EntityType.CONTRACT,SearchModels.EntityType.PROJECT,SearchModels.EntityType.PERSON,SearchModels.EntityType.ASSET);
             var request=new SearchModels.SearchRequest("BIZ-",types,Set.of(),null,null,0,20);
-            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all()),Set.of()))){
-                assertThat(searchService.search(request).items()).hasSize(6).noneMatch(item->item.id().startsWith("98123"));
-                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::route).contains("/suppliers/master","/projects/contracts","/projects/ledger");
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","resource:person:view","resource:asset:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all(),"resource:person",DataScope.all(),"resource:asset",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(request).items()).hasSize(10).noneMatch(item->item.id().startsWith("98123"));
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::route).contains("/suppliers/master","/projects/contracts","/projects/ledger","/resources/persons","/resources/assets");
+                assertThat(searchService.search(new SearchModels.SearchRequest("13800000000",Set.of(SearchModels.EntityType.PERSON),Set.of(),null,null,0,20)).items()).isEmpty();
+                assertThat(searchService.search(new SearchModels.SearchRequest("BIZ-PLATE98121",Set.of(SearchModels.EntityType.ASSET),Set.of(),null,null,0,20)).items()).extracting(SearchModels.SearchItem::id).containsExactly("98161");
+                assertThat(searchService.search(request).items()).filteredOn(item->item.type()==SearchModels.EntityType.PERSON).allSatisfy(item->{assertThat(item.subtitle()).doesNotContain("13800000000","1234");});
             }
-            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.organizations(Set.of(orgA)),"contract",DataScope.organizations(Set.of(orgA)),"project",DataScope.projects(Set.of(98141L))),Set.of()))){
-                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98121","98131","98141");
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","resource:person:view","resource:asset:view"),Map.of("supplier:master",DataScope.organizations(Set.of(orgA)),"contract",DataScope.organizations(Set.of(orgA)),"project",DataScope.projects(Set.of(98141L)),"resource:person",DataScope.projects(Set.of(98141L)),"resource:asset",DataScope.organizations(Set.of(orgA))),Set.of()))){
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98121","98131","98141","98151","98161");
             }
             try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.created()),Set.of()))){
                 var result=searchService.search(request);
                 assertThat(result.searchedTypes()).containsExactly(SearchModels.EntityType.SUPPLIER);
                 assertThat(result.items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98121","98122");
             }
-            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all()),Set.of()))){
-                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143");
+            try(var tenant=TenantContext.open(tenantA,10);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:person:view","resource:asset:view"),Map.of("resource:person",DataScope.created(),"resource:asset",DataScope.created()),Set.of()))){
+                assertThat(searchService.search(request).items()).isEmpty();
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:person:view","resource:asset:view"),Map.of("resource:person",DataScope.created(),"resource:asset",DataScope.created()),Set.of()))){
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98151","98152","98161","98162");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","resource:person:view","resource:asset:view"),Map.of("supplier:master",DataScope.all(),"contract",DataScope.all(),"project",DataScope.all(),"resource:person",DataScope.all(),"resource:asset",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143","98153","98163");
             }
         }finally{
+            jdbcTemplate.update("DELETE FROM res_supplier_person WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM res_supplier_asset WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM prj_project WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM prj_contract WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id IN (?,?)",tenantA,tenantB);

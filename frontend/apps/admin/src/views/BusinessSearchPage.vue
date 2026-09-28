@@ -8,8 +8,8 @@ import { useSessionStore } from '../stores/session';
 type EntityType=components['schemas']['SearchEntityType'];
 type SearchItem=components['schemas']['SearchItem'];
 type SavedSearch=components['schemas']['SavedSearch'];
-const businessTypes:EntityType[]=['SUPPLIER','CONTRACT','PROJECT'];
-const labels:Record<string,string>={SUPPLIER:'供应商',CONTRACT:'合同',PROJECT:'项目'};
+const businessTypes:EntityType[]=['SUPPLIER','CONTRACT','PROJECT','PERSON','ASSET'];
+const labels:Record<string,string>={SUPPLIER:'供应商',CONTRACT:'合同',PROJECT:'项目',PERSON:'供应商人员',ASSET:'车辆设备'};
 const session=useSessionStore(),router=useRouter();
 const query=reactive({keyword:'',types:[...businessTypes] as EntityType[],status:'',from:'',to:'',page:0,size:20});
 const rows=ref<SearchItem[]>([]),hasMore=ref(false),searchedTypes=ref<EntityType[]>([]),loading=ref(false);
@@ -90,7 +90,7 @@ onBeforeUnmount(()=>{sequence++;});
 </script>
 <template>
   <div class="page">
-    <div class="page-heading"><div><h1>业务全局搜索</h1><p>按当前账号的权限和数据范围检索供应商、合同与项目</p></div></div>
+    <div class="page-heading"><div><h1>业务全局搜索</h1><p>按当前账号的权限和数据范围检索供应商、合同、项目、人员与车辆设备</p></div></div>
     <el-card shadow="never" class="filter-card">
       <el-form inline @submit.prevent="submit">
         <el-form-item label="关键词"><el-input v-model="query.keyword" maxlength="100" clearable placeholder="名称、编码或供应商信用代码" style="width:300px" @keyup.enter="submit"/></el-form-item>

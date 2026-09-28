@@ -48,4 +48,19 @@ class SearchServiceTest {
             assertThat(result.searchedTypes()).isEmpty();assertThat(result.items()).isEmpty();verifyNoInteractions(mapper);
         }
     }
+    @Test void resourceSearchNeverUsesOtherObjectPermissionOrEmptyProjectScope(){
+        when(mapper.persons(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("PROJECT_SET"),eq(Set.of()),eq(Set.of(31L)),eq(9L)))
+            .thenReturn(List.of(new SearchModels.SearchRow(51,"PERSON","张三","PER-51 · 供应商甲","ACTIVE","/resources/persons",LocalDateTime.of(2026,1,1,0,0),18L,null)));
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:person:view"),Map.of("resource:person",DataScope.projects(Set.of(31L)),"resource:asset",DataScope.all()),Set.of()))){
+            var result=service.search(new SearchModels.SearchRequest("张",Set.of(SearchModels.EntityType.PERSON,SearchModels.EntityType.ASSET),Set.of(),null,null,0,20));
+            assertThat(result.searchedTypes()).containsExactly(SearchModels.EntityType.PERSON);
+            assertThat(result.items()).extracting(SearchModels.SearchItem::title).containsExactly("张三");
+            verify(mapper,never()).assets(anyLong(),anyString(),anySet(),any(),any(),anyInt(),anyString(),anySet(),anySet(),anyLong());
+        }
+        clearInvocations(mapper);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("resource:person:view","resource:asset:view"),Map.of("resource:person",DataScope.projects(Set.of()),"resource:asset",DataScope.organizations(Set.of())),Set.of()))){
+            assertThat(service.search(new SearchModels.SearchRequest("张",Set.of(SearchModels.EntityType.PERSON,SearchModels.EntityType.ASSET),Set.of(),null,null,0,20)).items()).isEmpty();
+            verifyNoInteractions(mapper);
+        }
+    }
 }
