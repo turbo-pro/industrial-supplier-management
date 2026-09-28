@@ -12,7 +12,8 @@ import java.util.*;
 /** Advisory snapshot only. Business commands must still enforce their own current checks. */
 @Service
 public class RestrictionExplanationService {
-    public enum Action { CONTRACT_CREATE, CONTRACT_ACTIVATE, QUALIFICATION_APPLY, PROJECT_CREATE, RESOURCE_ASSIGN, SITE_ENTER, START_WORK, RESUME_WORK }
+    public enum Action { CONTRACT_CREATE, CONTRACT_ACTIVATE, QUALIFICATION_APPLY, PROJECT_CREATE,
+        RESOURCE_ASSIGN, PERSON_REGISTER, PERSON_ACTIVATE, ASSET_REGISTER, ASSET_USE, SITE_ENTER, START_WORK, RESUME_WORK }
     public enum Decision { ALLOW, WARN, DENY }
     public record Hit(String code,String sourceId,Decision decision,String explanation) {}
     public record View(String supplierId,Action action,Decision decision,LocalDate businessDate,

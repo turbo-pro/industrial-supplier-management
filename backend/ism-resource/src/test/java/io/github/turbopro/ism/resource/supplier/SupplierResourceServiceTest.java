@@ -19,9 +19,15 @@ class SupplierResourceServiceTest {
     private final OperationIdGenerator ids=mock(OperationIdGenerator.class);
     private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
     private final SupplierResourceService service=new SupplierResourceService(mapper,ids,mock(AuditService.class),suppliers);
-    @org.junit.jupiter.api.BeforeEach void validSupplier(){when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));}
+    @org.junit.jupiter.api.BeforeEach void validSupplier(){for(var action:List.of(
+        io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_REGISTER,
+        io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_ACTIVATE,
+        io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_REGISTER,
+        io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_USE))
+        when(suppliers.eligibleForBusiness(30,action)).thenReturn(new io.github.turbopro.ism.supplier.SupplierReferenceService.Reference(20,"SUP-001","测试供应商"));}
     @Test void restrictedSupplierCannotActivatePeopleOrUseAssets(){
-        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_ACTIVATE)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_USE)).thenReturn(null);
         when(mapper.person(10,99)).thenReturn(person("PENDING"));
         when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
@@ -30,9 +36,22 @@ class SupplierResourceServiceTest {
         }
         verify(mapper,never()).personStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
         verify(mapper,never()).assetStatus(anyLong(),anyLong(),anyLong(),anyString(),any(),anyInt());
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_ACTIVATE);
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_USE);
+        verify(suppliers,never()).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN);
+    }
+    @Test void restrictedSupplierCannotRegisterPeopleOrAssets(){
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_REGISTER)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_REGISTER)).thenReturn(null);
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            assertThrows(ApiException.class,()->service.createPerson(new SupplierResourceModels.SavePerson("EMP-001","张三","30",null,SupplierResourceModels.IdType.NATIONAL_ID,"110101199001011234",null,null,null,null,LocalDate.now(),0)));
+            assertThrows(ApiException.class,()->service.createAsset(new SupplierResourceModels.SaveAsset("VEH-001","运输车辆","30",null,SupplierResourceModels.AssetType.VEHICLE,"沪A12345",null,null,null,null,null,0)));
+        }
+        verify(mapper,never()).insertPerson(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),anyString(),anyString(),anyString(),anyString(),any(),any(),any(),any(),any());
+        verify(mapper,never()).insertAsset(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),anyString(),anyString(),anyString(),any(),any(),any(),any(),any());
     }
     @Test void restrictedSupplierCanStillHandOverAssets(){
-        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN)).thenReturn(null);
+        when(suppliers.eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_USE)).thenReturn(null);
         when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
         when(mapper.handoverAsset(10,7,88,"接收人","交接",1)).thenReturn(1);
         try(var tenant=TenantContext.open(10,7);var auth=auth()){
@@ -49,8 +68,18 @@ class SupplierResourceServiceTest {
         }
         var hash=ArgumentCaptor.forClass(String.class);var masked=ArgumentCaptor.forClass(String.class);
         verify(mapper).insertPerson(eq(99L),eq(10L),eq(7L),eq(20L),eq(30L),isNull(),eq("EMP-001"),eq("张三"),eq("NATIONAL_ID"),hash.capture(),masked.capture(),eq("13800138000"),isNull(),isNull(),isNull(),any());
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.PERSON_REGISTER);
         assertEquals(64,hash.getValue().length());assertNotEquals("110101199001011234",hash.getValue());
         assertEquals("**************1234",masked.getValue());assertFalse(masked.getValue().contains("19900101"));
+    }
+
+    @Test void assetRegistrationUsesDistinctAction(){
+        when(ids.nextId()).thenReturn(88L);when(mapper.asset(10,88)).thenReturn(asset("AVAILABLE"));
+        try(var tenant=TenantContext.open(10,7);var auth=auth()){
+            service.createAsset(new SupplierResourceModels.SaveAsset("VEH-001","运输车辆","30",null,SupplierResourceModels.AssetType.VEHICLE,"沪A12345",null,null,null,null,null,0));
+        }
+        verify(suppliers).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.ASSET_REGISTER);
+        verify(suppliers,never()).eligibleForBusiness(30,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.RESOURCE_ASSIGN);
     }
 
     @Test void projectMustBelongToSameSupplier(){

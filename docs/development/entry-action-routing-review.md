@@ -9,8 +9,8 @@
 | 新建项目 | PROJECT_CREATE | 服务端读取当前供应商 |
 | 计划项目开工 | START_WORK | 原项目状态 PLANNED，目标 ACTIVE |
 | 暂停项目复工 | RESUME_WORK | 原项目状态 SUSPENDED，目标 ACTIVE |
-| 人员/资产登记 | RESOURCE_ASSIGN | 保留项目所属供应商核验 |
-| 人员启用/资产投入使用 | RESOURCE_ASSIGN | 保留人员培训/特种凭证与资源状态核验 |
+| 人员登记/启用 | PERSON_REGISTER / PERSON_ACTIVATE | 保留项目所属供应商、培训与特种凭证核验 |
+| 车辆设备登记/投入使用 | ASSET_REGISTER / ASSET_USE | 保留项目所属供应商与资源状态核验 |
 | 现场签到 | SITE_ENTER | 保留锁后人员、项目、培训与特种凭证核验 |
 | 准入创建/提交/批准 | QUALIFICATION_APPLY | 既有 eligibleForAdmission 包装继续使用 |
 
@@ -23,6 +23,8 @@
 项目台账将原“启动”按钮分为计划项目“开工”和暂停项目“复工”，后端仍接收原状态变更请求，并根据原项目状态推导动作，不新增 action 请求参数。数据库结构、REST 请求和响应没有变动，本轮无需迁移或改变生成客户端。
 
 此处只完善动作路由，不宣称已经支持组织/工厂/项目范围规则；当前 SPI 没有完整范围上下文，不能开启局部限制。因此，动作名称虽然准确，完整 B7-03 和统一范围判定仍未验收完成。
+
+后续资源动作已由 `RESOURCE_ASSIGN` 细分为四个固定动作，见 [资源动作验收](resource-action-routing-review.md)。本文件上方表格反映当前映射；下方 2026-09-27 测试记录保留当时的历史结果。
 
 ## 自动化与 Review
 

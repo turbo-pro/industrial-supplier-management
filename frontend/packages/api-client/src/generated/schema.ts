@@ -2565,7 +2565,7 @@ export interface components {
             data?: components["schemas"]["PersonalTableViewPage"];
         };
         /** @enum {string} */
-        RestrictionExplainAction: "CONTRACT_CREATE" | "CONTRACT_ACTIVATE" | "QUALIFICATION_APPLY" | "PROJECT_CREATE" | "RESOURCE_ASSIGN" | "SITE_ENTER" | "START_WORK" | "RESUME_WORK";
+        RestrictionExplainAction: "CONTRACT_CREATE" | "CONTRACT_ACTIVATE" | "QUALIFICATION_APPLY" | "PROJECT_CREATE" | "RESOURCE_ASSIGN" | "PERSON_REGISTER" | "PERSON_ACTIVATE" | "ASSET_REGISTER" | "ASSET_USE" | "SITE_ENTER" | "START_WORK" | "RESUME_WORK";
         /** @enum {string} */
         RestrictionExplainDecision: "ALLOW" | "WARN" | "DENY";
         RestrictionExplanationHit: {

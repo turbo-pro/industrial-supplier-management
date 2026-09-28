@@ -12,7 +12,7 @@ const result=ref<components['schemas']['RestrictionExplanation']|null>(null);
 const busy=ref(false);
 const gateHits=ref<components['schemas']['RestrictionGateHit'][]>([]),gateTotal=ref(0),gatePage=ref(0),gateLoading=ref(false);
 let requestVersion=0;
-const actions={CONTRACT_CREATE:'新建合同',CONTRACT_ACTIVATE:'合同生效',QUALIFICATION_APPLY:'准入申请',PROJECT_CREATE:'新建项目',RESOURCE_ASSIGN:'资源新增/分配',SITE_ENTER:'现场进场',START_WORK:'项目开工',RESUME_WORK:'项目复工'};
+const actions={CONTRACT_CREATE:'新建合同',CONTRACT_ACTIVATE:'合同生效',QUALIFICATION_APPLY:'准入申请',PROJECT_CREATE:'新建项目',PERSON_REGISTER:'人员登记',PERSON_ACTIVATE:'人员启用',ASSET_REGISTER:'车辆设备登记',ASSET_USE:'车辆设备投入使用',RESOURCE_ASSIGN:'资源操作（兼容旧查询）',SITE_ENTER:'现场进场',START_WORK:'项目开工',RESUME_WORK:'项目复工'};
 const decisions={ALLOW:'企业级检查未命中阻断',WARN:'观察提醒',DENY:'禁止新增业务'};
 async function explain(){
   if(!props.supplier)return;
@@ -58,7 +58,7 @@ watch(action,()=>{result.value=null;});
     <p>仅记录业务入口重验时的观察提醒或阻断；上方解释查询不写入此台账。门禁命中不代表业务已提交。</p>
     <el-button :loading="gateLoading" @click="loadGateHits(0)">读取命中台账</el-button>
     <el-table v-if="gateTotal||gateHits.length" v-loading="gateLoading" :data="gateHits" style="margin-top:12px">
-      <el-table-column prop="createdAt" label="判定时间" width="185"/><el-table-column prop="action" label="业务动作" width="145"/>
+      <el-table-column prop="createdAt" label="判定时间" width="185"/><el-table-column label="业务动作" width="170"><template #default="{row}">{{actions[row.action as keyof typeof actions]??row.action}}</template></el-table-column>
       <el-table-column prop="code" label="命中类型" width="140"/><el-table-column prop="sourceId" label="来源 ID" width="155"/>
       <el-table-column label="结果" width="85"><template #default="{row}"><el-tag :type="row.decision==='DENY'?'danger':'warning'">{{row.decision==='DENY'?'阻断':'提醒'}}</el-tag></template></el-table-column>
       <el-table-column prop="actorId" label="操作人 ID" width="120"/>
