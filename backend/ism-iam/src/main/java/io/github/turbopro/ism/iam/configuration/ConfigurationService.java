@@ -36,6 +36,9 @@ public class ConfigurationService {
         long tenantId=tenant();String type=systemMapper.settingType(key);
         if(type==null)throw new ApiException(ConfigurationErrorCode.UNKNOWN_SETTING);
         validate(type,command.value());validateKey(key,command.value());
+        if("exit.escalationRecipientId".equals(key)&&!"0".equals(command.value())
+                &&mapper.activeTenantUser(tenantId,Long.parseLong(command.value()))!=1)
+            throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);
         Integer current=mapper.tenantSettingVersion(tenantId,key);
         if(current==null){
             if(command.version()!=0)throw new ApiException(CommonErrorCode.CONFLICT);
@@ -51,6 +54,14 @@ public class ConfigurationService {
             throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);
         if("exit.autoReminderIntervalHours".equals(key)){
             try{long hours=Long.parseLong(value);if(hours<24||hours>720)throw new IllegalArgumentException();}
+            catch(IllegalArgumentException e){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}
+        }
+        if("exit.escalationAfterDays".equals(key)){
+            try{long days=Long.parseLong(value);if(days<1||days>365)throw new IllegalArgumentException();}
+            catch(IllegalArgumentException e){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}
+        }
+        if("exit.escalationRecipientId".equals(key)){
+            try{long id=Long.parseLong(value);if(id<0)throw new IllegalArgumentException();}
             catch(IllegalArgumentException e){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}
         }
         if("restriction.watchPeriodDays".equals(key)){

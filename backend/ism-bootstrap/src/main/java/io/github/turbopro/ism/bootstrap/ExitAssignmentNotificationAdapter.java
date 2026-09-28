@@ -14,4 +14,7 @@ public class ExitAssignmentNotificationAdapter implements ExitAssignmentNotifier
     @Override public void reminded(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId,java.time.LocalDate dueDate){
         messages.notifyExitReminder(supplierId,applicationId,entityId,code,sourceId,assigneeId,dueDate);
     }
+    @Override public void escalated(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId,long recipientId,java.time.LocalDate dueDate){
+        messages.notifyExitEscalation(supplierId,applicationId,entityId,code,sourceId,assigneeId,recipientId,dueDate);
+    }
 }

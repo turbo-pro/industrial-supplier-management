@@ -47,7 +47,10 @@ public class ExitAutoReminderWorker {
                         if(!"1".equals(dispatch.enabled(candidate.tenantId())))return;
                         String configuredHours=dispatch.intervalHours(candidate.tenantId());
                         int hours=Integer.parseInt(configuredHours==null?"24":configuredHours);
-                        if(exits.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours))
+                        String recipient=dispatch.escalationRecipientId(candidate.tenantId());
+                        String days=dispatch.escalationAfterDays(candidate.tenantId());
+                        if(exits.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours,
+                                Long.parseLong(recipient==null?"0":recipient),Integer.parseInt(days==null?"3":days)))
                             failures.delivered(candidate.supplierId(),candidate.applicationId(),candidate.id());
                     });
                 }catch(Exception ex){

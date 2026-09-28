@@ -7,6 +7,8 @@ import java.util.List;
 
 @Mapper
 public interface ConfigurationMapper extends TenantScopedMapper {
+    @Select("SELECT COUNT(*) FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0")
+    int activeTenantUser(long tenantId,long userId);
     @Select("SELECT setting_value FROM cfg_tenant_setting WHERE tenant_id=#{tenantId} AND setting_key=#{key} FOR UPDATE")
     String currentSettingValue(long tenantId,String key);
     @Select("""

@@ -14,6 +14,11 @@ import com.fasterxml.jackson.core.type.TypeReference;import com.fasterxml.jackso
   long tenant=tenant();mapper.ensureExitReminderTemplate(tenant,ids.nextId());
   deliverExitNotice(mapper.exitReminderTemplate(tenant),entityId,assigneeId,Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"code",code,"sourceId",Long.toString(sourceId),"dueDate",dueDate==null?"未设置":dueDate.toString()));
  }
+ @Transactional public void notifyExitEscalation(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId,long recipientId,LocalDate dueDate){
+  if(supplierId<=0||applicationId<=0||entityId<=0||sourceId<=0||assigneeId<=0||recipientId<=0||code==null||dueDate==null)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+  long tenant=tenant();mapper.ensureExitEscalationTemplate(tenant,ids.nextId());
+  deliverExitNotice(mapper.exitEscalationTemplate(tenant),entityId,recipientId,Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"code",code,"sourceId",Long.toString(sourceId),"dueDate",dueDate.toString(),"assigneeId",Long.toString(assigneeId)));
+ }
  private void deliverExitNotice(MessageModels.TemplateRow template,long entityId,long assigneeId,Map<String,String> variables){
   long tenant=tenant();
   if(template==null||!"ACTIVE".equals(template.status()))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"退出通知模板不可用");

@@ -28,4 +28,10 @@ public interface ExitReminderDispatchMapper {
 
     @Select("SELECT p.setting_value FROM cfg_tenant_setting p WHERE p.tenant_id=#{tenantId} AND p.setting_key='exit.autoReminderIntervalHours' FOR UPDATE")
     String intervalHours(long tenantId);
+
+    @Select("SELECT p.setting_value FROM cfg_tenant_setting p WHERE p.tenant_id=#{tenantId} AND p.setting_key='exit.escalationRecipientId' FOR UPDATE")
+    String escalationRecipientId(long tenantId);
+
+    @Select("SELECT p.setting_value FROM cfg_tenant_setting p WHERE p.tenant_id=#{tenantId} AND p.setting_key='exit.escalationAfterDays' FOR UPDATE")
+    String escalationAfterDays(long tenantId);
 }

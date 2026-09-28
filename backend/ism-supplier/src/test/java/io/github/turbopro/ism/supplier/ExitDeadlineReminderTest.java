@@ -22,6 +22,24 @@ class ExitDeadlineReminderTest extends ExitApplicationServiceTest {
         verify(notifications).reminded(30,90,100,"OPEN_CONTRACT",77,8,RestrictionBusinessDate.today().minusDays(1));
         verify(mapper).event(anyLong(),eq(10L),eq(90L),eq("AUTO_ENTITY_REMIND"),anyString(),eq(0L));
     }
+    @Test void overdueEscalationNotifiesConfiguredActiveRecipientWithoutReassignment(){
+        var service=pendingTask();var due=RestrictionBusinessDate.today().minusDays(3);
+        when(mapper.entity(10,90,100)).thenReturn(owner(due,null));
+        when(assignees.active(8)).thenReturn(true);when(assignees.active(9)).thenReturn(true);
+        when(mapper.reminded(eq(10L),eq(90L),eq(100L),any(),eq(0))).thenReturn(1);
+        when(mapper.advanceVersion(10,30,90,0)).thenReturn(1);
+        try(var t=TenantContext.openSystem(10)){assertTrue(service.autoRemind(30,90,100,24,9,3));}
+        verify(notifications).escalated(30,90,100,"OPEN_CONTRACT",77,8,9,due);
+        verify(mapper,never()).assignEntity(anyLong(),anyLong(),anyLong(),anyLong(),anyString(),anyLong(),anyInt());
+    }
+    @Test void escalationWaitsForThresholdAndDoesNotDuplicateOwnerNotice(){
+        var service=pendingTask();var due=RestrictionBusinessDate.today().minusDays(1);
+        when(mapper.entity(10,90,100)).thenReturn(owner(due,null));when(assignees.active(8)).thenReturn(true);
+        when(mapper.reminded(eq(10L),eq(90L),eq(100L),any(),eq(0))).thenReturn(1);
+        when(mapper.advanceVersion(10,30,90,0)).thenReturn(1);
+        try(var t=TenantContext.openSystem(10)){assertTrue(service.autoRemind(30,90,100,24,9,3));}
+        verify(notifications,never()).escalated(anyLong(),anyLong(),anyLong(),anyString(),anyLong(),anyLong(),anyLong(),any());
+    }
     @Test void automaticReminderSkipsDisabledFactsAndCannotBeCalledAsUser(){
         var service=pendingTask();
         when(mapper.entity(10,90,100)).thenReturn(owner(RestrictionBusinessDate.today(),null));

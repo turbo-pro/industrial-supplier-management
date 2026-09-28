@@ -142,8 +142,11 @@ public class ExitApplicationService {
     }
     /** Background-only path: rechecks mutable facts under the same supplier/application/entity locks as manual reminders. */
     @Transactional public boolean autoRemind(long supplierId,long applicationId,long entityId,int intervalHours){
+        return autoRemind(supplierId,applicationId,entityId,intervalHours,0,3);
+    }
+    @Transactional public boolean autoRemind(long supplierId,long applicationId,long entityId,int intervalHours,long escalationRecipientId,int escalationAfterDays){
         var i=TenantContext.require();
-        if(i.actorId()!=0||intervalHours<24||intervalHours>720)throw new IllegalArgumentException("system context and valid interval required");
+        if(i.actorId()!=0||intervalHours<24||intervalHours>720||escalationRecipientId<0||escalationAfterDays<1||escalationAfterDays>365)throw new IllegalArgumentException("system context and valid interval required");
         var supplier=suppliers.findForNewBusiness(i.tenantId(),supplierId);
         if(supplier==null||"EXITED".equals(supplier.status()))return false;
         var application=mapper.get(i.tenantId(),supplierId,applicationId);
@@ -158,6 +161,11 @@ public class ExitApplicationService {
         if(mapper.reminded(i.tenantId(),applicationId,entityId,now,entity.version())!=1)throw conflict();
         if(mapper.advanceVersion(i.tenantId(),supplierId,applicationId,application.version())!=1)throw conflict();
         notifications.reminded(supplierId,applicationId,entityId,entity.checkCode(),entity.sourceId(),entity.assigneeId(),entity.dueDate());
+        if(escalationRecipientId>0&&!entity.dueDate().plusDays(escalationAfterDays).isAfter(RestrictionBusinessDate.today())
+                &&escalationRecipientId!=entity.assigneeId()){
+            if(!assignees.active(escalationRecipientId))throw invalid("退出升级接收人不存在或已停用");
+            notifications.escalated(supplierId,applicationId,entityId,entity.checkCode(),entity.sourceId(),entity.assigneeId(),escalationRecipientId,entity.dueDate());
+        }
         event(applicationId,"AUTO_ENTITY_REMIND",entity.checkCode()+" #"+entity.sourceId()+" 自动催办责任人 "+entity.assigneeId());
         audit("SUPPLIER_EXIT_ENTITY_AUTO_REMIND",applicationId,Map.of("entityId",entityId,"assigneeId",entity.assigneeId()));
         return true;

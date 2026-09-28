@@ -9,6 +9,10 @@ import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;im
  int ensureExitReminderTemplate(long tenantId,long id);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_REMINDER' AND channel='IN_APP' FOR SHARE")
  MessageModels.TemplateRow exitReminderTemplate(long tenantId);
+ @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'SUPPLIER_EXIT_ESCALATION','退出事项逾期升级','IN_APP','退出事项逾期升级','供应商 {{supplierId}} 的退出申请 {{applicationId}}，事项 {{code}} / {{sourceId}} 已逾期，期限 {{dueDate}}，当前责任人 {{assigneeId}}。请督促处置并重新核验；本通知不代表事项已完成或责任已转移。',JSON_ARRAY('supplierId','applicationId','code','sourceId','dueDate','assigneeId'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
+ int ensureExitEscalationTemplate(long tenantId,long id);
+ @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_ESCALATION' AND channel='IN_APP' FOR SHARE")
+ MessageModels.TemplateRow exitEscalationTemplate(long tenantId);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} ORDER BY template_code,channel")List<MessageModels.TemplateRow> templates(long tenantId);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code=#{code} AND status='ACTIVE' ORDER BY channel LIMIT 1")MessageModels.TemplateRow activeTemplate(long tenantId,String code);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND id=#{id}")MessageModels.TemplateRow template(long tenantId,long id);

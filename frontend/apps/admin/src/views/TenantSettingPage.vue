@@ -7,6 +7,9 @@ const session=useSessionStore();
 const setting=ref<components['schemas']['TenantSetting']>();
 const reminderEnabled=ref<components['schemas']['TenantSetting']>();
 const reminderInterval=ref<components['schemas']['TenantSetting']>();
+const escalationRecipient=ref<components['schemas']['TenantSetting']>();
+const escalationDays=ref<components['schemas']['TenantSetting']>();
+const recipientId=ref('0'),afterDays=ref(3);
 const days=ref(7),enabled=ref(false),hours=ref(24),loading=ref(false),saving=ref(false);
 async function load(){
   loading.value=true;
@@ -17,9 +20,33 @@ async function load(){
     if(setting.value)days.value=Number(setting.value.value);
     reminderEnabled.value=data?.data?.find(item=>item.key==='exit.autoReminderEnabled');
     reminderInterval.value=data?.data?.find(item=>item.key==='exit.autoReminderIntervalHours');
+    escalationRecipient.value=data?.data?.find(item=>item.key==='exit.escalationRecipientId');
+    escalationDays.value=data?.data?.find(item=>item.key==='exit.escalationAfterDays');
     if(reminderEnabled.value)enabled.value=reminderEnabled.value.value==='1';
     if(reminderInterval.value)hours.value=Number(reminderInterval.value.value);
+    if(escalationRecipient.value)recipientId.value=escalationRecipient.value.value;
+    if(escalationDays.value)afterDays.value=Number(escalationDays.value.value);
   }catch{ElMessage.error('网络异常，配置加载失败');}finally{loading.value=false;}
+}
+async function saveEscalation(){
+  if(!escalationRecipient.value||!escalationDays.value||!/^(0|[1-9]\d{0,18})$/.test(recipientId.value)||BigInt(recipientId.value)>9223372036854775807n||!Number.isInteger(afterDays.value)||afterDays.value<1||afterDays.value>365){
+    ElMessage.warning('请输入有效用户 ID 和 1 至 365 天的升级阈值');return;
+  }
+  saving.value=true;
+  try{
+    // Disable the recipient first; when enabling, set the threshold before activating the recipient.
+    const changes:Array<[components['schemas']['TenantSetting'],string]>=recipientId.value==='0'
+      ? [[escalationRecipient.value,'0'],[escalationDays.value,String(afterDays.value)]]
+      : [[escalationDays.value,String(afterDays.value)],[escalationRecipient.value,recipientId.value]];
+    for(const [item,value] of changes){
+      const {data,error,response}=await session.client.PUT('/configuration/settings/{settingKey}',{
+        params:{path:{settingKey:item.key},header:{'Idempotency-Key':crypto.randomUUID()}},body:{value,version:item.version}
+      });
+      if(error){ElMessage.error(response.status===409?'配置已被更新，请刷新后重试':error.error.message);await load();return;}
+      if(data?.data){if(item.key==='exit.escalationRecipientId')escalationRecipient.value=data.data;else escalationDays.value=data.data;}
+    }
+    ElMessage.success('退出逾期升级策略已保存');
+  }catch{ElMessage.error('网络异常，请刷新核对保存结果');await load();}finally{saving.value=false;}
 }
 async function saveReminder(){
   if(!reminderEnabled.value||!reminderInterval.value||!Number.isInteger(hours.value)||hours.value<24||hours.value>720){
@@ -80,6 +107,16 @@ onMounted(load);
         <el-button type="primary" :loading="saving" @click="saveReminder">保存催办策略</el-button>
       </el-form>
       <el-empty v-else-if="!loading" description="自动催办策略尚未加载"/>
+    </el-card>
+    <el-card shadow="never" style="margin-top:16px">
+      <template #header>退出处置 · 逾期升级</template>
+      <el-alert title="默认关闭。须先启用自动催办；达到逾期天数后，随自动催办向指定本租户有效用户发送站内升级通知。不会自动改派或关闭事项。0 表示关闭升级。" type="info" :closable="false"/>
+      <el-form v-if="escalationRecipient&&escalationDays" label-position="top" style="margin-top:16px">
+        <el-form-item label="升级接收人用户 ID（0 为关闭）"><el-input v-model="recipientId" :disabled="saving"/></el-form-item>
+        <el-form-item label="逾期满多少天升级"><el-input-number v-model="afterDays" :min="1" :max="365" :precision="0" :disabled="saving"/></el-form-item>
+        <el-button type="primary" :loading="saving" @click="saveEscalation">保存升级策略</el-button>
+      </el-form>
+      <el-empty v-else-if="!loading" description="升级策略尚未加载"/>
     </el-card>
   </div>
 </template>

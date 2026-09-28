@@ -44,4 +44,10 @@ class ExitAssignmentNotificationTest {
         verify(mapper).ensureExitReminderTemplate(10,101);
         verify(mapper).insertDelivery(eq(10L),eq(102L),eq(51L),eq(8L),eq("催办"),eq("期限 未设置"),eq("SUPPLIER_EXIT_ENTITY"),eq(100L),any());
     }
+    @Test void escalationUsesDistinctTemplateAndRecipient(){
+        when(mapper.exitEscalationTemplate(10)).thenReturn(new MessageModels.TemplateRow(52,"SUPPLIER_EXIT_ESCALATION","升级","IN_APP","逾期升级","负责人 {{assigneeId}} / {{dueDate}}","[\"assigneeId\",\"dueDate\"]","ACTIVE",0));
+        when(mapper.validUsers(10,Set.of(9L))).thenReturn(Set.of(9L));when(ids.nextId()).thenReturn(101L,102L,103L);
+        try(var ignored=TenantContext.open(10,7)){service.notifyExitEscalation(30,90,100,"OPEN_CONTRACT",77,8,9,java.time.LocalDate.of(2026,9,20));}
+        verify(mapper).insertDelivery(eq(10L),eq(102L),eq(52L),eq(9L),eq("逾期升级"),eq("负责人 8 / 2026-09-20"),eq("SUPPLIER_EXIT_ENTITY"),eq(100L),any());
+    }
 }

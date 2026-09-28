@@ -9,6 +9,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ConfigurationServiceTest {
+    @Test void escalationPolicyRejectsInvalidRecipientAndThreshold(){
+        var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
+        when(definitions.settingType("exit.escalationRecipientId")).thenReturn("INTEGER");
+        when(definitions.settingType("exit.escalationAfterDays")).thenReturn("INTEGER");
+        var service=new ConfigurationService(mapper,definitions,mock(OperationIdGenerator.class));
+        try(var t=TenantContext.open(10,1)){
+            for(String value:new String[]{"0","366","bad"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.escalationAfterDays",new ConfigurationModels.UpdateSetting(value,0)));
+            for(String value:new String[]{"-1","9223372036854775808","bad"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.escalationRecipientId",new ConfigurationModels.UpdateSetting(value,0)));
+            assertThrows(ApiException.class,()->service.updateSetting("exit.escalationRecipientId",new ConfigurationModels.UpdateSetting("9",0)));
+        }
+        verify(mapper).activeTenantUser(10,9);
+        verify(mapper,never()).insertSetting(anyLong(),anyLong(),anyString(),anyString(),anyString());
+    }
     @Test void rejectsInvalidAutoReminderPolicyBeforeWriting(){
         var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
         when(definitions.settingType("exit.autoReminderEnabled")).thenReturn("INTEGER");
