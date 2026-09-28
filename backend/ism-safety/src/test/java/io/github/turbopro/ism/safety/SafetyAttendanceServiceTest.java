@@ -100,6 +100,15 @@ class SafetyAttendanceServiceTest {
         }
         verify(suppliers,never()).activeForNewBusiness(anyLong());
     }
+    @Test void detailRequiresCurrentDataScope(){
+        when(mapper.get(10,100)).thenReturn(new SafetyAttendanceModels.Row(100,20,40,30,99,"P-1","张三","供应商","项目","厂区",LocalDateTime.now(),null,7,null,null,7,0));
+        try(var tenant=TenantContext.open(10,7);var authorization=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("safety:attendance",DataScope.projects(Set.of(41L))),Set.of()))){
+            assertThrows(ApiException.class,()->service.get(100));
+        }
+        try(var tenant=TenantContext.open(10,7);var authorization=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("safety:attendance",DataScope.projects(Set.of(40L))),Set.of()))){
+            assertEquals("100",service.get(100).id());
+        }
+    }
     private AuthorizationContext.Scope auth() {
         return AuthorizationContext.open(new PermissionSnapshot(Set.of(),
                 Map.of("safety:attendance", DataScope.all()), Set.of()));

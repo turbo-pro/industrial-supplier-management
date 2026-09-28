@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -9,6 +10,7 @@ type Ncr = components['schemas']['QualityNcr'];
 type Project = components['schemas']['ProjectSummary'];
 type Event = components['schemas']['QualityNcrEvent'];
 const session = useSessionStore();
+const route = useRoute();
 const rows = ref<Ncr[]>([]);
 const projects = ref<Project[]>([]);
 const events = ref<Event[]>([]);
@@ -114,7 +116,7 @@ async function showEvents(row: Ncr) {
   eventsDialog.value = true;
 }
 
-onMounted(load);
+onMounted(() => { if(typeof route.query.keyword==='string')filter.keyword=route.query.keyword; void load(); });
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -8,10 +9,12 @@ import PersonalTableViews from '../components/PersonalTableViews.vue';
 type Attendance = components['schemas']['SafetyAttendance'];
 type Person = components['schemas']['SupplierPerson'];
 const session = useSessionStore();
+const route = useRoute();
 const loading = ref(false);
 const dialog = ref(false);
 const saving = ref(false);
 const rows = ref<Attendance[]>([]);
+const selectedAttendance = ref<Attendance | null>(null);
 const persons = ref<Person[]>([]);
 const total = ref(0);
 const query = reactive({ personId: '', openOnly: false, page: 0, size: 20 });
@@ -76,7 +79,14 @@ async function checkOut(row: Attendance) {
   await load();
 }
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+  const attendanceId=route.query.attendanceId;
+  if(typeof attendanceId!=='string'||!/^[1-9]\d*$/.test(attendanceId))return;
+  const {data,error}=await session.client.GET('/safety/attendance/{id}',{params:{path:{id:attendanceId}}});
+  if(error||!data?.data){ElMessage.error(error?.error.message??'出入记录不存在或无权查看');return;}
+  selectedAttendance.value=data.data;
+});
 </script>
 
 <template>
@@ -107,5 +117,14 @@ onMounted(load);
       </el-form>
       <template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="checkIn">签到</el-button></template>
     </el-dialog>
+    <el-drawer :model-value="!!selectedAttendance" title="现场出入记录" size="480px" @close="selectedAttendance=null">
+      <template v-if="selectedAttendance">
+        <p>人员：{{selectedAttendance.personName}}（{{selectedAttendance.personCode}}）</p>
+        <p>供应商：{{selectedAttendance.supplierName}} · 项目：{{selectedAttendance.projectName}}</p>
+        <p>现场：{{selectedAttendance.siteName}}</p>
+        <p>签到：{{selectedAttendance.checkInAt}} · 签退：{{selectedAttendance.checkOutAt??'未签退'}}</p>
+        <p v-if="selectedAttendance.checkOutNote">签退说明：{{selectedAttendance.checkOutNote}}</p>
+      </template>
+    </el-drawer>
   </div>
 </template>

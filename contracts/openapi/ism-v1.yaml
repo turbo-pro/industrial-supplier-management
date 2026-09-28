@@ -1399,6 +1399,13 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: personId, in: query, schema: { type: string } }, { name: openOnly, in: query, schema: { type: boolean, default: false } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
       responses: { '200': { description: Site attendance records, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyAttendancePageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' } }
+  /safety/attendance/{id}:
+    get:
+      operationId: getSafetyAttendance
+      tags: [Safety]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Scoped site attendance record, content: { application/json: { schema: { $ref: '#/components/schemas/SafetyAttendanceResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' } }
   /safety/attendance/check-in:
     post:
       operationId: checkInSitePerson
@@ -2366,7 +2373,7 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/WorkflowTask' } } } }]
     SearchEntityType:
       type: string
-      enum: [USER, ORGANIZATION, FILE, PRINT_TEMPLATE, MESSAGE, TASK, SUPPLIER, CONTRACT, PROJECT, PERSON, ASSET, SAFETY_ISSUE, QUALITY_NCR]
+      enum: [USER, ORGANIZATION, FILE, PRINT_TEMPLATE, MESSAGE, TASK, SUPPLIER, CONTRACT, PROJECT, PERSON, ASSET, SAFETY_ISSUE, QUALITY_NCR, PERFORMANCE_EVALUATION, SITE_ATTENDANCE]
     SearchRequest:
       type: object
       required: [keyword, types, statuses, page, size]

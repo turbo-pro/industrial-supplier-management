@@ -78,4 +78,28 @@ class SearchServiceTest {
             verifyNoInteractions(mapper);
         }
     }
+    @Test void performanceSearchRequiresEvaluationPermissionAndItsOwnScope(){
+        when(mapper.performanceEvaluations(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("OWNED"),eq(Set.of()),eq(9L)))
+            .thenReturn(List.of(new SearchModels.SearchRow(91,"PERFORMANCE_EVALUATION","供应商甲","SUP-91 · 2026-01-01 ~ 2026-01-31","DRAFT","/performance/evaluations",LocalDateTime.of(2026,1,31,0,0),18L,9L)));
+        var query=new SearchModels.SearchRequest("供应商",Set.of(SearchModels.EntityType.PERFORMANCE_EVALUATION),Set.of(),null,null,0,20);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("performance:evaluation:view"),Map.of("performance:evaluation",DataScope.owned()),Set.of()))){
+            assertThat(service.search(query).items()).extracting(SearchModels.SearchItem::id).containsExactly("91");
+        }
+        clearInvocations(mapper);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("performance:evaluation:view"),Map.of("performance:evaluation",DataScope.organizations(Set.of())),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("performance:evaluation",DataScope.all()),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+    }
+    @Test void attendanceSearchRejectsEmptyProjectScopeAndMissingPermission(){
+        var query=new SearchModels.SearchRequest("厂区",Set.of(SearchModels.EntityType.SITE_ATTENDANCE),Set.of("OPEN"),null,null,0,20);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:attendance:view"),Map.of("safety:attendance",DataScope.projects(Set.of())),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("safety:attendance",DataScope.all()),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+    }
 }

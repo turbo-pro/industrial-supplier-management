@@ -7,7 +7,7 @@ import java.util.Set;
 
 public final class SearchModels {
     private SearchModels(){}
-    public enum EntityType { USER,ORGANIZATION,FILE,PRINT_TEMPLATE,MESSAGE,TASK,SUPPLIER,CONTRACT,PROJECT,PERSON,ASSET,SAFETY_ISSUE,QUALITY_NCR }
+    public enum EntityType { USER,ORGANIZATION,FILE,PRINT_TEMPLATE,MESSAGE,TASK,SUPPLIER,CONTRACT,PROJECT,PERSON,ASSET,SAFETY_ISSUE,QUALITY_NCR,PERFORMANCE_EVALUATION,SITE_ATTENDANCE }
     public record SearchRequest(@Size(max=100) String keyword,Set<EntityType> types,Set<@Size(max=32) String> statuses,
                                 LocalDateTime updatedFrom,LocalDateTime updatedTo,@Min(0) @Max(100) int page,@Min(1) @Max(100) int size){
         public SearchRequest{keyword=keyword==null?"":keyword.trim();types=types==null?Set.of():Set.copyOf(types);statuses=statuses==null?Set.of():Set.copyOf(statuses);size=size==0?20:size;}

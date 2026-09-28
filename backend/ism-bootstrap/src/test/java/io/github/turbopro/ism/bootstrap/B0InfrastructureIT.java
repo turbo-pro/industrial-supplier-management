@@ -211,6 +211,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.integration.table.TableViewService tableViewService;
     @Autowired private SafetyCredentialMapper safetyCredentialMapper;
     @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceMapper safetyAttendanceMapper;
+    @Autowired private io.github.turbopro.ism.safety.SafetyAttendanceService safetyAttendanceService;
     @Autowired private QualityNcrMapper qualityNcrMapper;
     @Autowired private PerformanceMapper performanceMapper;
     @Autowired private ImprovementMapper improvementMapper;
@@ -1386,6 +1387,26 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,9,'search-evidence.pdf','application/pdf',1,?,'LOCAL',?,'ACTIVE')",row[0]+70,row[1],String.format("%064d",row[0]+70),"search/"+row[0]);
                 jdbcTemplate.update("INSERT INTO saf_issue(id,tenant_id,organization_id,project_id,supplier_id,issue_no,title,category,severity,description,discovered_at,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Safety','GENERAL','LOW','Fixture',CURRENT_TIMESTAMP,CURRENT_DATE,9,9,9)",row[0]+50,row[1],row[2],row[0]+20,row[0],"BIZ-SAFE"+row[0]);
                 jdbcTemplate.update("INSERT INTO qua_nonconformance(id,tenant_id,organization_id,project_id,supplier_id,ncr_no,title,category,severity,description,inspection_date,inspected_quantity,defective_quantity,unit,evidence_file_id,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Quality','PRODUCT','LOW','Fixture',CURRENT_DATE,10,1,'件',?,CURRENT_DATE,9,9,9)",row[0]+60,row[1],row[2],row[0]+20,row[0],"BIZ-NCR"+row[0],row[0]+70);
+                jdbcTemplate.update("INSERT INTO per_supplier_evaluation(id,tenant_id,organization_id,supplier_id,supplier_code,supplier_name,period_start,period_end,total_score,grade,created_by,updated_by) VALUES(?,?,?,?,?,?,'2026-01-01','2026-01-31',80,'B',9,9)",row[0]+80,row[1],row[2],row[0],"BIZ-S"+row[0],"Business Supplier "+row[0]);
+                jdbcTemplate.update("INSERT INTO saf_site_attendance(id,tenant_id,organization_id,project_id,supplier_id,person_id,site_name,check_in_at,check_in_by,created_by) VALUES(?,?,?,?,?,?,'BIZ-SITE',CURRENT_TIMESTAMP,9,9)",row[0]+90,row[1],row[2],row[0]+20,row[0],row[0]+30);
+            }
+            var attendanceRequest=new SearchModels.SearchRequest("BIZ-SITE",Set.of(SearchModels.EntityType.SITE_ATTENDANCE),Set.of("OPEN"),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:attendance:view"),Map.of("safety:attendance",DataScope.projects(Set.of(98141L))),Set.of()))){
+                assertThat(searchService.search(attendanceRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98211");
+                assertThat(searchService.search(attendanceRequest).items()).extracting(SearchModels.SearchItem::route).containsExactly("/safety/attendance");
+                assertThat(safetyAttendanceService.get(98211).personId()).isEqualTo("98151");
+                assertThatThrownBy(()->safetyAttendanceService.get(98212)).isInstanceOf(ApiException.class);
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:attendance:view"),Map.of("safety:attendance",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(attendanceRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98213");
+            }
+            var performanceRequest=new SearchModels.SearchRequest("BIZ-S",Set.of(SearchModels.EntityType.PERFORMANCE_EVALUATION),Set.of(),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("performance:evaluation:view"),Map.of("performance:evaluation",DataScope.organizations(Set.of(orgA))),Set.of()))){
+                assertThat(searchService.search(performanceRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98201");
+                assertThat(searchService.search(performanceRequest).items()).extracting(SearchModels.SearchItem::route).containsExactly("/performance/evaluations");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("performance:evaluation:view"),Map.of("performance:evaluation",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(performanceRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98203");
             }
             var issueTypes=Set.of(SearchModels.EntityType.SAFETY_ISSUE,SearchModels.EntityType.QUALITY_NCR);
             var issueRequest=new SearchModels.SearchRequest("BIZ-",issueTypes,Set.of(),null,null,0,20);
@@ -1426,6 +1447,8 @@ class B0InfrastructureIT {
                 assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143","98153","98163");
             }
         }finally{
+            jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM qua_nonconformance WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM saf_issue WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM res_file_object WHERE tenant_id IN (?,?)",tenantA,tenantB);

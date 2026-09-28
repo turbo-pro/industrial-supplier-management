@@ -25,6 +25,11 @@ public class SafetyAttendanceController {
                                                            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return responses.success(service.list(personId, openOnly, page, size));
     }
+    @GetMapping("/{id}")
+    @RequiresPermission("safety:attendance:view")
+    public ApiResponse<SafetyAttendanceModels.View> get(@PathVariable long id) {
+        return responses.success(service.get(id));
+    }
     @PostMapping("/check-in")
     @RequiresPermission("safety:attendance:checkin")
     public ApiResponse<SafetyAttendanceModels.View> checkIn(@Valid @RequestBody SafetyAttendanceModels.CheckIn command) {

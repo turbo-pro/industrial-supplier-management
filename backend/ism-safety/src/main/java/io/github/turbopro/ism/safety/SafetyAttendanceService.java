@@ -33,6 +33,14 @@ public class SafetyAttendanceService {
         return new SafetyAttendanceModels.Page(total, page, size, rows.stream().map(this::view).toList());
     }
 
+    public SafetyAttendanceModels.View get(long attendanceId) {
+        var identity = TenantContext.require();
+        var row = mapper.get(identity.tenantId(), attendanceId);
+        if (row == null || !scope().allows(new DataTarget(row.organizationId(), row.projectId(),
+                null, row.createdBy()), identity.actorId())) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        return view(row);
+    }
+
     @Transactional
     public SafetyAttendanceModels.View checkIn(SafetyAttendanceModels.CheckIn command) {
         var identity = TenantContext.require();

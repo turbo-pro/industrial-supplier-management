@@ -1986,6 +1986,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/safety/attendance/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSafetyAttendance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/safety/attendance/check-in": {
         parameters: {
             query?: never;
@@ -4074,7 +4090,7 @@ export interface components {
             data?: components["schemas"]["WorkflowTask"][];
         };
         /** @enum {string} */
-        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK" | "SUPPLIER" | "CONTRACT" | "PROJECT" | "PERSON" | "ASSET" | "SAFETY_ISSUE" | "QUALITY_NCR";
+        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK" | "SUPPLIER" | "CONTRACT" | "PROJECT" | "PERSON" | "ASSET" | "SAFETY_ISSUE" | "QUALITY_NCR" | "PERFORMANCE_EVALUATION" | "SITE_ATTENDANCE";
         SearchRequest: {
             keyword: string;
             types: components["schemas"]["SearchEntityType"][];
@@ -8926,6 +8942,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["ApiFailure"];
+        };
+    };
+    getSafetyAttendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped site attendance record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SafetyAttendanceResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
         };
     };
     checkInSitePerson: {

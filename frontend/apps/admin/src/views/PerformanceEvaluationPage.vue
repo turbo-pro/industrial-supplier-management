@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -12,6 +13,7 @@ type Dimension = components['schemas']['PerformanceDimension'];
 type Rule = components['schemas']['PerformanceRule'];
 type Improvement = components['schemas']['ImprovementPlan'];
 const session = useSessionStore();
+const route = useRoute();
 const dimensions: Dimension[] = ['QUALITY', 'DELIVERY', 'SAFETY', 'SERVICE'];
 const labels = { QUALITY: '质量', DELIVERY: '交付', SAFETY: '安全', SERVICE: '服务' };
 const statuses = { DRAFT: '草稿', SUBMITTED: '待审核', APPROVED: '已批准', REJECTED: '已驳回' };
@@ -182,7 +184,14 @@ async function reviewImprovement(decision: 'ACCEPT' | 'REWORK') {
     improvement.value = data?.data ?? null; ElMessage.success(decision === 'ACCEPT' ? '改进已验收' : '已退回整改');
   } catch { /* user cancelled */ }
 }
-onMounted(() => { load(); loadRule(); });
+onMounted(async () => {
+  await Promise.all([load(), loadRule()]);
+  const evaluationId = route.query.evaluationId;
+  if(typeof evaluationId !== 'string' || !/^[1-9]\d*$/.test(evaluationId)) return;
+  const {data,error} = await session.client.GET('/performance/evaluations/{id}', {params:{path:{id:evaluationId}}});
+  if(error || !data?.data){ElMessage.error(error?.error.message ?? '评价不存在或无权查看');return;}
+  await showDetail(data.data);
+});
 </script>
 
 <template>
