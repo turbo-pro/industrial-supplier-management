@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.*;
 
 @Validated @RestController @RequestMapping("/api/suppliers/{supplierId}/exit-applications")
 public class ExitController {
-    private final ExitApplicationService service;private final ExitReminderFailureService failures;private final ExitArchiveService archives;private final ApiResponseFactory responses;
-    public ExitController(ExitApplicationService service,ExitReminderFailureService failures,ExitArchiveService archives,ApiResponseFactory responses){this.service=service;this.failures=failures;this.archives=archives;this.responses=responses;}
+    private final ExitApplicationService service;private final ExitReminderFailureService failures;private final ExitArchiveService archives;private final ExitAccessRecoveryService recovery;private final ApiResponseFactory responses;
+    public ExitController(ExitApplicationService service,ExitReminderFailureService failures,ExitArchiveService archives,ExitAccessRecoveryService recovery,ApiResponseFactory responses){this.service=service;this.failures=failures;this.archives=archives;this.recovery=recovery;this.responses=responses;}
     @GetMapping("/reminder-failures") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitReminderFailureModels.Page> reminderFailures(@PathVariable long supplierId,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(failures.list(supplierId,page,size));}
     @GetMapping @RequiresPermission("supplier:exit:view")
@@ -20,6 +20,8 @@ public class ExitController {
     public ApiResponse<ExitModels.View> get(@PathVariable long supplierId,@PathVariable long id){return responses.success(service.get(supplierId,id));}
     @GetMapping("/{id}/archive") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitArchiveModels.View> archive(@PathVariable long supplierId,@PathVariable long id){return responses.success(archives.get(supplierId,id));}
+    @GetMapping("/{id}/access-recovery") @RequiresPermission("supplier:exit:view")
+    public ApiResponse<ExitAccessRecoveryModels.Inventory> accessRecovery(@PathVariable long supplierId,@PathVariable long id){return responses.success(recovery.inventory(supplierId,id));}
     @GetMapping("/{id}/entities") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitModels.EntityPage> entities(@PathVariable long supplierId,@PathVariable long id,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.entities(supplierId,id,page,size));}
     @PostMapping @RequiresPermission("supplier:exit:create")

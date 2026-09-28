@@ -108,12 +108,15 @@ class ExitApplicationServiceTest {
         assertThrows(ApiException.class,()->service(List.of(id->ExitReadinessEvaluatorTest.clear())).review(30,90,approve()));
     }verify(mapper,never()).insertResult(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString());}
     @Test void approvalSeparatesLocalClosureFromExternalRecovery(){setup();when(suppliers.completeExit(10,8,30,0)).thenReturn(1);
+        when(mapper.insertAccessRecoveryTask(anyLong(),eq(10L),eq(90L),eq(30L),anyString(),eq(8L))).thenReturn(1);
         when(mapper.finish(10,30,90,"BUSINESS_CLOSED","核验通过",8,0)).thenReturn(1);
         when(mapper.get(10,30,90)).thenReturn(row("SUBMITTED",0),row("BUSINESS_CLOSED",1));
         when(ids.nextId()).thenReturn(100L);
         try(var t=TenantContext.open(10,8);var a=auth()){assertEquals("BUSINESS_CLOSED",service(List.of(id->ExitReadinessEvaluatorTest.clear())).review(30,90,approve()).status());}
         verify(suppliers).completeExit(10,8,30,0);verify(mapper).insertResult(100,10,90,30,8,"核验通过");
         verify(archives).seal(30,90);
+        for(String channel:List.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL"))
+            verify(mapper).insertAccessRecoveryTask(100,10,90,30,channel,8);
     }
     @Test void staleOrTerminalReviewNeverMutatesSupplier(){setup();try(var t=TenantContext.open(10,8);var a=auth()){
         when(mapper.get(10,30,90)).thenReturn(row("SUBMITTED",1));assertThrows(ApiException.class,()->service(List.of()).review(30,90,approve()));

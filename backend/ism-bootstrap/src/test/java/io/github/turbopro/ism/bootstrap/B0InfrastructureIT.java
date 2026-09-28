@@ -219,6 +219,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.supplier.RestrictionGateHitService restrictionGateHitService;
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
     @Autowired private io.github.turbopro.ism.supplier.ExitArchiveService exitArchiveService;
+    @Autowired private io.github.turbopro.ism.supplier.ExitAccessRecoveryService exitAccessRecoveryService;
     @Autowired private io.github.turbopro.ism.supplier.ExitTaskService exitTaskService;
     @Autowired private ExitAutoReminderWorker exitAutoReminderWorker;
     @Autowired private io.github.turbopro.ism.supplier.ExitReminderFailureService exitReminderFailureService;
@@ -813,6 +814,13 @@ class B0InfrastructureIT {
                     var closed=exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"处置核验通过",ready.version()));
                     assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().completionScope()).isEqualTo("LOCAL_BUSINESS");
                     assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    var recovery=exitAccessRecoveryService.inventory(supplierId,finalExitId);
+                    assertThat(recovery.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(recovery.tasks()).extracting(io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Task::channel)
+                        .containsExactly("API_CREDENTIAL","DOOR_ACCESS","PORTAL_ACCOUNT");
+                    assertThat(recovery.tasks()).extracting(io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Task::status)
+                        .containsOnly("DISCOVERY_REQUIRED");
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_recovery_task WHERE tenant_id=? AND application_id=?",Integer.class,tenantId,finalExitId)).isEqualTo(3);
                     var archive=exitArchiveService.get(supplierId,finalExitId);
                     assertThat(archive.integrityVerified()).isTrue();
                     assertThat(archive.scope()).isEqualTo("LOCAL_RECORD_METADATA");
@@ -826,6 +834,7 @@ class B0InfrastructureIT {
                 }
                 try(var other=TenantContext.open(tenantId+100000,4);var authorization=AuthorizationContext.open(exitPermissions)){
                     assertThatThrownBy(()->exitApplicationService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.inventory(supplierId,finalExitId)).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitReminderFailureService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitArchiveService.get(supplierId,finalExitId)).isInstanceOf(ApiException.class);
                 }
@@ -836,6 +845,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_task WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_restriction_gate_hit WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",tenantId);

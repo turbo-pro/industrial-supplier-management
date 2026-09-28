@@ -184,6 +184,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierExitAccessRecovery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
         parameters: {
             query?: never;
@@ -2755,6 +2771,25 @@ export interface components {
         ExitLocalArchiveResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["ExitLocalArchive"];
         };
+        ExitAccessRecoveryTask: {
+            id: string;
+            /** @enum {string} */
+            channel: "PORTAL_ACCOUNT" | "DOOR_ACCESS" | "API_CREDENTIAL";
+            /** @enum {string} */
+            status: "DISCOVERY_REQUIRED";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ExitAccessRecoveryInventory: {
+            supplierId: string;
+            applicationId: string;
+            /** @enum {string} */
+            accessRecoveryStatus: "NOT_VERIFIED";
+            tasks: components["schemas"]["ExitAccessRecoveryTask"][];
+        };
+        ExitAccessRecoveryInventoryResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ExitAccessRecoveryInventory"];
+        };
         ExitApplication: {
             id: string;
             supplierId: string;
@@ -5283,6 +5318,31 @@ export interface operations {
                 };
             };
             401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierExitAccessRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unverified external access discovery inventory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
         };

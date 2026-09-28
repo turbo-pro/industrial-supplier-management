@@ -48,6 +48,10 @@ public interface ExitMapper extends TenantScopedMapper {
     int upsertItem(long id,long tenantId,long applicationId,String code,String label,String route,long count);
     @Insert("INSERT INTO sup_exit_result(id,tenant_id,application_id,supplier_id,approved_by,comment) VALUES(#{id},#{tenantId},#{applicationId},#{supplierId},#{actorId},#{comment})")
     int insertResult(long id,long tenantId,long applicationId,long supplierId,long actorId,String comment);
+    @Insert("INSERT INTO sup_exit_access_recovery_task(id,tenant_id,application_id,supplier_id,channel,created_by) VALUES(#{id},#{tenantId},#{applicationId},#{supplierId},#{channel},#{actorId})")
+    int insertAccessRecoveryTask(long id,long tenantId,long applicationId,long supplierId,String channel,long actorId);
+    @Select("SELECT id,channel,status,created_at FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} ORDER BY channel")
+    List<ExitAccessRecoveryModels.TaskRow> accessRecoveryTasks(long tenantId,long supplierId,long applicationId);
     @Select("SELECT id,approved_by,comment,completion_scope,access_recovery_status,effective_at FROM sup_exit_result WHERE tenant_id=#{tenantId} AND application_id=#{applicationId}")
     ExitModels.ResultRow findResult(long tenantId,long applicationId);
     @Insert("INSERT INTO sup_exit_event(id,tenant_id,application_id,action,comment,actor_id) VALUES(#{id},#{tenantId},#{applicationId},#{action},#{comment},#{actorId})")

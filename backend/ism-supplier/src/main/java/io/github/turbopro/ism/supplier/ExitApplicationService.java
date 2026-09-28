@@ -79,6 +79,9 @@ public class ExitApplicationService {
         mapper.insertResult(ids.nextId(),i.tenantId(),id,supplierId,i.actorId(),command.comment().trim());
         event(id,"BUSINESS_CLOSE",command.comment().trim());
         archives.seal(supplierId,id);
+        // Inventory obligations only. No external account or access is presumed to exist or to have been revoked.
+        for(String channel:List.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL"))
+            if(mapper.insertAccessRecoveryTask(ids.nextId(),i.tenantId(),id,supplierId,channel,i.actorId())!=1)throw conflict();
         audit("SUPPLIER_EXIT_BUSINESS_CLOSE",id,Map.of("supplierId",supplierId,"fromStatus",current.status(),"toStatus","EXITED","completionScope","LOCAL_BUSINESS","accessRecoveryStatus","NOT_VERIFIED"));
         return view(require(supplierId,id));
     }
