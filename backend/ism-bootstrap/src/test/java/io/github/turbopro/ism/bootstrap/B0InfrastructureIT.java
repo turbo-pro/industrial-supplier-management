@@ -215,6 +215,7 @@ class B0InfrastructureIT {
     @Autowired private PerformanceMapper performanceMapper;
     @Autowired private ImprovementMapper improvementMapper;
     @Autowired private SupplierReferenceService supplierReferenceService;
+    @Autowired private io.github.turbopro.ism.supplier.RestrictionGateHitService restrictionGateHitService;
     @Autowired private io.github.turbopro.ism.supplier.ExitApplicationService exitApplicationService;
     @Autowired private io.github.turbopro.ism.supplier.ExitTaskService exitTaskService;
     @Autowired private ExitAutoReminderWorker exitAutoReminderWorker;
@@ -462,6 +463,19 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isOne();
                 assertThat(supplierReferenceService.active(supplierId)).isNull();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNull();
+                long gateHitsBeforeRollback=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_restriction_gate_hit WHERE tenant_id=? AND supplier_id=?",Long.class,tenantId,supplierId);
+                var deniedTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
+                deniedTransaction.executeWithoutResult(tx->{assertThat(supplierReferenceService.eligibleForBusiness(supplierId,io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.CONTRACT_CREATE)).isNull();tx.setRollbackOnly();});
+                assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_restriction_gate_hit WHERE tenant_id=? AND supplier_id=?",Long.class,tenantId,supplierId)).isGreaterThan(gateHitsBeforeRollback);
+                try(var hitReader=TenantContext.open(tenantId,4);var hitAuth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.all()),Set.of()))){
+                    assertThat(restrictionGateHitService.list(supplierId,0,20).items()).anySatisfy(hit->{assertThat(hit.action()).isEqualTo("CONTRACT_CREATE");assertThat(hit.decision()).isEqualTo("DENY");});
+                }
+                try(var hitReader=TenantContext.open(tenantId,4);var hitAuth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.none()),Set.of()))){
+                    assertThatThrownBy(()->restrictionGateHitService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                }
+                try(var hitReader=TenantContext.open(tenantId+100000,4);var hitAuth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.all()),Set.of()))){
+                    assertThatThrownBy(()->restrictionGateHitService.list(supplierId,0,20)).isInstanceOf(ApiException.class);
+                }
                 long appealId;
                 try(var applicant=TenantContext.open(tenantId,3L);var authorization=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of()))){
                     var appeal=appealService.create(blacklistId,new io.github.turbopro.ism.supplier.AppealModels.Create("提出新证据",Long.toString(fileId)));
@@ -579,9 +593,11 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.currentCase(tenantId,9981).status()).isEqualTo("APPROVED");
                 assertThat(blacklistMapper.lifted(tenantId,9981)).isOne();
                 try(var actor=TenantContext.open(tenantId,3);var authorization=AuthorizationContext.open(liftPermissions)){
+                    long beforeExplain=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_restriction_gate_hit WHERE tenant_id=? AND supplier_id=?",Long.class,tenantId,supplierId);
                     var explanation=restrictionExplanationService.explain(supplierId,io.github.turbopro.ism.supplier.RestrictionExplanationService.Action.PROJECT_CREATE);
                     assertThat(explanation.decision()).isEqualTo(io.github.turbopro.ism.supplier.RestrictionExplanationService.Decision.DENY);
                     assertThat(explanation.hits()).extracting(io.github.turbopro.ism.supplier.RestrictionExplanationService.Hit::sourceId).containsExactly("9982");
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_restriction_gate_hit WHERE tenant_id=? AND supplier_id=?",Long.class,tenantId,supplierId)).isEqualTo(beforeExplain);
                     for(var action:io.github.turbopro.ism.supplier.SupplierRestrictionEvaluator.Action.values())assertThat(supplierReferenceService.eligibleForBusiness(supplierId,action)).isNull();
                 }
                 assertThat(blacklistMapper.currentEffectiveCases(tenantId,supplierId,java.time.LocalDate.now())).extracting(io.github.turbopro.ism.supplier.BlacklistModels.Row::id).containsExactly(9982L);
@@ -805,6 +821,7 @@ class B0InfrastructureIT {
             }
         } finally {
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM sup_restriction_gate_hit WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM msg_inbox WHERE tenant_id=? AND recipient_id=9976",tenantId);
             jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976",tenantId);
             jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code IN ('SUPPLIER_EXIT_ASSIGNMENT','SUPPLIER_EXIT_REMINDER')",tenantId);

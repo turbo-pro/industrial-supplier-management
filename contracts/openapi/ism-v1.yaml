@@ -6,6 +6,22 @@ info:
 servers:
   - url: /api
 paths:
+  /suppliers/{supplierId}/restriction-gate-hits:
+    get:
+      operationId: listSupplierRestrictionGateHits
+      tags: [Supplier Restriction]
+      description: Actual business-gate WARN/DENY hits only; advisory explanation queries are excluded. Requires supplier:restriction:explain and live supplier data scope.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Scoped gate-hit ledger, content: { application/json: { schema: { $ref: '#/components/schemas/RestrictionGateHitPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /supplier-exit-tasks/monitor:
     get:
       operationId: monitorSupplierExitTasks
@@ -2481,6 +2497,21 @@ components:
         overdue: { type: boolean }
     ExitMonitorPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/ExitMonitorItem' } } } } } }]
+    RestrictionGateHit:
+      type: object
+      required: [id, supplierId, actorId, action, decision, code, sourceId, businessDate, createdAt]
+      properties:
+        id: { type: string }
+        supplierId: { type: string }
+        actorId: { type: string }
+        action: { type: string }
+        decision: { type: string, enum: [WARN, DENY] }
+        code: { type: string }
+        sourceId: { type: string }
+        businessDate: { type: string, format: date }
+        createdAt: { type: string, format: date-time }
+    RestrictionGateHitPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/RestrictionGateHit' } } } } } }]
     MessageTemplateListResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MessageTemplate' } } } }]
     MessageTemplateResponse:

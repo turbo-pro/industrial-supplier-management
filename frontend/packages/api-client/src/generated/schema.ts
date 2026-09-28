@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/restriction-gate-hits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Actual business-gate WARN/DENY hits only; advisory explanation queries are excluded. Requires supplier:restriction:explain and live supplier data scope. */
+        get: operations["listSupplierRestrictionGateHits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/supplier-exit-tasks/monitor": {
         parameters: {
             query?: never;
@@ -4206,6 +4223,29 @@ export interface components {
                 items: components["schemas"]["ExitMonitorItem"][];
             };
         };
+        RestrictionGateHit: {
+            id: string;
+            supplierId: string;
+            actorId: string;
+            action: string;
+            /** @enum {string} */
+            decision: "WARN" | "DENY";
+            code: string;
+            sourceId: string;
+            /** Format: date */
+            businessDate: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RestrictionGateHitPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["RestrictionGateHit"][];
+            };
+        };
         MessageTemplateListResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["MessageTemplate"][];
         };
@@ -4717,6 +4757,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSupplierRestrictionGateHits: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped gate-hit ledger */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionGateHitPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
     monitorSupplierExitTasks: {
         parameters: {
             query?: {

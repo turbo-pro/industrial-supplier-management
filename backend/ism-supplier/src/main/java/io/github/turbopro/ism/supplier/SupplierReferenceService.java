@@ -9,7 +9,8 @@ public class SupplierReferenceService {
     private final SupplierMapper mapper;
     private final BlacklistMapper blacklist;
     private final SupplierRestrictionEvaluator evaluator;
-    public SupplierReferenceService(SupplierMapper mapper,BlacklistMapper blacklist,SupplierRestrictionEvaluator evaluator) { this.mapper = mapper; this.blacklist=blacklist; this.evaluator=evaluator; }
+    private final RestrictionGateHitService gateHits;
+    public SupplierReferenceService(SupplierMapper mapper,BlacklistMapper blacklist,SupplierRestrictionEvaluator evaluator,RestrictionGateHitService gateHits) { this.mapper = mapper; this.blacklist=blacklist; this.evaluator=evaluator; this.gateHits=gateHits; }
 
     public Reference active(long supplierId) {
         var row = mapper.find(TenantContext.require().tenantId(), supplierId);
@@ -27,7 +28,10 @@ public class SupplierReferenceService {
         long tenant=TenantContext.require().tenantId();
         blacklist.lockSupplier(tenant, supplierId);
         var row=mapper.findForNewBusiness(tenant,supplierId);
-        if(row==null || evaluator.evaluateLocked(supplierId,row.status(),action).decision()==SupplierRestrictionEvaluator.Decision.DENY)return null;
+        if(row==null)return null;
+        var evaluation=evaluator.evaluateLocked(supplierId,row.status(),action);
+        if(!evaluation.hits().isEmpty())gateHits.record(supplierId,action,evaluation);
+        if(evaluation.decision()==SupplierRestrictionEvaluator.Decision.DENY)return null;
         return new Reference(row.organizationId(),row.supplierCode(),row.supplierName());
     }
     public record Reference(long organizationId, String code, String name) {}
