@@ -661,7 +661,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.lockSupplier(tenantId, supplierId)).isEqualTo(supplierId);
                 assertThat(manualClearanceMapper.resubmit(tenantId,supplierId,fileId,"退出前重新核验",1,2)).isOne();
                 assertThat(manualClearanceMapper.review(tenantId,supplierId,"APPROVED","财务核验通过",2,3)).isOne();
-                var exitPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of("supplier:exit:review"),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
+                var exitPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of("supplier:exit:review","supplier:exit:assign"),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());
                 var previewTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
                 var exitSubmitTransaction=new org.springframework.transaction.support.TransactionTemplate(b7TransactionManager);
                 exitSubmitTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -830,12 +830,24 @@ class B0InfrastructureIT {
                     assertThat(discovered.tasks().get(0).finding()).isEqualTo("PRESENT");
                     assertThat(discovered.tasks().get(0).version()).isOne();
                     assertThat(discovered.tasks().get(0).events()).hasSize(1);
+                    var assignedRecovery=exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9976",java.time.LocalDate.now().plusDays(7),"核查实际访问清单",1));
+                    assertThat(assignedRecovery.tasks().get(0).assigneeId()).isEqualTo("9976");
+                    assertThat(assignedRecovery.tasks().get(0).assignments()).hasSize(1);
+                    assertThat(assignedRecovery.tasks().get(0).version()).isEqualTo(2);
+                    assertThat(assignedRecovery.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9977",null,"停用账号",2))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9978",null,"外租户账号",2))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9976",null,"过期版本",1))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitAccessRecoveryService.record(supplierId,finalExitId,recoveryTaskId,
                         new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RecordFinding(
                             io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.ABSENT,Long.toString(fileId),"过期版本",0))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitAccessRecoveryService.record(supplierId,finalExitId,recoveryTaskId,
                         new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RecordFinding(
-                            io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.ABSENT,"999999999999","不存在的证据",1))).isInstanceOf(ApiException.class);
+                            io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Finding.ABSENT,"999999999999","不存在的证据",2))).isInstanceOf(ApiException.class);
                     assertThat(jdbcTemplate.queryForObject("SELECT access_recovery_status FROM sup_exit_result WHERE tenant_id=? AND application_id=?",String.class,tenantId,finalExitId)).isEqualTo("NOT_VERIFIED");
                     var archive=exitArchiveService.get(supplierId,finalExitId);
                     assertThat(archive.integrityVerified()).isTrue();
@@ -861,6 +873,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM sup_exit_access_assignment_event WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_event WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_task WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_blacklist_event WHERE tenant_id=?", tenantId);

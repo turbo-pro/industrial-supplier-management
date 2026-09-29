@@ -21,6 +21,23 @@ const recovery=ref<RecoveryInventory>(),recoveryVisible=ref(false),recoveryLoadi
 const recoveryChannels:Record<string,string>={PORTAL_ACCOUNT:'供应商门户账号',DOOR_ACCESS:'外部门禁权限',API_CREDENTIAL:'接口凭证'};
 type RecoveryTask=components['schemas']['ExitAccessRecoveryTask'];
 const discoveryTask=ref<RecoveryTask>(),discoveryDialog=ref(false),discoveryBusy=ref(false);
+const recoveryAssignTask=ref<RecoveryTask>(),recoveryAssignDialog=ref(false),recoveryAssignBusy=ref(false);
+const recoveryAssignForm=reactive({assigneeId:'',dueDate:'',note:''});
+function openRecoveryAssign(task:RecoveryTask){recoveryAssignTask.value=task;Object.assign(recoveryAssignForm,{assigneeId:task.assigneeId??'',dueDate:task.dueDate??'',note:task.assignmentNote??''});recoveryAssignDialog.value=true;}
+async function saveRecoveryAssign(){
+  const supplierId=props.supplier?.id,inventory=recovery.value,task=recoveryAssignTask.value;
+  if(!supplierId||!inventory||!task)return;
+  if(!/^[1-9]\d{0,18}$/.test(recoveryAssignForm.assigneeId)||!recoveryAssignForm.note.trim()){ElMessage.warning('请填写有效责任人账号 ID 和分派说明');return;}
+  recoveryAssignBusy.value=true;
+  try{
+    const {data,error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign',{
+      params:{path:{supplierId,id:inventory.applicationId,taskId:task.id}},
+      body:{assigneeId:recoveryAssignForm.assigneeId,dueDate:recoveryAssignForm.dueDate||null,note:recoveryAssignForm.note.trim(),version:task.version}
+    });
+    if(error){ElMessage.error(error.error.message+'；如版本变化，请刷新后重试');return;}
+    recovery.value=data?.data;recoveryAssignDialog.value=false;ElMessage.success('内部核查责任已留痕；外部回收仍未核验');
+  }catch{ElMessage.error('分派失败，请刷新核对');}finally{recoveryAssignBusy.value=false;}
+}
 const discoveryForm=reactive({finding:'PRESENT' as 'PRESENT'|'ABSENT',evidenceFileId:'',note:''});
 function openDiscovery(task:RecoveryTask){
   discoveryTask.value=task;discoveryForm.finding=(task.finding as 'PRESENT'|'ABSENT')??'PRESENT';
@@ -281,12 +298,18 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
       <p>退出申请 {{recovery.applicationId}} · 外部访问状态：未核验</p>
       <el-alert v-if="recovery.tasks.length===0" title="历史退出记录未建立核查目录，外部访问仍未核验；不得视为无需回收。" type="error" :closable="false"/>
       <el-table :data="recovery.tasks" row-key="id">
-        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.discoveryNote">核查说明：{{task.discoveryNote}} · 证据文件 {{task.evidenceFileId}}</p><el-timeline><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item></el-timeline></template></el-table-column>
+        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.assignmentNote">分派说明：{{task.assignmentNote}}</p><el-timeline><el-timeline-item v-for="event in task.assignments" :key="event.id" :timestamp="event.createdAt">责任人 {{event.assigneeId}} · 期限 {{event.dueDate??'未设置'}} · 分派人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item></el-timeline></template></el-table-column>
         <el-table-column label="核查渠道"><template #default="{row:task}">{{recoveryChannels[task.channel]??task.channel}}</template></el-table-column>
+        <el-table-column label="责任人 / 期限" width="190"><template #default="{row:task}">{{task.assigneeId??'未分派'}} / {{task.dueDate??'未设置'}}</template></el-table-column>
         <el-table-column label="发现记录" width="150"><template #default="{row:task}">{{task.finding==='PRESENT'?'发现访问记录':task.finding==='ABSENT'?'未发现访问记录':'待核查'}}</template></el-table-column>
-        <el-table-column label="操作" width="110"><template #default="{row:task}"><el-button link type="primary" @click="openDiscovery(task)">记录发现</el-button></template></el-table-column>
+        <el-table-column label="操作" width="160"><template #default="{row:task}"><el-button link type="primary" @click="openRecoveryAssign(task)">分派</el-button><el-button link type="primary" @click="openDiscovery(task)">记录发现</el-button></template></el-table-column>
       </el-table>
     </template>
+  </el-dialog>
+  <el-dialog v-model="recoveryAssignDialog" :title="`${recoveryChannels[recoveryAssignTask?.channel??'']??'外部访问'} · 核查分派`" width="560px" append-to-body :close-on-click-modal="false">
+    <el-alert title="仅分派本地核查责任；当前不发送站内通知，不等于外部账号或权限已回收。" type="warning" :closable="false"/>
+    <el-form label-position="top"><el-form-item label="责任人账号 ID"><el-input v-model="recoveryAssignForm.assigneeId" maxlength="19"/><el-button link @click="recoveryAssignForm.assigneeId=session.actorId??''">分派给我</el-button></el-form-item><el-form-item label="核查期限"><el-date-picker v-model="recoveryAssignForm.dueDate" type="date" value-format="YYYY-MM-DD" clearable/></el-form-item><el-form-item label="分派说明"><el-input v-model="recoveryAssignForm.note" type="textarea" maxlength="1000" show-word-limit/></el-form-item></el-form>
+    <template #footer><el-button :disabled="recoveryAssignBusy" @click="recoveryAssignDialog=false">取消</el-button><el-button type="primary" :loading="recoveryAssignBusy" @click="saveRecoveryAssign">保存分派</el-button></template>
   </el-dialog>
   <el-dialog v-model="discoveryDialog" :title="`${recoveryChannels[discoveryTask?.channel??'']??'外部访问'} · 核查发现`" width="560px" append-to-body :close-on-click-modal="false">
     <el-alert title="仅记录是否发现外部账号或权限，不代表账号已停用或回收；不得填写口令、密钥等秘密。" type="warning" :closable="false"/>

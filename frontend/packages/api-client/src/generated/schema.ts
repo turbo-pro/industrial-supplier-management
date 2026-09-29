@@ -216,6 +216,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["assignSupplierExitAccessRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
         parameters: {
             query?: never;
@@ -2800,10 +2816,36 @@ export interface components {
             discoveredBy?: string | null;
             /** Format: date-time */
             discoveredAt?: string | null;
+            assigneeId?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            assignmentNote?: string | null;
+            assignedBy?: string | null;
+            /** Format: date-time */
+            assignedAt?: string | null;
             version: number;
             /** Format: date-time */
             createdAt: string;
             events: components["schemas"]["ExitAccessRecoveryEvent"][];
+            assignments: components["schemas"]["ExitAccessAssignmentEvent"][];
+        };
+        ExitAccessAssignmentEvent: {
+            id: string;
+            previousAssigneeId?: string | null;
+            assigneeId: string;
+            /** Format: date */
+            dueDate?: string | null;
+            note: string;
+            actorId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AssignExitAccessRecovery: {
+            assigneeId: string;
+            /** Format: date */
+            dueDate?: string | null;
+            note: string;
+            version: number;
         };
         ExitAccessRecoveryEvent: {
             id: string;
@@ -5407,6 +5449,38 @@ export interface operations {
         };
         responses: {
             /** @description Discovery recorded; external recovery still not verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    assignSupplierExitAccessRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignExitAccessRecovery"];
+            };
+        };
+        responses: {
+            /** @description Internal discovery assignment recorded; external recovery remains unverified */
             200: {
                 headers: {
                     [name: string]: unknown;

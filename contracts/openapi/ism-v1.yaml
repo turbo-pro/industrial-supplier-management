@@ -194,6 +194,14 @@ paths:
       parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: taskId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RecordExitAccessFinding' } } } }
       responses: { '200': { description: Discovery recorded; external recovery still not verified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign:
+    post:
+      operationId: assignSupplierExitAccessRecovery
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: taskId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AssignExitAccessRecovery' } } } }
+      responses: { '200': { description: Internal discovery assignment recorded; external recovery remains unverified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{supplierId}/exit-applications/{id}/recheck:
     post:
       operationId: recheckSupplierExitApplication
@@ -1845,7 +1853,7 @@ components:
     ExitLocalArchiveResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ExitLocalArchive' } } } ] }
     ExitAccessRecoveryTask:
       type: object
-      required: [id, channel, status, version, createdAt, events]
+      required: [id, channel, status, version, createdAt, events, assignments]
       properties:
         id: { type: string }
         channel: { type: string, enum: [PORTAL_ACCOUNT, DOOR_ACCESS, API_CREDENTIAL] }
@@ -1855,9 +1863,34 @@ components:
         discoveryNote: { type: string, nullable: true }
         discoveredBy: { type: string, nullable: true }
         discoveredAt: { type: string, format: date-time, nullable: true }
+        assigneeId: { type: string, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        assignmentNote: { type: string, nullable: true }
+        assignedBy: { type: string, nullable: true }
+        assignedAt: { type: string, format: date-time, nullable: true }
         version: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
         events: { type: array, items: { $ref: '#/components/schemas/ExitAccessRecoveryEvent' } }
+        assignments: { type: array, items: { $ref: '#/components/schemas/ExitAccessAssignmentEvent' } }
+    ExitAccessAssignmentEvent:
+      type: object
+      required: [id, assigneeId, note, actorId, createdAt]
+      properties:
+        id: { type: string }
+        previousAssigneeId: { type: string, nullable: true }
+        assigneeId: { type: string }
+        dueDate: { type: string, format: date, nullable: true }
+        note: { type: string }
+        actorId: { type: string }
+        createdAt: { type: string, format: date-time }
+    AssignExitAccessRecovery:
+      type: object
+      required: [assigneeId, note, version]
+      properties:
+        assigneeId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        dueDate: { type: string, format: date, nullable: true }
+        note: { type: string, minLength: 1, maxLength: 1000 }
+        version: { type: integer, minimum: 0 }
     ExitAccessRecoveryEvent:
       type: object
       required: [id, finding, evidenceFileId, note, actorId, createdAt]
