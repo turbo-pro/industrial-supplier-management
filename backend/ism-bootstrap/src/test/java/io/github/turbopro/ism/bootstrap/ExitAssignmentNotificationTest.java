@@ -25,6 +25,19 @@ class ExitAssignmentNotificationTest {
         verify(mapper).insertDelivery(eq(10L),eq(102L),eq(50L),eq(8L),eq("退出事项待处置"),eq("30/90/OPEN_CONTRACT/77"),eq("SUPPLIER_EXIT_ENTITY"),eq(100L),any());
         verify(mapper).insertInbox(10,103,102,8);
     }
+    @Test void accessAssignmentUsesDistinctBusinessTypeAndNoSecretPayload(){
+        when(mapper.exitAccessAssignmentTemplate(10)).thenReturn(new MessageModels.TemplateRow(55,"SUPPLIER_EXIT_ACCESS_ASSIGNMENT","访问核查","IN_APP","外部访问待核查","{{supplierId}}/{{applicationId}}/{{channel}}/{{taskId}}/{{dueDate}}","[\"supplierId\",\"applicationId\",\"channel\",\"taskId\",\"dueDate\"]","ACTIVE",0));
+        when(mapper.validUsers(10,Set.of(8L))).thenReturn(Set.of(8L));when(ids.nextId()).thenReturn(101L,102L,103L);
+        try(var ignored=TenantContext.open(10,7)){service.notifyExitAccessAssignment(30,90,100,"DOOR_ACCESS",8,null);}
+        verify(mapper).ensureExitAccessAssignmentTemplate(10,101);
+        verify(mapper).insertDelivery(eq(10L),eq(102L),eq(55L),eq(8L),eq("外部访问待核查"),eq("30/90/DOOR_ACCESS/100/未设置"),eq("SUPPLIER_EXIT_ACCESS"),eq(100L),any());
+        verify(mapper).insertInbox(10,103,102,8);
+    }
+    @Test void disabledAccessAssignmentTemplateFailsWithoutInbox(){
+        when(mapper.exitAccessAssignmentTemplate(10)).thenReturn(new MessageModels.TemplateRow(55,"SUPPLIER_EXIT_ACCESS_ASSIGNMENT","访问核查","IN_APP","待核查","正文","[]","DISABLED",0));
+        try(var ignored=TenantContext.open(10,7)){assertThrows(ApiException.class,()->service.notifyExitAccessAssignment(30,90,100,"DOOR_ACCESS",8,null));}
+        verify(mapper,never()).insertInbox(anyLong(),anyLong(),anyLong(),anyLong());
+    }
     @Test void disabledTemplateIsNotReactivatedOrDelivered(){template("DISABLED","业务提示","[]");
         try(var ignored=TenantContext.open(10,7)){assertThrows(ApiException.class,this::send);}
         verify(mapper,never()).insertInbox(anyLong(),anyLong(),anyLong(),anyLong());

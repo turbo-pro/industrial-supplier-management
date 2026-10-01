@@ -16,12 +16,14 @@ public class ExitAccessRecoveryService {
     private final SupplierService suppliers;
     private final AppealEvidenceVerifier evidence;
     private final ExitAssigneeVerifier assignees;
+    private final ExitAssignmentNotifier notifications;
     private final OperationIdGenerator ids;
     private final AuditService audit;
 
     public ExitAccessRecoveryService(ExitMapper mapper,SupplierService suppliers,AppealEvidenceVerifier evidence,ExitAssigneeVerifier assignees,
+                                     ExitAssignmentNotifier notifications,
                                      OperationIdGenerator ids,AuditService audit){
-        this.mapper=mapper;this.suppliers=suppliers;this.evidence=evidence;this.assignees=assignees;this.ids=ids;this.audit=audit;
+        this.mapper=mapper;this.suppliers=suppliers;this.evidence=evidence;this.assignees=assignees;this.notifications=notifications;this.ids=ids;this.audit=audit;
     }
 
     @Transactional(readOnly=true)
@@ -92,6 +94,7 @@ public class ExitAccessRecoveryService {
             throw new ApiException(CommonErrorCode.CONFLICT);
         if(mapper.insertAccessAssignmentEvent(ids.nextId(),tenantId,taskId,row.assigneeId(),assigneeId,command.dueDate(),note,identity.actorId())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
+        notifications.accessAssigned(supplierId,applicationId,taskId,row.channel(),assigneeId,command.dueDate());
         audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_ASSIGN","SUPPLIER_EXIT_ACCESS",taskId,null,
             Map.of("previousAssigneeId",row.assigneeId()==null?"":row.assigneeId().toString()),
             Map.of("assigneeId",assigneeId,"dueDate",command.dueDate()==null?"":command.dueDate().toString(),"supplierId",supplierId,"applicationId",applicationId),null,null));

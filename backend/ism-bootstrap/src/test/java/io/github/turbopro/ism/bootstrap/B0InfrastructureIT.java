@@ -830,12 +830,22 @@ class B0InfrastructureIT {
                     assertThat(discovered.tasks().get(0).finding()).isEqualTo("PRESENT");
                     assertThat(discovered.tasks().get(0).version()).isOne();
                     assertThat(discovered.tasks().get(0).events()).hasSize(1);
+                    int beforeAccessMessages=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId);
                     var assignedRecovery=exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
                         new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9976",java.time.LocalDate.now().plusDays(7),"核查实际访问清单",1));
                     assertThat(assignedRecovery.tasks().get(0).assigneeId()).isEqualTo("9976");
                     assertThat(assignedRecovery.tasks().get(0).assignments()).hasSize(1);
                     assertThat(assignedRecovery.tasks().get(0).version()).isEqualTo(2);
                     assertThat(assignedRecovery.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(beforeAccessMessages+1);
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox i JOIN msg_delivery d ON d.id=i.delivery_id WHERE i.tenant_id=? AND i.recipient_id=9976 AND d.business_type='SUPPLIER_EXIT_ACCESS' AND d.business_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
+                    jdbcTemplate.update("UPDATE msg_template SET status='DISABLED' WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ACCESS_ASSIGNMENT'",tenantId);
+                    assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9976",null,"模板停用应回滚",2))).isInstanceOf(ApiException.class);
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).version()).isEqualTo(2);
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_assignment_event WHERE tenant_id=? AND task_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(beforeAccessMessages+1);
+                    jdbcTemplate.update("UPDATE msg_template SET status='ACTIVE' WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ACCESS_ASSIGNMENT'",tenantId);
                     assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
                         new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Assign("9977",null,"停用账号",2))).isInstanceOf(ApiException.class);
                     assertThatThrownBy(()->exitAccessRecoveryService.assign(supplierId,finalExitId,recoveryTaskId,
@@ -882,7 +892,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM msg_inbox WHERE tenant_id=? AND recipient_id=9979",tenantId);
             jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976",tenantId);
             jdbcTemplate.update("DELETE FROM msg_delivery WHERE tenant_id=? AND recipient_id=9979",tenantId);
-            jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code IN ('SUPPLIER_EXIT_ASSIGNMENT','SUPPLIER_EXIT_REMINDER','SUPPLIER_EXIT_ESCALATION')",tenantId);
+            jdbcTemplate.update("DELETE FROM msg_template WHERE tenant_id=? AND template_code IN ('SUPPLIER_EXIT_ASSIGNMENT','SUPPLIER_EXIT_REMINDER','SUPPLIER_EXIT_ESCALATION','SUPPLIER_EXIT_ACCESS_ASSIGNMENT')",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_event WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_reminder_failure WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_entity WHERE tenant_id=?", tenantId);

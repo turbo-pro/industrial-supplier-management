@@ -307,7 +307,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
     </template>
   </el-dialog>
   <el-dialog v-model="recoveryAssignDialog" :title="`${recoveryChannels[recoveryAssignTask?.channel??'']??'外部访问'} · 核查分派`" width="560px" append-to-body :close-on-click-modal="false">
-    <el-alert title="仅分派本地核查责任；当前不发送站内通知，不等于外部账号或权限已回收。" type="warning" :closable="false"/>
+    <el-alert title="分派成功会发送站内通知；通知失败则整笔分派回滚。不等于外部账号或权限已回收。" type="warning" :closable="false"/>
     <el-form label-position="top"><el-form-item label="责任人账号 ID"><el-input v-model="recoveryAssignForm.assigneeId" maxlength="19"/><el-button link @click="recoveryAssignForm.assigneeId=session.actorId??''">分派给我</el-button></el-form-item><el-form-item label="核查期限"><el-date-picker v-model="recoveryAssignForm.dueDate" type="date" value-format="YYYY-MM-DD" clearable/></el-form-item><el-form-item label="分派说明"><el-input v-model="recoveryAssignForm.note" type="textarea" maxlength="1000" show-word-limit/></el-form-item></el-form>
     <template #footer><el-button :disabled="recoveryAssignBusy" @click="recoveryAssignDialog=false">取消</el-button><el-button type="primary" :loading="recoveryAssignBusy" @click="saveRecoveryAssign">保存分派</el-button></template>
   </el-dialog>
