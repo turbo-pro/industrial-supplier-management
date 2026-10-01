@@ -10,6 +10,7 @@ import java.util.Set;
 @Service
 public class ExitTaskService {
     private static final Set<String> CODES=Set.of("OPEN_CONTRACT","OPEN_PROJECT","OPEN_PERSON","OPEN_ASSET","OPEN_SAFETY","OPEN_ATTENDANCE","OPEN_QUALITY","OPEN_IMPROVEMENT");
+    private static final Set<String> ACCESS_CHANNELS=Set.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL");
     private final ExitTaskMapper mapper;
     public ExitTaskService(ExitTaskMapper mapper){this.mapper=mapper;}
     @Transactional(readOnly=true)
@@ -36,5 +37,20 @@ public class ExitTaskService {
         var items=mapper.list(identity.tenantId(),identity.actorId(),scope.type().name(),scope.organizationIds(),like,type,Math.multiplyExact(page,size),size).stream().map(r->new ExitTaskModels.Task(
             Long.toString(r.id()),Long.toString(r.applicationId()),Long.toString(r.supplierId()),r.supplierCode(),r.supplierName(),Long.toString(r.organizationId()),r.checkCode(),Long.toString(r.sourceId()),r.route(),r.note(),r.assignedAt(),r.checkedAt(),r.version(),r.applicationVersion(),r.dueDate(),r.lastRemindedAt(),r.dueDate()!=null&&r.dueDate().isBefore(RestrictionBusinessDate.today()))).toList();
         return new ExitTaskModels.Page(total,page,size,items);
+    }
+    @Transactional(readOnly=true)
+    public ExitTaskModels.AccessPage accessMine(String keyword,String channel,int page,int size){
+        if(page<0||page>10000||size<1||size>100||keyword!=null&&keyword.length()>100)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"核查待办查询参数无效");
+        String type=channel==null||channel.isBlank()?null:channel;
+        if(type!=null&&!ACCESS_CHANNELS.contains(type))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"核查渠道无效");
+        var identity=TenantContext.require();var scope=AuthorizationContext.require().dataScope("supplier:master");var today=RestrictionBusinessDate.today();
+        String like=keyword==null||keyword.isBlank()?null:"%"+keyword.trim().replace("=","==").replace("%","=%").replace("_","=_")+"%";
+        long total=mapper.accessCount(identity.tenantId(),identity.actorId(),scope.type().name(),scope.organizationIds(),like,type);
+        var items=mapper.accessList(identity.tenantId(),identity.actorId(),scope.type().name(),scope.organizationIds(),like,type,Math.multiplyExact(page,size),size)
+            .stream().map(r->new ExitTaskModels.AccessTask(Long.toString(r.id()),Long.toString(r.applicationId()),Long.toString(r.supplierId()),
+                r.supplierCode(),r.supplierName(),Long.toString(r.organizationId()),r.channel(),r.status(),r.finding(),r.assignmentNote(),
+                r.dueDate(),r.assignedAt(),r.version(),r.dueDate()!=null&&r.dueDate().isBefore(today))).toList();
+        return new ExitTaskModels.AccessPage(total,page,size,items);
     }
 }

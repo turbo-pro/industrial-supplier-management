@@ -54,6 +54,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/supplier-exit-tasks/access/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMySupplierExitAccessTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/table-views/{tableKey}": {
         parameters: {
             query?: never;
@@ -4384,6 +4400,36 @@ export interface components {
                 items: components["schemas"]["MyExitTask"][];
             };
         };
+        MyExitAccessTask: {
+            id: string;
+            applicationId: string;
+            supplierId: string;
+            supplierCode: string;
+            supplierName: string;
+            organizationId: string;
+            /** @enum {string} */
+            channel: "PORTAL_ACCOUNT" | "DOOR_ACCESS" | "API_CREDENTIAL";
+            /** @enum {string} */
+            status: "DISCOVERY_REQUIRED" | "DISCOVERY_RECORDED";
+            /** @enum {string|null} */
+            finding?: "PRESENT" | "ABSENT" | null;
+            assignmentNote?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            /** Format: date-time */
+            assignedAt?: string | null;
+            version: number;
+            overdue: boolean;
+        };
+        MyExitAccessTaskPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["MyExitAccessTask"][];
+            };
+        };
         ExitMonitorItem: {
             id: string;
             applicationId: string;
@@ -5045,6 +5091,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyExitTaskPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    listMySupplierExitAccessTasks: {
+        parameters: {
+            query?: {
+                /** @description Supplier code or name; wildcard characters are literal */
+                keyword?: string;
+                channel?: "PORTAL_ACCOUNT" | "DOOR_ACCESS" | "API_CREDENTIAL";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current actor's access discovery tasks within live supplier scope; not external recovery completion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyExitAccessTaskPageResponse"];
                 };
             };
             400: components["responses"]["ApiFailure"];

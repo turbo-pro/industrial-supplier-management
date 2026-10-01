@@ -837,6 +837,21 @@ class B0InfrastructureIT {
                     assertThat(assignedRecovery.tasks().get(0).assignments()).hasSize(1);
                     assertThat(assignedRecovery.tasks().get(0).version()).isEqualTo(2);
                     assertThat(assignedRecovery.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThat(accessTasks(tenantId,9976,DataScope.all()).items()).singleElement().satisfies(task->{
+                        assertThat(task.id()).isEqualTo(Long.toString(recoveryTaskId));
+                        assertThat(task.status()).isEqualTo("DISCOVERY_RECORDED");
+                        assertThat(task.finding()).isEqualTo("PRESENT");
+                    });
+                    assertThat(accessTasks(tenantId,9976,DataScope.none()).total()).isZero();
+                    assertThat(accessTasks(tenantId,9976,DataScope.organizations(Set.of(taskOrganization+100000))).total()).isZero();
+                    assertThat(accessTasks(tenantId+100000,9976,DataScope.all()).total()).isZero();
+                    assertThat(accessTasks(tenantId,9979,DataScope.all()).total()).isZero();
+                    try(var taskOwner=TenantContext.open(tenantId,9976);var taskAuthorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.all()),Set.of()))){
+                        assertThat(exitTaskService.accessMine(null,"API_CREDENTIAL",0,20).total()).isOne();
+                        assertThat(exitTaskService.accessMine(null,"DOOR_ACCESS",0,20).total()).isZero();
+                        assertThat(exitTaskService.accessMine("%",null,0,20).total()).isZero();
+                        assertThatThrownBy(()->exitTaskService.accessMine(null,"UNKNOWN",0,20)).isInstanceOf(ApiException.class);
+                    }
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(beforeAccessMessages+1);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_inbox i JOIN msg_delivery d ON d.id=i.delivery_id WHERE i.tenant_id=? AND i.recipient_id=9976 AND d.business_type='SUPPLIER_EXIT_ACCESS' AND d.business_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
                     jdbcTemplate.update("UPDATE msg_template SET status='DISABLED' WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ACCESS_ASSIGNMENT'",tenantId);
@@ -1799,6 +1814,11 @@ class B0InfrastructureIT {
     private io.github.turbopro.ism.supplier.ExitTaskModels.Page exitTasks(long tenantId,long actorId,DataScope scope){
         try(var identity=TenantContext.open(tenantId,actorId);var authorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of(),Map.of("supplier:master",scope),Set.of()))){
             return exitTaskService.mine(null,null,0,20);
+        }
+    }
+    private io.github.turbopro.ism.supplier.ExitTaskModels.AccessPage accessTasks(long tenantId,long actorId,DataScope scope){
+        try(var identity=TenantContext.open(tenantId,actorId);var authorization=AuthorizationContext.open(new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(Set.of(),Map.of("supplier:master",scope),Set.of()))){
+            return exitTaskService.accessMine(null,null,0,20);
         }
     }
     private io.github.turbopro.ism.supplier.ExitTaskModels.MonitorPage exitMonitor(long tenantId,long actorId,DataScope scope,boolean unassignedOnly,boolean overdueOnly){

@@ -55,6 +55,21 @@ paths:
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '403': { $ref: '#/components/responses/ApiFailure' }
+  /supplier-exit-tasks/access/mine:
+    get:
+      operationId: listMySupplierExitAccessTasks
+      tags: [Supplier Exit]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 }, description: Supplier code or name; wildcard characters are literal }
+        - { name: channel, in: query, schema: { type: string, enum: [PORTAL_ACCOUNT, DOOR_ACCESS, API_CREDENTIAL] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Current actor's access discovery tasks within live supplier scope; not external recovery completion, content: { application/json: { schema: { $ref: '#/components/schemas/MyExitAccessTaskPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /table-views/{tableKey}:
     get:
       operationId: listPersonalTableViews
@@ -2613,6 +2628,26 @@ components:
         overdue: { type: boolean }
     MyExitTaskPageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/MyExitTask' } } } } } }]
+    MyExitAccessTask:
+      type: object
+      required: [id, applicationId, supplierId, supplierCode, supplierName, organizationId, channel, status, version, overdue]
+      properties:
+        id: { type: string }
+        applicationId: { type: string }
+        supplierId: { type: string }
+        supplierCode: { type: string }
+        supplierName: { type: string }
+        organizationId: { type: string }
+        channel: { type: string, enum: [PORTAL_ACCOUNT, DOOR_ACCESS, API_CREDENTIAL] }
+        status: { type: string, enum: [DISCOVERY_REQUIRED, DISCOVERY_RECORDED] }
+        finding: { type: string, enum: [PRESENT, ABSENT], nullable: true }
+        assignmentNote: { type: string, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        assignedAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer, minimum: 0 }
+        overdue: { type: boolean }
+    MyExitAccessTaskPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [total, page, size, items], properties: { total: { type: integer, format: int64, minimum: 0 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/MyExitAccessTask' } } } } } }]
     ExitMonitorItem:
       type: object
       required: [id, applicationId, supplierId, supplierCode, supplierName, organizationId, code, sourceId, route, checkedAt, overdue]
