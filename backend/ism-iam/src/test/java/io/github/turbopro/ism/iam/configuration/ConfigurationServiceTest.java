@@ -51,6 +51,19 @@ class ConfigurationServiceTest {
         }
         verifyNoInteractions(mapper);
     }
+    @Test void rejectsInvalidAccessAutoReminderPolicyBeforeWriting(){
+        var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
+        when(definitions.settingType("exit.accessAutoReminderEnabled")).thenReturn("INTEGER");
+        when(definitions.settingType("exit.accessAutoReminderIntervalHours")).thenReturn("INTEGER");
+        var service=new ConfigurationService(mapper,definitions,mock(OperationIdGenerator.class));
+        try(var t=TenantContext.open(10,1)){
+            for(String value:new String[]{"-1","2","true","01"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.accessAutoReminderEnabled",new ConfigurationModels.UpdateSetting(value,0)));
+            for(String value:new String[]{"0","23","721","24.5","bad"})
+                assertThrows(ApiException.class,()->service.updateSetting("exit.accessAutoReminderIntervalHours",new ConfigurationModels.UpdateSetting(value,0)));
+        }
+        verifyNoInteractions(mapper);
+    }
     @Test void rejectsInvalidObservationDaysBeforeWriting(){
         var mapper=mock(ConfigurationMapper.class);var definitions=mock(SystemConfigurationMapper.class);
         when(definitions.settingType("restriction.watchPeriodDays")).thenReturn("INTEGER");

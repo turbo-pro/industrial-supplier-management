@@ -129,6 +129,27 @@ public class ExitAccessRecoveryService {
         return inventory(supplierId,applicationId);
     }
 
+    /** Background-only reminder. The task row lock serializes all application instances and manual reminders. */
+    @Transactional
+    public boolean autoRemind(long supplierId,long applicationId,long taskId,int intervalHours){
+        var identity=TenantContext.require();
+        if(identity.actorId()!=0||intervalHours<24||intervalHours>720)throw new IllegalArgumentException("system context and valid interval required");
+        var application=mapper.get(identity.tenantId(),supplierId,applicationId);
+        if(application==null||!"BUSINESS_CLOSED".equals(application.status())||mapper.findResult(identity.tenantId(),applicationId)==null)return false;
+        var row=mapper.lockAccessRecoveryTask(identity.tenantId(),supplierId,applicationId,taskId);
+        if(row==null||row.assigneeId()==null||row.dueDate()==null||!row.dueDate().isBefore(RestrictionBusinessDate.today())||!assignees.active(row.assigneeId()))return false;
+        var now=java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if(row.lastRemindedAt()!=null&&row.lastRemindedAt().isAfter(now.minusHours(intervalHours)))return false;
+        if(mapper.remindAccessRecoveryTask(identity.tenantId(),supplierId,applicationId,taskId,row.assigneeId(),now,row.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        if(mapper.insertAccessReminderEvent(ids.nextId(),identity.tenantId(),taskId,row.assigneeId(),0,row.dueDate())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        notifications.accessReminded(supplierId,applicationId,taskId,row.channel(),row.assigneeId(),row.dueDate());
+        audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_AUTO_REMIND","SUPPLIER_EXIT_ACCESS",taskId,null,
+            Map.of("status",row.status()),Map.of("status",row.status(),"assigneeId",row.assigneeId(),"supplierId",supplierId,"applicationId",applicationId),null,null));
+        return true;
+    }
+
     private ExitAccessRecoveryModels.Task task(long tenantId,ExitAccessRecoveryModels.TaskRow row){
         var events=mapper.accessRecoveryEvents(tenantId,row.id()).stream()
             .map(e->new ExitAccessRecoveryModels.Event(Long.toString(e.id()),e.finding(),Long.toString(e.evidenceFileId()),

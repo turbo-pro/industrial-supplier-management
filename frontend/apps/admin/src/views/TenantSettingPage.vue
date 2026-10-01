@@ -7,6 +7,8 @@ const session=useSessionStore();
 const setting=ref<components['schemas']['TenantSetting']>();
 const reminderEnabled=ref<components['schemas']['TenantSetting']>();
 const reminderInterval=ref<components['schemas']['TenantSetting']>();
+const accessReminderEnabled=ref<components['schemas']['TenantSetting']>();
+const accessReminderInterval=ref<components['schemas']['TenantSetting']>();
 const escalationRecipient=ref<components['schemas']['TenantSetting']>();
 const escalationDays=ref<components['schemas']['TenantSetting']>();
 const recipientId=ref('0'),afterDays=ref(3);
@@ -29,6 +31,7 @@ async function searchEscalationUsers(keyword=''){
 function changeRecipient(value:string){selectedUser.value=displayedUsers.value.find(user=>user.id===value);}
 function recipientDropdownVisible(visible:boolean){if(visible)void searchEscalationUsers();}
 const days=ref(7),enabled=ref(false),hours=ref(24),loading=ref(false),saving=ref(false);
+const accessEnabled=ref(false),accessHours=ref(24);
 async function load(){
   loading.value=true;
   try{
@@ -38,6 +41,10 @@ async function load(){
     if(setting.value)days.value=Number(setting.value.value);
     reminderEnabled.value=data?.data?.find(item=>item.key==='exit.autoReminderEnabled');
     reminderInterval.value=data?.data?.find(item=>item.key==='exit.autoReminderIntervalHours');
+    accessReminderEnabled.value=data?.data?.find(item=>item.key==='exit.accessAutoReminderEnabled');
+    accessReminderInterval.value=data?.data?.find(item=>item.key==='exit.accessAutoReminderIntervalHours');
+    accessEnabled.value=accessReminderEnabled.value?.value==='1';
+    accessHours.value=Number(accessReminderInterval.value?.value??24);
     escalationRecipient.value=data?.data?.find(item=>item.key==='exit.escalationRecipientId');
     escalationDays.value=data?.data?.find(item=>item.key==='exit.escalationAfterDays');
     if(reminderEnabled.value)enabled.value=reminderEnabled.value.value==='1';
@@ -88,6 +95,25 @@ async function saveReminder(){
     ElMessage.success('退出自动催办策略已保存');
   }catch{ElMessage.error('网络异常，请刷新核对保存结果');await load();}finally{saving.value=false;}
 }
+async function saveAccessReminder(){
+  if(!accessReminderEnabled.value||!accessReminderInterval.value||!Number.isInteger(accessHours.value)||accessHours.value<24||accessHours.value>720){
+    ElMessage.warning('核查催办间隔须为 24 至 720 小时的整数');return;
+  }
+  saving.value=true;
+  try{
+    const changes:Array<[components['schemas']['TenantSetting'],string]>=accessEnabled.value
+      ? [[accessReminderInterval.value,String(accessHours.value)],[accessReminderEnabled.value,'1']]
+      : [[accessReminderEnabled.value,'0'],[accessReminderInterval.value,String(accessHours.value)]];
+    for(const [item,value] of changes){
+      const {data,error,response}=await session.client.PUT('/configuration/settings/{settingKey}',{
+        params:{path:{settingKey:item.key},header:{'Idempotency-Key':crypto.randomUUID()}},body:{value,version:item.version}
+      });
+      if(error){ElMessage.error(response.status===409?'配置已被更新，请刷新后重试':error.error.message);await load();return;}
+      if(data?.data){if(item.key==='exit.accessAutoReminderEnabled')accessReminderEnabled.value=data.data;else accessReminderInterval.value=data.data;}
+    }
+    ElMessage.success('外部访问核查自动催办策略已保存');
+  }catch{ElMessage.error('网络异常，请刷新核对保存结果');await load();}finally{saving.value=false;}
+}
 async function save(){
   if(!setting.value||!Number.isInteger(days.value)||days.value<1||days.value>3650){
     ElMessage.warning('观察天数须为 1 至 3650 的整数');return;
@@ -126,6 +152,16 @@ onMounted(load);
         <el-button type="primary" :loading="saving" @click="saveReminder">保存催办策略</el-button>
       </el-form>
       <el-empty v-else-if="!loading" description="自动催办策略尚未加载"/>
+    </el-card>
+    <el-card shadow="never" style="margin-top:16px">
+      <template #header>外部访问核查 · 逾期自动催办</template>
+      <el-alert title="默认关闭，独立于本地退出处置催办。只对已本地关闭、逾期且分派给有效账号的核查任务发送站内消息；消息不是外部回收凭证。" type="info" :closable="false"/>
+      <el-form v-if="accessReminderEnabled&&accessReminderInterval" label-position="top" style="margin-top:16px">
+        <el-form-item label="启用自动催办"><el-switch v-model="accessEnabled" :disabled="saving"/></el-form-item>
+        <el-form-item label="重复催办间隔（小时）"><el-input-number v-model="accessHours" :min="24" :max="720" :precision="0" :disabled="saving"/></el-form-item>
+        <el-button type="primary" :loading="saving" @click="saveAccessReminder">保存核查催办策略</el-button>
+      </el-form>
+      <el-empty v-else-if="!loading" description="核查催办策略尚未加载"/>
     </el-card>
     <el-card shadow="never" style="margin-top:16px">
       <template #header>退出处置 · 逾期升级</template>
