@@ -9,6 +9,10 @@ import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;im
  int ensureExitAccessAssignmentTemplate(long tenantId,long id);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_ACCESS_ASSIGNMENT' AND channel='IN_APP' FOR SHARE")
  MessageModels.TemplateRow exitAccessAssignmentTemplate(long tenantId);
+ @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'SUPPLIER_EXIT_ACCESS_REMINDER','退出外部访问核查催办','IN_APP','外部访问核查催办','供应商 {{supplierId}} 的退出申请 {{applicationId}}，{{channel}} 核查任务 {{taskId}} 尚需处理；期限 {{dueDate}}。请记录证据并核验实际回收；本通知不是回收凭证。',JSON_ARRAY('supplierId','applicationId','channel','taskId','dueDate'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
+ int ensureExitAccessReminderTemplate(long tenantId,long id);
+ @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_ACCESS_REMINDER' AND channel='IN_APP' FOR SHARE")
+ MessageModels.TemplateRow exitAccessReminderTemplate(long tenantId);
  @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'SUPPLIER_EXIT_REMINDER','退出事项催办','IN_APP','退出事项催办','供应商 {{supplierId}} 的退出申请 {{applicationId}}，事项 {{code}} / {{sourceId}} 尚待处置；期限：{{dueDate}}。请处置后联系管理人员重新核验，本消息不是完成凭证。',JSON_ARRAY('supplierId','applicationId','code','sourceId','dueDate'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
  int ensureExitReminderTemplate(long tenantId,long id);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_REMINDER' AND channel='IN_APP' FOR SHARE")

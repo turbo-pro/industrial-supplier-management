@@ -101,6 +101,34 @@ public class ExitAccessRecoveryService {
         return inventory(supplierId,applicationId);
     }
 
+    @Transactional
+    public ExitAccessRecoveryModels.Inventory remind(long supplierId,long applicationId,long taskId,
+                                                      ExitAccessRecoveryModels.Remind command){
+        if(!AuthorizationContext.require().hasAction("supplier:exit:remind"))throw new ApiException(CommonErrorCode.FORBIDDEN);
+        suppliers.get(supplierId);
+        var identity=TenantContext.require();long tenantId=identity.tenantId();
+        var application=mapper.get(tenantId,supplierId,applicationId);
+        if(application==null||!"BUSINESS_CLOSED".equals(application.status())||mapper.findResult(tenantId,applicationId)==null)
+            throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var row=mapper.lockAccessRecoveryTask(tenantId,supplierId,applicationId,taskId);
+        if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(row.version()!=command.version())throw new ApiException(CommonErrorCode.CONFLICT);
+        if(row.assigneeId()==null||!assignees.active(row.assigneeId()))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"请先分派给本租户有效责任人");
+        var now=java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        if(row.lastRemindedAt()!=null&&row.lastRemindedAt().isAfter(now.minusHours(24)))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"同一核查任务 24 小时内只能催办一次");
+        if(mapper.remindAccessRecoveryTask(tenantId,supplierId,applicationId,taskId,row.assigneeId(),now,command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        if(mapper.insertAccessReminderEvent(ids.nextId(),tenantId,taskId,row.assigneeId(),identity.actorId(),row.dueDate())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        notifications.accessReminded(supplierId,applicationId,taskId,row.channel(),row.assigneeId(),row.dueDate());
+        audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_REMIND","SUPPLIER_EXIT_ACCESS",taskId,null,
+            Map.of("status",row.status()),Map.of("status",row.status(),"assigneeId",row.assigneeId(),
+                "supplierId",supplierId,"applicationId",applicationId),null,null));
+        return inventory(supplierId,applicationId);
+    }
+
     private ExitAccessRecoveryModels.Task task(long tenantId,ExitAccessRecoveryModels.TaskRow row){
         var events=mapper.accessRecoveryEvents(tenantId,row.id()).stream()
             .map(e->new ExitAccessRecoveryModels.Event(Long.toString(e.id()),e.finding(),Long.toString(e.evidenceFileId()),
@@ -109,10 +137,13 @@ public class ExitAccessRecoveryService {
             .map(e->new ExitAccessRecoveryModels.AssignmentEvent(Long.toString(e.id()),
                 e.previousAssigneeId()==null?null:Long.toString(e.previousAssigneeId()),Long.toString(e.assigneeId()),
                 e.dueDate(),e.note(),Long.toString(e.actorId()),e.createdAt())).toList();
+        var reminders=mapper.accessReminderEvents(tenantId,row.id()).stream()
+            .map(e->new ExitAccessRecoveryModels.ReminderEvent(Long.toString(e.id()),Long.toString(e.recipientId()),
+                Long.toString(e.actorId()),e.dueDate(),e.createdAt())).toList();
         return new ExitAccessRecoveryModels.Task(Long.toString(row.id()),row.channel(),row.status(),row.finding(),
             row.evidenceFileId()==null?null:Long.toString(row.evidenceFileId()),row.discoveryNote(),
             row.discoveredBy()==null?null:Long.toString(row.discoveredBy()),row.discoveredAt(),
             row.assigneeId()==null?null:Long.toString(row.assigneeId()),row.dueDate(),row.assignmentNote(),
-            row.assignedBy()==null?null:Long.toString(row.assignedBy()),row.assignedAt(),row.version(),row.createdAt(),events,assignments);
+            row.assignedBy()==null?null:Long.toString(row.assignedBy()),row.assignedAt(),row.lastRemindedAt(),row.version(),row.createdAt(),events,assignments,reminders);
     }
 }

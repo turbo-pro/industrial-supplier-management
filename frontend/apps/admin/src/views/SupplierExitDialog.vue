@@ -8,7 +8,7 @@ type Entity=components['schemas']['ExitEntity'];
 type ReminderFailure=components['schemas']['ExitReminderFailure'];
 type LocalArchive=components['schemas']['ExitLocalArchive'];
 type RecoveryInventory=components['schemas']['ExitAccessRecoveryInventory'];
-const props=defineProps<{modelValue:boolean;supplier:Pick<components['schemas']['SupplierSummary'],'id'|'name'>|null}>();
+const props=defineProps<{modelValue:boolean;supplier:Pick<components['schemas']['SupplierSummary'],'id'|'name'>|null;focusApplicationId?:string}>();
 const emit=defineEmits<{ 'update:modelValue':[value:boolean];changed:[] }>();
 const visible=computed({get:()=>props.modelValue,set:(value:boolean)=>emit('update:modelValue',value)});
 const session=useSessionStore(),rows=ref<Application[]>([]),page=ref(0),total=ref(0),loading=ref(false),busy=ref(false);
@@ -23,6 +23,19 @@ type RecoveryTask=components['schemas']['ExitAccessRecoveryTask'];
 const discoveryTask=ref<RecoveryTask>(),discoveryDialog=ref(false),discoveryBusy=ref(false);
 const recoveryAssignTask=ref<RecoveryTask>(),recoveryAssignDialog=ref(false),recoveryAssignBusy=ref(false);
 const recoveryAssignForm=reactive({assigneeId:'',dueDate:'',note:''});
+const recoveryRemindBusy=ref(false);
+async function remindRecovery(task:RecoveryTask){
+  const supplierId=props.supplier?.id,inventory=recovery.value;if(!supplierId||!inventory||!task.assigneeId)return;
+  try{await ElMessageBox.confirm('向当前核查责任人发送站内催办？同一任务 24 小时内只能催办一次，不会标记外部访问已回收。','核查催办',{confirmButtonText:'发送催办',cancelButtonText:'取消'});
+    recoveryRemindBusy.value=true;
+    const {data,error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/remind',{
+      params:{path:{supplierId,id:inventory.applicationId,taskId:task.id}},body:{version:task.version}
+    });
+    if(supplierId!==props.supplier?.id||!props.modelValue)return;
+    if(error){ElMessage.error(error.error.message+'；如任务已变化，请刷新后重试');return;}
+    recovery.value=data?.data;ElMessage.success('站内催办已发送，外部回收仍未核验');
+  }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('催办失败，请刷新核对');}finally{recoveryRemindBusy.value=false;}
+}
 function openRecoveryAssign(task:RecoveryTask){recoveryAssignTask.value=task;Object.assign(recoveryAssignForm,{assigneeId:task.assigneeId??'',dueDate:task.dueDate??'',note:task.assignmentNote??''});recoveryAssignDialog.value=true;}
 async function saveRecoveryAssign(){
   const supplierId=props.supplier?.id,inventory=recovery.value,task=recoveryAssignTask.value;
@@ -70,6 +83,15 @@ async function viewRecovery(row:Application){
     recovery.value=data?.data;recoveryVisible.value=true;
   }catch{if(version===requestVersion)ElMessage.error('访问回收任务加载失败，请重试');}
   finally{recoveryLoading.value=false;}
+}
+async function focusRecovery(){
+  const supplierId=props.supplier?.id,id=props.focusApplicationId,version=requestVersion;
+  if(!supplierId||!id||!props.modelValue)return;
+  try{const {data,error}=await session.client.GET('/suppliers/{supplierId}/exit-applications/{id}',{params:{path:{supplierId,id}}});
+    if(version!==requestVersion||supplierId!==props.supplier?.id||!props.modelValue)return;
+    if(error||!data?.data||data.data.status!=='BUSINESS_CLOSED'){ElMessage.error('目标退出申请不可查看');return;}
+    await viewRecovery(data.data);
+  }catch{if(version===requestVersion)ElMessage.error('目标核查任务读取失败');}
 }
 async function viewArchive(row:Application){
   const supplierId=props.supplier?.id;if(!supplierId||row.status!=='BUSINESS_CLOSED')return;
@@ -200,7 +222,7 @@ async function review(row:Application,decision:'APPROVE'|'REJECT'){
     await load();emit('changed');
   }catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error('审批失败，请刷新核对结果');}finally{busy.value=false;}
 }
-watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureRequestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;archiveVisible.value=false;archive.value=undefined;rows.value=[];total.value=0;canApply.value=false;loading.value=false;failureRows.value=[];failureTotal.value=0;failurePage.value=0;failureLoading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();}});
+watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureRequestVersion++;entityPages.value={};entityRequests.clear();assignment.value=false;deadlineDialog.value=false;archiveVisible.value=false;archive.value=undefined;rows.value=[];total.value=0;canApply.value=false;loading.value=false;failureRows.value=[];failureTotal.value=0;failurePage.value=0;failureLoading.value=false;if(props.modelValue){page.value=0;Object.assign(form,{type:'NORMAL',reason:'',evidenceFileId:''});void load();void focusRecovery();}});
 </script>
 <template>
   <el-dialog v-model="visible" :title="`${supplier?.name??''} · 退出流程`" width="1040px" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
@@ -298,11 +320,11 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
       <p>退出申请 {{recovery.applicationId}} · 外部访问状态：未核验</p>
       <el-alert v-if="recovery.tasks.length===0" title="历史退出记录未建立核查目录，外部访问仍未核验；不得视为无需回收。" type="error" :closable="false"/>
       <el-table :data="recovery.tasks" row-key="id">
-        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.assignmentNote">分派说明：{{task.assignmentNote}}</p><el-timeline><el-timeline-item v-for="event in task.assignments" :key="event.id" :timestamp="event.createdAt">责任人 {{event.assigneeId}} · 期限 {{event.dueDate??'未设置'}} · 分派人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item></el-timeline></template></el-table-column>
+        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.assignmentNote">分派说明：{{task.assignmentNote}}</p><p v-if="task.lastRemindedAt">上次催办（UTC）：{{task.lastRemindedAt}}</p><el-timeline><el-timeline-item v-for="event in task.assignments" :key="event.id" :timestamp="event.createdAt">责任人 {{event.assigneeId}} · 期限 {{event.dueDate??'未设置'}} · 分派人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.reminders" :key="event.id" :timestamp="event.createdAt">催办责任人 {{event.recipientId}} · 操作人 {{event.actorId}}</el-timeline-item></el-timeline></template></el-table-column>
         <el-table-column label="核查渠道"><template #default="{row:task}">{{recoveryChannels[task.channel]??task.channel}}</template></el-table-column>
         <el-table-column label="责任人 / 期限" width="190"><template #default="{row:task}">{{task.assigneeId??'未分派'}} / {{task.dueDate??'未设置'}}</template></el-table-column>
         <el-table-column label="发现记录" width="150"><template #default="{row:task}">{{task.finding==='PRESENT'?'发现访问记录':task.finding==='ABSENT'?'未发现访问记录':'待核查'}}</template></el-table-column>
-        <el-table-column label="操作" width="160"><template #default="{row:task}"><el-button link type="primary" @click="openRecoveryAssign(task)">分派</el-button><el-button link type="primary" @click="openDiscovery(task)">记录发现</el-button></template></el-table-column>
+        <el-table-column label="操作" width="210"><template #default="{row:task}"><el-button link type="primary" @click="openRecoveryAssign(task)">分派</el-button><el-button link type="primary" @click="openDiscovery(task)">记录发现</el-button><el-button link type="warning" :disabled="!task.assigneeId||recoveryRemindBusy" @click="remindRecovery(task)">催办</el-button></template></el-table-column>
       </el-table>
     </template>
   </el-dialog>

@@ -12,9 +12,10 @@ public final class ExitAccessRecoveryModels {
                                 @NotBlank @Size(max=1000) String note,@PositiveOrZero int version) {}
     public record Assign(@NotBlank String assigneeId,LocalDate dueDate,@NotBlank @Size(max=1000) String note,
                          @PositiveOrZero int version) {}
+    public record Remind(@PositiveOrZero int version) {}
     public record TaskRow(long id,String channel,String status,String finding,Long evidenceFileId,
                           String discoveryNote,Long discoveredBy,LocalDateTime discoveredAt,
-                          Long assigneeId,LocalDate dueDate,String assignmentNote,Long assignedBy,LocalDateTime assignedAt,
+                          Long assigneeId,LocalDate dueDate,String assignmentNote,Long assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
                           int version,LocalDateTime createdAt) {}
     public record EventRow(long id,long taskId,String finding,long evidenceFileId,String note,long actorId,LocalDateTime createdAt) {}
     public record Event(String id,String finding,String evidenceFileId,String note,String actorId,LocalDateTime createdAt) {}
@@ -22,9 +23,11 @@ public final class ExitAccessRecoveryModels {
                                      String note,long actorId,LocalDateTime createdAt) {}
     public record AssignmentEvent(String id,String previousAssigneeId,String assigneeId,LocalDate dueDate,
                                   String note,String actorId,LocalDateTime createdAt) {}
+    public record ReminderEventRow(long id,long taskId,long recipientId,long actorId,LocalDate dueDate,LocalDateTime createdAt) {}
+    public record ReminderEvent(String id,String recipientId,String actorId,LocalDate dueDate,LocalDateTime createdAt) {}
     public record Task(String id,String channel,String status,String finding,String evidenceFileId,
                        String discoveryNote,String discoveredBy,LocalDateTime discoveredAt,
-                       String assigneeId,LocalDate dueDate,String assignmentNote,String assignedBy,LocalDateTime assignedAt,
-                       int version,LocalDateTime createdAt,List<Event> events,List<AssignmentEvent> assignments) {}
+                       String assigneeId,LocalDate dueDate,String assignmentNote,String assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
+                       int version,LocalDateTime createdAt,List<Event> events,List<AssignmentEvent> assignments,List<ReminderEvent> reminders) {}
     public record Inventory(String supplierId,String applicationId,String accessRecoveryStatus,List<Task> tasks) {}
 }

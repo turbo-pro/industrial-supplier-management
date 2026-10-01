@@ -38,6 +38,13 @@ class ExitAssignmentNotificationTest {
         try(var ignored=TenantContext.open(10,7)){assertThrows(ApiException.class,()->service.notifyExitAccessAssignment(30,90,100,"DOOR_ACCESS",8,null));}
         verify(mapper,never()).insertInbox(anyLong(),anyLong(),anyLong(),anyLong());
     }
+    @Test void accessReminderUsesDistinctTemplateAndKeepsRecoveryUnverified(){
+        when(mapper.exitAccessReminderTemplate(10)).thenReturn(new MessageModels.TemplateRow(56,"SUPPLIER_EXIT_ACCESS_REMINDER","访问催办","IN_APP","外部访问核查催办","{{channel}}/{{dueDate}}","[\"channel\",\"dueDate\"]","ACTIVE",0));
+        when(mapper.validUsers(10,Set.of(8L))).thenReturn(Set.of(8L));when(ids.nextId()).thenReturn(101L,102L,103L);
+        try(var ignored=TenantContext.open(10,7)){service.notifyExitAccessReminder(30,90,100,"DOOR_ACCESS",8,null);}
+        verify(mapper).ensureExitAccessReminderTemplate(10,101);
+        verify(mapper).insertDelivery(eq(10L),eq(102L),eq(56L),eq(8L),eq("外部访问核查催办"),eq("DOOR_ACCESS/未设置"),eq("SUPPLIER_EXIT_ACCESS"),eq(100L),any());
+    }
     @Test void disabledTemplateIsNotReactivatedOrDelivered(){template("DISABLED","业务提示","[]");
         try(var ignored=TenantContext.open(10,7)){assertThrows(ApiException.class,this::send);}
         verify(mapper,never()).insertInbox(anyLong(),anyLong(),anyLong(),anyLong());

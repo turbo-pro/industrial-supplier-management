@@ -248,6 +248,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/remind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["remindSupplierExitAccessRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/recheck": {
         parameters: {
             query?: never;
@@ -2839,11 +2855,23 @@ export interface components {
             assignedBy?: string | null;
             /** Format: date-time */
             assignedAt?: string | null;
+            /** Format: date-time */
+            lastRemindedAt?: string | null;
             version: number;
             /** Format: date-time */
             createdAt: string;
             events: components["schemas"]["ExitAccessRecoveryEvent"][];
             assignments: components["schemas"]["ExitAccessAssignmentEvent"][];
+            reminders: components["schemas"]["ExitAccessReminderEvent"][];
+        };
+        ExitAccessReminderEvent: {
+            id: string;
+            recipientId: string;
+            actorId: string;
+            /** Format: date */
+            dueDate?: string | null;
+            /** Format: date-time */
+            createdAt: string;
         };
         ExitAccessAssignmentEvent: {
             id: string;
@@ -2861,6 +2889,9 @@ export interface components {
             /** Format: date */
             dueDate?: string | null;
             note: string;
+            version: number;
+        };
+        RemindExitAccessRecovery: {
             version: number;
         };
         ExitAccessRecoveryEvent: {
@@ -5556,6 +5587,38 @@ export interface operations {
         };
         responses: {
             /** @description Internal discovery assignment recorded; external recovery remains unverified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    remindSupplierExitAccessRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemindExitAccessRecovery"];
+            };
+        };
+        responses: {
+            /** @description In-app reminder sent transactionally; external recovery still unverified */
             200: {
                 headers: {
                     [name: string]: unknown;

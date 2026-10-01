@@ -17,6 +17,14 @@ import com.fasterxml.jackson.core.type.TypeReference;import com.fasterxml.jackso
    Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"taskId",Long.toString(taskId),
     "channel",channel,"dueDate",dueDate==null?"未设置":dueDate.toString()),"SUPPLIER_EXIT_ACCESS");
  }
+ @Transactional public void notifyExitAccessReminder(long supplierId,long applicationId,long taskId,String channel,long assigneeId,LocalDate dueDate){
+  if(supplierId<=0||applicationId<=0||taskId<=0||assigneeId<=0||channel==null||!Set.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL").contains(channel))
+   throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+  long tenant=tenant();mapper.ensureExitAccessReminderTemplate(tenant,ids.nextId());
+  deliverExitNotice(mapper.exitAccessReminderTemplate(tenant),taskId,assigneeId,
+   Map.of("supplierId",Long.toString(supplierId),"applicationId",Long.toString(applicationId),"taskId",Long.toString(taskId),
+    "channel",channel,"dueDate",dueDate==null?"未设置":dueDate.toString()),"SUPPLIER_EXIT_ACCESS");
+ }
  @Transactional public void notifyExitReminder(long supplierId,long applicationId,long entityId,String code,long sourceId,long assigneeId,LocalDate dueDate){
   if(supplierId<=0||applicationId<=0||entityId<=0||sourceId<=0||assigneeId<=0||code==null)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
   long tenant=tenant();mapper.ensureExitReminderTemplate(tenant,ids.nextId());

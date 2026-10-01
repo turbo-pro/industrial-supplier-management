@@ -20,4 +20,7 @@ public class ExitAssignmentNotificationAdapter implements ExitAssignmentNotifier
     @Override public void accessAssigned(long supplierId,long applicationId,long taskId,String channel,long assigneeId,java.time.LocalDate dueDate){
         messages.notifyExitAccessAssignment(supplierId,applicationId,taskId,channel,assigneeId,dueDate);
     }
+    @Override public void accessReminded(long supplierId,long applicationId,long taskId,String channel,long assigneeId,java.time.LocalDate dueDate){
+        messages.notifyExitAccessReminder(supplierId,applicationId,taskId,channel,assigneeId,dueDate);
+    }
 }

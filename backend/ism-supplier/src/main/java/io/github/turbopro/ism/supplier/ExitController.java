@@ -28,6 +28,9 @@ public class ExitController {
     @PostMapping("/{id}/access-recovery/{taskId}/assign") @RequiresPermission("supplier:exit:assign")
     public ApiResponse<ExitAccessRecoveryModels.Inventory> assignAccessRecovery(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
         @Valid @RequestBody ExitAccessRecoveryModels.Assign command){return responses.success(recovery.assign(supplierId,id,taskId,command));}
+    @PostMapping("/{id}/access-recovery/{taskId}/remind") @RequiresPermission("supplier:exit:remind")
+    public ApiResponse<ExitAccessRecoveryModels.Inventory> remindAccessRecovery(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
+        @Valid @RequestBody ExitAccessRecoveryModels.Remind command){return responses.success(recovery.remind(supplierId,id,taskId,command));}
     @GetMapping("/{id}/entities") @RequiresPermission("supplier:exit:view")
     public ApiResponse<ExitModels.EntityPage> entities(@PathVariable long supplierId,@PathVariable long id,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.entities(supplierId,id,page,size));}
     @PostMapping @RequiresPermission("supplier:exit:create")
