@@ -18,6 +18,22 @@ class SearchServiceTest {
     private final SearchMapper mapper=mock(SearchMapper.class);
     private final SearchService service=new SearchService(mapper,mock(OperationIdGenerator.class),new ObjectMapper().findAndRegisterModules());
 
+    @Test void qualificationSearchRequiresItsOwnPermissionAndNonemptyScope(){
+        var query=new SearchModels.SearchRequest("证号",Set.of(SearchModels.EntityType.SUPPLIER_QUALIFICATION),Set.of("EXPIRED"),null,null,0,20);
+        when(mapper.supplierQualifications(eq(8L),eq("%证号%"),eq(Set.of("EXPIRED")),isNull(),isNull(),eq(21),eq("ORGANIZATION_SET"),eq(Set.of(18L)),eq(9L)))
+            .thenReturn(List.of(new SearchModels.SearchRow(55,"SUPPLIER_QUALIFICATION","证号-55","供应商甲 · 安全许可证","EXPIRED","/suppliers/qualifications",LocalDateTime.of(2026,1,1,0,0),18L,9L)));
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.organizations(Set.of(18L))),Set.of()))){
+            assertThat(service.search(query).items()).extracting(SearchModels.SearchItem::id).containsExactly("55");
+        }
+        clearInvocations(mapper);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.organizations(Set.of())),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+    }
+
     @Test void searchesOnlyEntityTypesAllowedByUnderlyingPermissions(){
         when(mapper.users(eq(8L),anyString(),anySet(),isNull(),isNull(),eq(21),eq("ORGANIZATION_SET"),eq(Set.of(18L)),eq(9L))).thenReturn(List.of(new SearchModels.SearchRow(1,"USER","张三","zhangsan","ACTIVE","/system/users/1",LocalDateTime.of(2026,1,1,0,0),18L,null)));
         try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("iam:user:view"),Map.of("iam:user",DataScope.organizations(Set.of(18L))),Set.of()))){

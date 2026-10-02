@@ -4332,7 +4332,7 @@ export interface components {
             data?: components["schemas"]["WorkflowTask"][];
         };
         /** @enum {string} */
-        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK" | "SUPPLIER" | "CONTRACT" | "PROJECT" | "PERSON" | "ASSET" | "SAFETY_ISSUE" | "QUALITY_NCR" | "PERFORMANCE_EVALUATION" | "SITE_ATTENDANCE";
+        SearchEntityType: "USER" | "ORGANIZATION" | "FILE" | "PRINT_TEMPLATE" | "MESSAGE" | "TASK" | "SUPPLIER" | "SUPPLIER_QUALIFICATION" | "CONTRACT" | "PROJECT" | "PERSON" | "ASSET" | "SAFETY_ISSUE" | "QUALITY_NCR" | "PERFORMANCE_EVALUATION" | "SITE_ATTENDANCE";
         SearchRequest: {
             keyword: string;
             types: components["schemas"]["SearchEntityType"][];

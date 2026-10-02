@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Search, Setting } from '@element-plus/icons-vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 type Row=components['schemas']['QualificationSummary'];type Type=components['schemas']['QualificationType'];type Supplier=components['schemas']['SupplierSummary'];type Status=components['schemas']['QualificationStatus'];
-const session=useSessionStore();const tab=ref('ledger');const loading=ref(false);const saving=ref(false);const dialog=ref(false);const typeDialog=ref(false);const rows=ref<Row[]>([]);const types=ref<Type[]>([]);const suppliers=ref<Supplier[]>([]);const total=ref(0);
+const session=useSessionStore();const route=useRoute();const tab=ref('ledger');const loading=ref(false);const saving=ref(false);const dialog=ref(false);const typeDialog=ref(false);const rows=ref<Row[]>([]);const types=ref<Type[]>([]);const suppliers=ref<Supplier[]>([]);const total=ref(0);
 const query=reactive<{keyword:string;status?:Status;page:number;size:number}>({keyword:'',status:undefined,page:0,size:20});
 const form=reactive({supplierId:'',typeId:'',certificateNo:'',issuingAuthority:'',issueDate:'',effectiveDate:'',expiryDate:'',permanent:false,warningDays:30,fileId:''});
 const typeForm=reactive({code:'',name:'',category:'LEGAL',validityRequired:true,defaultWarningDays:30,description:''});
@@ -20,7 +21,7 @@ function openType(){Object.assign(typeForm,{code:'',name:'',category:'LEGAL',val
 async function createType(){if(!typeForm.code||!typeForm.name){ElMessage.warning('请填写类型编码和名称');return;}const {error}=await session.client.POST('/qualifications/types',{body:{...typeForm,status:'ACTIVE',version:0}});if(error){ElMessage.error(error.error.message);return;}typeDialog.value=false;ElMessage.success('资质类型已创建');await loadTypes();}
 function tagType(status:Status){return status==='VALID'?'success':status==='EXPIRING'?'warning':status==='EXPIRED'||status==='REJECTED'||status==='REVOKED'?'danger':'info';}
 function pageChanged(value:number){query.page=value-1;void load();}
-onMounted(()=>Promise.all([load(),loadTypes()]));
+onMounted(()=>{query.keyword=typeof route.query.keyword==='string'?route.query.keyword:'';return Promise.all([load(),loadTypes()]);});
 </script>
 <template><div class="page"><div class="page-heading"><div><h1>资质证照</h1><p>统一维护供应商证照核验、有效期预警、撤销与换证记录</p></div><div><el-button :icon="Setting" @click="tab='types'">类型配置</el-button><el-button type="primary" :icon="Plus" @click="openCreate">新增证照</el-button></div></div>
   <el-tabs v-model="tab"><el-tab-pane label="证照台账" name="ledger"><el-card shadow="never" class="filter-card"><el-form inline><el-form-item label="关键词"><el-input v-model="query.keyword" clearable placeholder="供应商、证书编号" :prefix-icon="Search" @keyup.enter="query.page=0;load()"/></el-form-item><el-form-item label="状态"><el-select v-model="query.status" clearable placeholder="全部状态" style="width:150px"><el-option v-for="(name,key) in statusNames" :key="key" :label="name" :value="key"/></el-select></el-form-item><el-form-item><el-button type="primary" @click="query.page=0;load()">查询</el-button><el-button :icon="Refresh" @click="query.keyword='';query.status=undefined;query.page=0;load()">重置</el-button></el-form-item></el-form></el-card>

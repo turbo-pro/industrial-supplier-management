@@ -1521,6 +1521,8 @@ class B0InfrastructureIT {
         try{
             for(long[] row:new long[][]{{orgA,tenantA},{orgOther,tenantA},{orgB,tenantB}})
                 jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,'SITE','ACTIVE')",row[0],row[1],"SEARCH_"+row[0],"Search Site "+row[0]);
+            for(long tenantId:new long[]{tenantA,tenantB})
+                jdbcTemplate.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(?,?,?,'Safety License','LEGAL',9,9)",tenantId+1000,tenantId,"SEARCH_CERT_"+tenantId);
             for(long[] row:new long[][]{{98121,tenantA,orgA},{98122,tenantA,orgOther},{98123,tenantB,orgB}}){
                 jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,?,?,'MANUFACTURER',9,9)",row[0],row[1],row[2],"BIZ-S"+row[0],"Business Supplier "+row[0]);
                 jdbcTemplate.update("INSERT INTO prj_contract(id,tenant_id,organization_id,supplier_id,contract_no,contract_name,contract_type,amount,start_date,end_date,owner_id,file_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'SERVICE',10,CURRENT_DATE,CURRENT_DATE,9,1,9,9)",row[0]+10,row[1],row[2],row[0],"BIZ-C"+row[0],"Business Contract "+row[0]);
@@ -1532,6 +1534,17 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("INSERT INTO qua_nonconformance(id,tenant_id,organization_id,project_id,supplier_id,ncr_no,title,category,severity,description,inspection_date,inspected_quantity,defective_quantity,unit,evidence_file_id,deadline,responsible_user_id,created_by,updated_by) VALUES(?,?,?,?,?,?,'Business Quality','PRODUCT','LOW','Fixture',CURRENT_DATE,10,1,'件',?,CURRENT_DATE,9,9,9)",row[0]+60,row[1],row[2],row[0]+20,row[0],"BIZ-NCR"+row[0],row[0]+70);
                 jdbcTemplate.update("INSERT INTO per_supplier_evaluation(id,tenant_id,organization_id,supplier_id,supplier_code,supplier_name,period_start,period_end,total_score,grade,created_by,updated_by) VALUES(?,?,?,?,?,?,'2026-01-01','2026-01-31',80,'B',9,9)",row[0]+80,row[1],row[2],row[0],"BIZ-S"+row[0],"Business Supplier "+row[0]);
                 jdbcTemplate.update("INSERT INTO saf_site_attendance(id,tenant_id,organization_id,project_id,supplier_id,person_id,site_name,check_in_at,check_in_by,created_by) VALUES(?,?,?,?,?,?,'BIZ-SITE',CURRENT_TIMESTAMP,9,9)",row[0]+90,row[1],row[2],row[0]+20,row[0],row[0]+30);
+                jdbcTemplate.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,expiry_date,file_id,status,created_by,updated_by) VALUES(?,?,?,?,?,? ,DATE_SUB(CURRENT_DATE,INTERVAL 1 DAY),?,'VALID',9,9)",row[0]+100,row[1],row[2],row[0],row[1]+1000,"BIZ-CERT"+row[0],row[0]+70);
+            }
+            var certificateRequest=new SearchModels.SearchRequest("BIZ-CERT",Set.of(SearchModels.EntityType.SUPPLIER_QUALIFICATION),Set.of("EXPIRED"),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.organizations(Set.of(orgA))),Set.of()))){
+                assertThat(searchService.search(certificateRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98221");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(certificateRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98223");
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(certificateRequest).items()).isEmpty();
             }
             var attendanceRequest=new SearchModels.SearchRequest("BIZ-SITE",Set.of(SearchModels.EntityType.SITE_ATTENDANCE),Set.of("OPEN"),null,null,0,20);
             try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("safety:attendance:view"),Map.of("safety:attendance",DataScope.projects(Set.of(98141L))),Set.of()))){
@@ -1590,6 +1603,8 @@ class B0InfrastructureIT {
                 assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143","98153","98163");
             }
         }finally{
+            jdbcTemplate.update("DELETE FROM qua_supplier_qualification WHERE tenant_id IN (?,?)",tenantA,tenantB);
+            jdbcTemplate.update("DELETE FROM qua_qualification_type WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM per_supplier_evaluation WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM qua_nonconformance WHERE tenant_id IN (?,?)",tenantA,tenantB);
