@@ -1108,6 +1108,8 @@ paths:
         - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
         - { name: status, in: query, schema: { $ref: '#/components/schemas/SupplierStatus' } }
         - { name: organizationId, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/SupplierType' } }
+        - { name: riskLevel, in: query, schema: { $ref: '#/components/schemas/SupplierRiskLevel' } }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses: { '200': { description: Data-scope filtered supplier page, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }

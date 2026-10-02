@@ -8164,6 +8164,8 @@ export interface operations {
                 keyword?: string;
                 status?: components["schemas"]["SupplierStatus"];
                 organizationId?: string;
+                type?: components["schemas"]["SupplierType"];
+                riskLevel?: components["schemas"]["SupplierRiskLevel"];
                 page?: number;
                 size?: number;
             };

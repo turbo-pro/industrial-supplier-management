@@ -527,8 +527,17 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.observed(tenantId, supplierId)).isOne();
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
-                assertThat(supplierMapper.list(tenantId, null, null, null, "TENANT_ALL", java.util.Set.of(), 1, 0, 20))
+                assertThat(supplierMapper.list(tenantId, null, null, null, null, null, "TENANT_ALL", java.util.Set.of(), 1, 0, 20))
                         .anySatisfy(supplier -> { assertThat(supplier.id()).isEqualTo(Long.toString(supplierId)); assertThat(supplier.observed()).isTrue(); });
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1)).isOne();
+                assertThat(supplierMapper.list(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1,0,20))
+                        .extracting(io.github.turbopro.ism.supplier.SupplierModels.SupplierSummary::id).containsExactly(Long.toString(supplierId));
+                assertThat(supplierMapper.count(tenantId,null,null,null,"CONTRACTOR","LOW","TENANT_ALL",java.util.Set.of(),1)).isZero();
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","HIGH","TENANT_ALL",java.util.Set.of(),1)).isZero();
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","ORGANIZATION_SET",java.util.Set.of(orgId+1),1)).isZero();
+                try(var otherTenant=TenantContext.open(tenantId+100000,1)){
+                    assertThat(supplierMapper.count(tenantId+100000,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1)).isZero();
+                }
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "WATCH")).isOne();
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
                 var observationPermissions=new io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",io.github.turbopro.ism.common.infrastructure.authorization.DataScope.all()),java.util.Set.of());

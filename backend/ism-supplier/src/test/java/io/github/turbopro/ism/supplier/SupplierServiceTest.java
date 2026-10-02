@@ -16,6 +16,7 @@ class SupplierServiceTest {
     private final SupplierExitCheck exitCheck=mock(SupplierExitCheck.class);
     private final AuditService audit=mock(AuditService.class);
     private final SupplierService service=new SupplierService(mapper,mock(OperationIdGenerator.class),audit,blacklist,List.of(exitCheck));
+    @Test void listPassesTypeRiskAndScopeToCountAndItems(){try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:master",DataScope.organizations(Set.of(20L))),Set.of()))){service.list("SUP", "ACTIVE",null,SupplierModels.Type.CONTRACTOR,SupplierModels.RiskLevel.HIGH,1,20);}verify(mapper).count(10,"%SUP%","ACTIVE",null,"CONTRACTOR","HIGH","ORGANIZATION_SET",Set.of(20L),7);verify(mapper).list(10,"%SUP%","ACTIVE",null,"CONTRACTOR","HIGH","ORGANIZATION_SET",Set.of(20L),7,20,20);}
     @Test void supplierEditReplacesContactsAndAuditsOnlyAfterVersionMatch(){
         var command=new SupplierModels.SaveSupplier("SUP-001","新名称",null,null,SupplierModels.Type.MANUFACTURER,null,"CN",null,null,null,null,null,null,null,null,SupplierModels.RiskLevel.LOW,null,"20",List.of(new SupplierModels.ContactCommand("张三",null,"13800138000",null,null,true,0)),0);
         when(mapper.find(10,99)).thenReturn(row("ACTIVE",20,7));when(mapper.organizationExists(10,20)).thenReturn(1);
