@@ -930,6 +930,25 @@ class B0InfrastructureIT {
                         new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal("other-9976","未发现渠道",Long.toString(fileId),"不得登记",0))).isInstanceOf(ApiException.class);
                     assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).version()).isEqualTo(5);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_principal WHERE tenant_id=? AND task_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
+                    long principalId=Long.parseLong(withPrincipal.tasks().get(0).principals().get(0).id());
+                    assertThatThrownBy(()->exitAccessRecoveryService.voidPrincipal(supplierId,finalExitId,recoveryTaskId,principalId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.VoidPrincipal("999999999999","证据无效不得作废",5,0))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.voidPrincipal(supplierId,finalExitId,
+                        Long.parseLong(withPrincipal.tasks().get(1).id()),principalId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.VoidPrincipal(Long.toString(fileId),"跨任务不得作废",0,0))).isInstanceOf(ApiException.class);
+                    var voidedPrincipal=exitAccessRecoveryService.voidPrincipal(supplierId,finalExitId,recoveryTaskId,principalId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.VoidPrincipal(Long.toString(fileId),"登记标识有误，保留原记录",5,0));
+                    assertThat(voidedPrincipal.tasks().get(0).version()).isEqualTo(6);
+                    assertThat(voidedPrincipal.tasks().get(0).principals().get(0).status()).isEqualTo("VOIDED");
+                    assertThat(voidedPrincipal.tasks().get(0).principals().get(0).voidReason()).contains("标识有误");
+                    assertThat(voidedPrincipal.tasks().get(0).principals().get(0).voidedBy()).isEqualTo("4");
+                    assertThatThrownBy(()->exitAccessRecoveryService.voidPrincipal(supplierId,finalExitId,recoveryTaskId,principalId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.VoidPrincipal(Long.toString(fileId),"不得重复作废",6,1))).isInstanceOf(ApiException.class);
+                    var correctedPrincipal=exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal("acct-9976","核对后的账号",Long.toString(fileId),"登记纠错后重新确认",6));
+                    assertThat(correctedPrincipal.tasks().get(0).principals()).hasSize(2);
+                    assertThat(correctedPrincipal.tasks().get(0).principals()).extracting(io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.Principal::status).containsExactly("VOIDED","ACTIVE");
+                    assertThat(correctedPrincipal.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
                     assertThat(jdbcTemplate.queryForObject("SELECT access_recovery_status FROM sup_exit_result WHERE tenant_id=? AND application_id=?",String.class,tenantId,finalExitId)).isEqualTo("NOT_VERIFIED");
                     var archive=exitArchiveService.get(supplierId,finalExitId);
                     assertThat(archive.integrityVerified()).isTrue();

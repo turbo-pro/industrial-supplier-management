@@ -218,6 +218,15 @@ paths:
       parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: taskId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterExitAccessPrincipal' } } } }
       responses: { '200': { description: Observed principal registered; recovery remains unverified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/principals/{principalId}/void:
+    post:
+      operationId: voidSupplierExitAccessPrincipalRegistration
+      tags: [Supplier Exit]
+      description: Void only an erroneous local principal registration with reason and evidence. Historical row remains; the external account is not disabled or revoked.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: supplierId, in: path, required: true, schema: { type: string } }, { name: id, in: path, required: true, schema: { type: string } }, { name: taskId, in: path, required: true, schema: { type: string } }, { name: principalId, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VoidExitAccessPrincipal' } } } }
+      responses: { '200': { description: Local registration voided; external recovery remains unverified, content: { application/json: { schema: { $ref: '#/components/schemas/ExitAccessRecoveryInventoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign:
     post:
       operationId: assignSupplierExitAccessRecovery
@@ -1915,7 +1924,7 @@ components:
         principals: { type: array, items: { $ref: '#/components/schemas/ExitAccessPrincipal' } }
     ExitAccessPrincipal:
       type: object
-      required: [id, externalReference, displayLabel, evidenceFileId, note, recordedBy, recordedAt]
+      required: [id, externalReference, displayLabel, evidenceFileId, note, recordedBy, recordedAt, status, version]
       properties:
         id: { type: string }
         externalReference: { type: string }
@@ -1924,6 +1933,12 @@ components:
         note: { type: string }
         recordedBy: { type: string }
         recordedAt: { type: string, format: date-time }
+        status: { type: string, enum: [ACTIVE, VOIDED] }
+        version: { type: integer, minimum: 0 }
+        voidReason: { type: string, nullable: true }
+        voidEvidenceFileId: { type: string, nullable: true }
+        voidedBy: { type: string, nullable: true }
+        voidedAt: { type: string, format: date-time, nullable: true }
     ExitAccessReminderEvent:
       type: object
       required: [id, recipientId, actorId, createdAt]
@@ -1966,6 +1981,14 @@ components:
         evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
         note: { type: string, minLength: 1, maxLength: 1000 }
         version: { type: integer, minimum: 0 }
+    VoidExitAccessPrincipal:
+      type: object
+      required: [evidenceFileId, reason, taskVersion, principalVersion]
+      properties:
+        evidenceFileId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+        taskVersion: { type: integer, minimum: 0 }
+        principalVersion: { type: integer, minimum: 0 }
     ExitAccessRecoveryEvent:
       type: object
       required: [id, finding, evidenceFileId, note, actorId, createdAt]

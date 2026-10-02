@@ -20,12 +20,33 @@ const archive=ref<LocalArchive>(),archiveVisible=ref(false),archiveLoading=ref(f
 const recovery=ref<RecoveryInventory>(),recoveryVisible=ref(false),recoveryLoading=ref(false);
 const recoveryChannels:Record<string,string>={PORTAL_ACCOUNT:'供应商门户账号',DOOR_ACCESS:'外部门禁权限',API_CREDENTIAL:'接口凭证'};
 type RecoveryTask=components['schemas']['ExitAccessRecoveryTask'];
+type RecoveryPrincipal=components['schemas']['ExitAccessPrincipal'];
 const discoveryTask=ref<RecoveryTask>(),discoveryDialog=ref(false),discoveryBusy=ref(false);
 const recoveryAssignTask=ref<RecoveryTask>(),recoveryAssignDialog=ref(false),recoveryAssignBusy=ref(false);
 const recoveryAssignForm=reactive({assigneeId:'',dueDate:'',note:''});
 const recoveryRemindBusy=ref(false);
 const principalTask=ref<RecoveryTask>(),principalDialog=ref(false),principalBusy=ref(false);
 const principalForm=reactive({externalReference:'',displayLabel:'',evidenceFileId:'',note:''});
+const voidTask=ref<RecoveryTask>(),voidTarget=ref<RecoveryPrincipal>(),voidDialog=ref(false),voidBusy=ref(false);
+const voidForm=reactive({evidenceFileId:'',reason:''});
+function openVoid(task:RecoveryTask,principal:RecoveryPrincipal){voidTask.value=task;voidTarget.value=principal;Object.assign(voidForm,{evidenceFileId:principal.evidenceFileId,reason:''});voidDialog.value=true;}
+async function saveVoid(){
+  const supplierId=props.supplier?.id,inventory=recovery.value,task=voidTask.value,principal=voidTarget.value;
+  if(!supplierId||!inventory||!task||!principal)return;
+  if(!/^[1-9][0-9]{0,18}$/.test(voidForm.evidenceFileId)||!voidForm.reason.trim()){
+    ElMessage.warning('请填写有效证据文件 ID 和登记作废原因');return;
+  }
+  voidBusy.value=true;
+  try{
+    const {data,error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/principals/{principalId}/void',{
+      params:{path:{supplierId,id:inventory.applicationId,taskId:task.id,principalId:principal.id}},
+      body:{evidenceFileId:voidForm.evidenceFileId,reason:voidForm.reason.trim(),taskVersion:task.version,principalVersion:principal.version}
+    });
+    if(supplierId!==props.supplier?.id||!props.modelValue)return;
+    if(error){ElMessage.error(error.error.message+'；如记录已变化，请刷新后重试');return;}
+    recovery.value=data?.data;voidDialog.value=false;ElMessage.success('错误登记已作废；外部访问状态仍未核验');
+  }catch{ElMessage.error('登记作废失败，请刷新核对');}finally{voidBusy.value=false;}
+}
 function openPrincipal(task:RecoveryTask){principalTask.value=task;Object.assign(principalForm,{externalReference:'',displayLabel:'',evidenceFileId:task.evidenceFileId??'',note:''});principalDialog.value=true;}
 async function savePrincipal(){
   const supplierId=props.supplier?.id,inventory=recovery.value,task=principalTask.value;
@@ -339,7 +360,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
       <p>退出申请 {{recovery.applicationId}} · 外部访问状态：未核验</p>
       <el-alert v-if="recovery.tasks.length===0" title="历史退出记录未建立核查目录，外部访问仍未核验；不得视为无需回收。" type="error" :closable="false"/>
       <el-table :data="recovery.tasks" row-key="id">
-        <el-table-column type="expand"><template #default="{row:task}"><p v-if="task.assignmentNote">分派说明：{{task.assignmentNote}}</p><p v-if="task.lastRemindedAt">上次催办（UTC）：{{task.lastRemindedAt}}</p><el-alert v-if="task.reminderFailureStatus==='FAILED'" type="error" :closable="false" :title="`自动催办失败 ${task.reminderFailureCount} 次 · ${task.reminderFailureCode} · 最近 ${task.reminderLastFailedAt}（UTC）`"/><p v-else-if="task.reminderFailureStatus==='DELIVERED'">自动催办故障已恢复：累计失败 {{task.reminderFailureCount}} 次，恢复时间 {{task.reminderResolvedAt}}（UTC）</p><p>已登记外部标识（{{task.principals.length}}）：仅为人工发现，不是已绑定门户身份或已回收</p><p v-for="principal in task.principals" :key="principal.id">{{principal.displayLabel}} · {{principal.externalReference}} · 证据 {{principal.evidenceFileId}} · 登记人 {{principal.recordedBy}}<br/>{{principal.note}}</p><el-timeline><el-timeline-item v-for="event in task.assignments" :key="event.id" :timestamp="event.createdAt">责任人 {{event.assigneeId}} · 期限 {{event.dueDate??'未设置'}} · 分派人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.reminders" :key="event.id" :timestamp="event.createdAt">催办责任人 {{event.recipientId}} · 操作人 {{event.actorId}}</el-timeline-item></el-timeline></template></el-table-column>
+        <el-table-column type="expand"><template #default="{row:task} "><p v-if="task.assignmentNote">分派说明：{{task.assignmentNote}}</p><p v-if="task.lastRemindedAt">上次催办（UTC）：{{task.lastRemindedAt}}</p><el-alert v-if="task.reminderFailureStatus==='FAILED'" type="error" :closable="false" :title="`自动催办失败 ${task.reminderFailureCount} 次 · ${task.reminderFailureCode} · 最近 ${task.reminderLastFailedAt}（UTC）`"/><p v-else-if="task.reminderFailureStatus==='DELIVERED'">自动催办故障已恢复：累计失败 {{task.reminderFailureCount}} 次，恢复时间 {{task.reminderResolvedAt}}（UTC）</p><p>已登记外部标识（{{task.principals.length}}）：仅为人工发现，不是已绑定门户身份或已回收</p><p v-for="principal in task.principals" :key="principal.id">{{principal.displayLabel}} · {{principal.externalReference}} · {{principal.status==='VOIDED'?'登记已作废':'登记有效'}} · 证据 {{principal.evidenceFileId}} · 登记人 {{principal.recordedBy}}<br/>{{principal.note}}<span v-if="principal.status==='VOIDED'"> · 作废：{{principal.voidReason}} / 证据 {{principal.voidEvidenceFileId}} / 操作人 {{principal.voidedBy}}</span><el-button v-else link type="warning" @click="openVoid(task,principal)">作废错误登记</el-button></p><el-timeline><el-timeline-item v-for="event in task.assignments" :key="event.id" :timestamp="event.createdAt">责任人 {{event.assigneeId}} · 期限 {{event.dueDate??'未设置'}} · 分派人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.events" :key="event.id" :timestamp="event.createdAt">{{event.finding==='PRESENT'?'发现访问记录':'未发现访问记录'}} · 证据 {{event.evidenceFileId}} · 操作人 {{event.actorId}}<p>{{event.note}}</p></el-timeline-item><el-timeline-item v-for="event in task.reminders" :key="event.id" :timestamp="event.createdAt">催办责任人 {{event.recipientId}} · 操作人 {{event.actorId}}</el-timeline-item></el-timeline></template></el-table-column>
         <el-table-column label="核查渠道"><template #default="{row:task}">{{recoveryChannels[task.channel]??task.channel}}</template></el-table-column>
         <el-table-column label="责任人 / 期限" width="190"><template #default="{row:task}">{{task.assigneeId??'未分派'}} / {{task.dueDate??'未设置'}}</template></el-table-column>
         <el-table-column label="发现记录" width="150"><template #default="{row:task}">{{task.finding==='PRESENT'?'发现访问记录':task.finding==='ABSENT'?'未发现访问记录':'待核查'}}</template></el-table-column>
@@ -351,6 +372,12 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
     <el-alert title="仅登记人工发现的账号/卡号/凭证标识，不得填写口令、令牌或密钥；不执行外部系统停用或回收。" type="warning" :closable="false"/>
     <el-form label-position="top"><el-form-item label="外部标识"><el-input v-model="principalForm.externalReference" maxlength="128"/></el-form-item><el-form-item label="显示名称"><el-input v-model="principalForm.displayLabel" maxlength="120"/></el-form-item><el-form-item label="证据文件 ID"><el-input v-model="principalForm.evidenceFileId" maxlength="19"/></el-form-item><el-form-item label="登记说明"><el-input v-model="principalForm.note" type="textarea" maxlength="1000" show-word-limit/></el-form-item></el-form>
     <template #footer><el-button :disabled="principalBusy" @click="principalDialog=false">取消</el-button><el-button type="primary" :loading="principalBusy" @click="savePrincipal">登记标识</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="voidDialog" title="作废错误的外部标识登记" width="560px" append-to-body :close-on-click-modal="false">
+    <el-alert title="仅作废本系统的错误登记，保留原始记录及证据；不会停用或回收外部账号、卡号或凭证。" type="warning" :closable="false"/>
+    <p>{{voidTarget?.displayLabel}} · {{voidTarget?.externalReference}}</p>
+    <el-form label-position="top"><el-form-item label="作废依据文件 ID"><el-input v-model="voidForm.evidenceFileId" maxlength="19"/></el-form-item><el-form-item label="作废原因"><el-input v-model="voidForm.reason" type="textarea" maxlength="1000" show-word-limit/></el-form-item></el-form>
+    <template #footer><el-button :disabled="voidBusy" @click="voidDialog=false">取消</el-button><el-button type="warning" :loading="voidBusy" @click="saveVoid">确认作废登记</el-button></template>
   </el-dialog>
   <el-dialog v-model="recoveryAssignDialog" :title="`${recoveryChannels[recoveryAssignTask?.channel??'']??'外部访问'} · 核查分派`" width="560px" append-to-body :close-on-click-modal="false">
     <el-alert title="分派成功会发送站内通知；通知失败则整笔分派回滚。不等于外部账号或权限已回收。" type="warning" :closable="false"/>

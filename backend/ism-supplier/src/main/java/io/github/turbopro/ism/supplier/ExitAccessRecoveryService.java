@@ -102,6 +102,37 @@ public class ExitAccessRecoveryService {
     }
 
     @Transactional
+    public ExitAccessRecoveryModels.Inventory voidPrincipal(long supplierId,long applicationId,long taskId,long principalId,
+                                                            ExitAccessRecoveryModels.VoidPrincipal command){
+        if(!AuthorizationContext.require().hasAction("supplier:exit:review"))throw new ApiException(CommonErrorCode.FORBIDDEN);
+        suppliers.get(supplierId);
+        var identity=TenantContext.require();long tenantId=identity.tenantId();
+        var application=mapper.get(tenantId,supplierId,applicationId);
+        if(application==null||!"BUSINESS_CLOSED".equals(application.status())||mapper.findResult(tenantId,applicationId)==null)
+            throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var task=mapper.lockAccessRecoveryTask(tenantId,supplierId,applicationId,taskId);
+        if(task==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(task.version()!=command.taskVersion())throw new ApiException(CommonErrorCode.CONFLICT);
+        var principal=mapper.lockAccessPrincipal(tenantId,taskId,principalId);
+        if(principal==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(principal.version()!=command.principalVersion()||!"ACTIVE".equals(principal.status()))
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        String reason=command.reason().trim();
+        if(reason.isEmpty())throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"请填写登记作废原因");
+        long fileId;
+        try{fileId=Long.parseLong(command.evidenceFileId());if(fileId<=0)throw new NumberFormatException();}
+        catch(NumberFormatException ex){throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"证据文件 ID 无效");}
+        if(!evidence.available(fileId))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"证据文件不存在或不可用");
+        if(mapper.advanceAccessRecoveryVersion(tenantId,supplierId,applicationId,taskId,command.taskVersion())!=1||
+           mapper.voidAccessPrincipal(tenantId,taskId,principalId,reason,fileId,identity.actorId(),command.principalVersion())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_PRINCIPAL_VOID","SUPPLIER_EXIT_ACCESS",taskId,null,
+            Map.of("principalId",principalId,"status","ACTIVE"),Map.of("principalId",principalId,"status","VOIDED",
+                "supplierId",supplierId,"applicationId",applicationId),null,null));
+        return inventory(supplierId,applicationId);
+    }
+
+    @Transactional
     public ExitAccessRecoveryModels.Inventory assign(long supplierId,long applicationId,long taskId,
                                                       ExitAccessRecoveryModels.Assign command){
         if(!AuthorizationContext.require().hasAction("supplier:exit:assign"))throw new ApiException(CommonErrorCode.FORBIDDEN);
@@ -212,7 +243,9 @@ public class ExitAccessRecoveryService {
                 Long.toString(e.actorId()),e.dueDate(),e.createdAt())).toList();
         var principals=mapper.accessPrincipals(tenantId,row.id()).stream()
             .map(e->new ExitAccessRecoveryModels.Principal(Long.toString(e.id()),e.externalReference(),e.displayLabel(),
-                Long.toString(e.evidenceFileId()),e.note(),Long.toString(e.recordedBy()),e.recordedAt())).toList();
+                Long.toString(e.evidenceFileId()),e.note(),Long.toString(e.recordedBy()),e.recordedAt(),e.status(),e.version(),
+                e.voidReason(),e.voidEvidenceFileId()==null?null:Long.toString(e.voidEvidenceFileId()),
+                e.voidedBy()==null?null:Long.toString(e.voidedBy()),e.voidedAt())).toList();
         return new ExitAccessRecoveryModels.Task(Long.toString(row.id()),row.channel(),row.status(),row.finding(),
             row.evidenceFileId()==null?null:Long.toString(row.evidenceFileId()),row.discoveryNote(),
             row.discoveredBy()==null?null:Long.toString(row.discoveredBy()),row.discoveredAt(),

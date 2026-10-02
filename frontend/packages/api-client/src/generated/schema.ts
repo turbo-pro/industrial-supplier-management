@@ -249,6 +249,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/principals/{principalId}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Void only an erroneous local principal registration with reason and evidence. Historical row remains; the external account is not disabled or revoked. */
+        post: operations["voidSupplierExitAccessPrincipalRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign": {
         parameters: {
             query?: never;
@@ -2901,6 +2918,14 @@ export interface components {
             recordedBy: string;
             /** Format: date-time */
             recordedAt: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "VOIDED";
+            version: number;
+            voidReason?: string | null;
+            voidEvidenceFileId?: string | null;
+            voidedBy?: string | null;
+            /** Format: date-time */
+            voidedAt?: string | null;
         };
         ExitAccessReminderEvent: {
             id: string;
@@ -2938,6 +2963,12 @@ export interface components {
             evidenceFileId: string;
             note: string;
             version: number;
+        };
+        VoidExitAccessPrincipal: {
+            evidenceFileId: string;
+            reason: string;
+            taskVersion: number;
+            principalVersion: number;
         };
         ExitAccessRecoveryEvent: {
             id: string;
@@ -5632,6 +5663,39 @@ export interface operations {
         };
         responses: {
             /** @description Observed principal registered; recovery remains unverified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    voidSupplierExitAccessPrincipalRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                taskId: string;
+                principalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidExitAccessPrincipal"];
+            };
+        };
+        responses: {
+            /** @description Local registration voided; external recovery remains unverified */
             200: {
                 headers: {
                     [name: string]: unknown;

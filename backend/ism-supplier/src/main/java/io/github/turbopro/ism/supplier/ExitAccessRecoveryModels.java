@@ -16,6 +16,8 @@ public final class ExitAccessRecoveryModels {
     public record RegisterPrincipal(@NotBlank @Size(max=128) String externalReference,
                                     @NotBlank @Size(max=120) String displayLabel,@NotBlank String evidenceFileId,
                                     @NotBlank @Size(max=1000) String note,@PositiveOrZero int version) {}
+    public record VoidPrincipal(@NotBlank String evidenceFileId,@NotBlank @Size(max=1000) String reason,
+                                @PositiveOrZero int taskVersion,@PositiveOrZero int principalVersion) {}
     public record TaskRow(long id,String channel,String status,String finding,Long evidenceFileId,
                           String discoveryNote,Long discoveredBy,LocalDateTime discoveredAt,
                           Long assigneeId,LocalDate dueDate,String assignmentNote,Long assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
@@ -30,9 +32,11 @@ public final class ExitAccessRecoveryModels {
     public record ReminderEventRow(long id,long taskId,long recipientId,long actorId,LocalDate dueDate,LocalDateTime createdAt) {}
     public record ReminderEvent(String id,String recipientId,String actorId,LocalDate dueDate,LocalDateTime createdAt) {}
     public record PrincipalRow(long id,long taskId,String externalReference,String displayLabel,long evidenceFileId,
-                               String note,long recordedBy,LocalDateTime recordedAt) {}
+                               String note,long recordedBy,LocalDateTime recordedAt,String status,int version,
+                               String voidReason,Long voidEvidenceFileId,Long voidedBy,LocalDateTime voidedAt) {}
     public record Principal(String id,String externalReference,String displayLabel,String evidenceFileId,
-                            String note,String recordedBy,LocalDateTime recordedAt) {}
+                            String note,String recordedBy,LocalDateTime recordedAt,String status,int version,
+                            String voidReason,String voidEvidenceFileId,String voidedBy,LocalDateTime voidedAt) {}
     public record Task(String id,String channel,String status,String finding,String evidenceFileId,
                        String discoveryNote,String discoveredBy,LocalDateTime discoveredAt,
                        String assigneeId,LocalDate dueDate,String assignmentNote,String assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,

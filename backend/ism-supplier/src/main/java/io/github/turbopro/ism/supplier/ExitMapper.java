@@ -71,8 +71,13 @@ public interface ExitMapper extends TenantScopedMapper {
     int advanceAccessRecoveryVersion(long tenantId,long supplierId,long applicationId,long taskId,int version);
     @Insert("INSERT INTO sup_exit_access_principal(id,tenant_id,task_id,external_reference,display_label,evidence_file_id,note,recorded_by) VALUES(#{id},#{tenantId},#{taskId},#{externalReference},#{displayLabel},#{evidenceFileId},#{note},#{actorId})")
     int insertAccessPrincipal(long id,long tenantId,long taskId,String externalReference,String displayLabel,long evidenceFileId,String note,long actorId);
-    @Select("SELECT id,task_id,external_reference,display_label,evidence_file_id,note,recorded_by,recorded_at FROM sup_exit_access_principal WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY recorded_at,id")
+    String PRINCIPAL_FIELDS="id,task_id,external_reference,display_label,evidence_file_id,note,recorded_by,recorded_at,status,version,void_reason,void_evidence_file_id,voided_by,voided_at";
+    @Select("SELECT "+PRINCIPAL_FIELDS+" FROM sup_exit_access_principal WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY recorded_at,id")
     List<ExitAccessRecoveryModels.PrincipalRow> accessPrincipals(long tenantId,long taskId);
+    @Select("SELECT "+PRINCIPAL_FIELDS+" FROM sup_exit_access_principal WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND id=#{principalId} FOR UPDATE")
+    ExitAccessRecoveryModels.PrincipalRow lockAccessPrincipal(long tenantId,long taskId,long principalId);
+    @Update("UPDATE sup_exit_access_principal SET status='VOIDED',void_reason=#{reason},void_evidence_file_id=#{fileId},voided_by=#{actorId},voided_at=CURRENT_TIMESTAMP(3),version=version+1 WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND id=#{principalId} AND status='ACTIVE' AND version=#{version}")
+    int voidAccessPrincipal(long tenantId,long taskId,long principalId,String reason,long fileId,long actorId,int version);
     @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_count=IF(reminder_failure_count>=2147483647,2147483647,reminder_failure_count+1),reminder_failure_code=#{reasonCode},reminder_failure_status='FAILED',reminder_first_failed_at=COALESCE(reminder_first_failed_at,#{now}),reminder_last_failed_at=#{now},reminder_resolved_at=NULL WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId}")
     int recordAccessReminderFailure(long tenantId,long supplierId,long applicationId,long taskId,String reasonCode,java.time.LocalDateTime now);
     @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_status='DELIVERED',reminder_resolved_at=#{now} WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND reminder_failure_status='FAILED'")
