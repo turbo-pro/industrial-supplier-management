@@ -18,6 +18,22 @@ class SearchServiceTest {
     private final SearchMapper mapper=mock(SearchMapper.class);
     private final SearchService service=new SearchService(mapper,mock(OperationIdGenerator.class),new ObjectMapper().findAndRegisterModules());
 
+    @Test void admissionSearchRequiresIndependentPermissionAndScope(){
+        var query=new SearchModels.SearchRequest("ADM-",Set.of(SearchModels.EntityType.SUPPLIER_ADMISSION),Set.of("SUBMITTED"),null,null,0,20);
+        when(mapper.supplierAdmissions(eq(8L),eq("%ADM-%"),eq(Set.of("SUBMITTED")),isNull(),isNull(),eq(21),eq("CREATED"),eq(Set.of()),eq(9L)))
+            .thenReturn(List.of(new SearchModels.SearchRow(54,"SUPPLIER_ADMISSION","ADM-54","供应商甲 · 设备","SUBMITTED","/suppliers/admissions",LocalDateTime.of(2026,1,1,0,0),18L,9L)));
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:admission:view"),Map.of("supplier:admission",DataScope.created()),Set.of()))){
+            assertThat(service.search(query).items()).extracting(SearchModels.SearchItem::id).containsExactly("54");
+        }
+        clearInvocations(mapper);
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:admission:view"),Map.of("supplier:admission",DataScope.organizations(Set.of())),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+        try(var tenant=TenantContext.open(8,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){
+            assertThat(service.search(query).items()).isEmpty();verifyNoInteractions(mapper);
+        }
+    }
+
     @Test void qualificationSearchRequiresItsOwnPermissionAndNonemptyScope(){
         var query=new SearchModels.SearchRequest("证号",Set.of(SearchModels.EntityType.SUPPLIER_QUALIFICATION),Set.of("EXPIRED"),null,null,0,20);
         when(mapper.supplierQualifications(eq(8L),eq("%证号%"),eq(Set.of("EXPIRED")),isNull(),isNull(),eq(21),eq("ORGANIZATION_SET"),eq(Set.of(18L)),eq(9L)))

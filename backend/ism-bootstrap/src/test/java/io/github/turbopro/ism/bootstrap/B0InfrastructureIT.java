@@ -1535,6 +1535,17 @@ class B0InfrastructureIT {
                 jdbcTemplate.update("INSERT INTO per_supplier_evaluation(id,tenant_id,organization_id,supplier_id,supplier_code,supplier_name,period_start,period_end,total_score,grade,created_by,updated_by) VALUES(?,?,?,?,?,?,'2026-01-01','2026-01-31',80,'B',9,9)",row[0]+80,row[1],row[2],row[0],"BIZ-S"+row[0],"Business Supplier "+row[0]);
                 jdbcTemplate.update("INSERT INTO saf_site_attendance(id,tenant_id,organization_id,project_id,supplier_id,person_id,site_name,check_in_at,check_in_by,created_by) VALUES(?,?,?,?,?,?,'BIZ-SITE',CURRENT_TIMESTAMP,9,9)",row[0]+90,row[1],row[2],row[0]+20,row[0],row[0]+30);
                 jdbcTemplate.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,expiry_date,file_id,status,created_by,updated_by) VALUES(?,?,?,?,?,? ,DATE_SUB(CURRENT_DATE,INTERVAL 1 DAY),?,'VALID',9,9)",row[0]+100,row[1],row[2],row[0],row[1]+1000,"BIZ-CERT"+row[0],row[0]+70);
+                jdbcTemplate.update("INSERT INTO qua_admission_application(id,tenant_id,organization_id,supplier_id,application_no,purchase_category,admission_reason,status,created_by,updated_by) VALUES(?,?,?,?,?,'Equipment','Search fixture','SUBMITTED',9,9)",row[0]+110,row[1],row[2],row[0],"BIZ-ADM"+row[0]);
+            }
+            var admissionRequest=new SearchModels.SearchRequest("BIZ-ADM",Set.of(SearchModels.EntityType.SUPPLIER_ADMISSION),Set.of("SUBMITTED"),null,null,0,20);
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:admission:view"),Map.of("supplier:admission",DataScope.organizations(Set.of(orgA))),Set.of()))){
+                assertThat(searchService.search(admissionRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98231");
+            }
+            try(var tenant=TenantContext.open(tenantB,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:admission:view"),Map.of("supplier:admission",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(admissionRequest).items()).extracting(SearchModels.SearchItem::id).containsExactly("98233");
+            }
+            try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){
+                assertThat(searchService.search(admissionRequest).items()).isEmpty();
             }
             var certificateRequest=new SearchModels.SearchRequest("BIZ-CERT",Set.of(SearchModels.EntityType.SUPPLIER_QUALIFICATION),Set.of("EXPIRED"),null,null,0,20);
             try(var tenant=TenantContext.open(tenantA,9);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.organizations(Set.of(orgA))),Set.of()))){
@@ -1603,6 +1614,7 @@ class B0InfrastructureIT {
                 assertThat(searchService.search(request).items()).extracting(SearchModels.SearchItem::id).containsExactlyInAnyOrder("98123","98133","98143","98153","98163");
             }
         }finally{
+            jdbcTemplate.update("DELETE FROM qua_admission_application WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM qua_supplier_qualification WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM qua_qualification_type WHERE tenant_id IN (?,?)",tenantA,tenantB);
             jdbcTemplate.update("DELETE FROM saf_site_attendance WHERE tenant_id IN (?,?)",tenantA,tenantB);

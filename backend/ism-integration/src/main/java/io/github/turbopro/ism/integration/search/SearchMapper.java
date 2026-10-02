@@ -26,6 +26,21 @@ public interface SearchMapper extends TenantScopedMapper {
     @Select("<script>SELECT s.id,'SUPPLIER' entity_type,s.supplier_name title,s.supplier_code subtitle,s.status,'/suppliers/master' route,s.updated_at,s.organization_id,s.created_by owner_id FROM sup_supplier s WHERE s.tenant_id=#{tenantId} AND s.deleted=0 AND (s.supplier_name LIKE #{keyword} ESCAPE '=' OR s.supplier_code LIKE #{keyword} ESCAPE '=' OR s.unified_social_credit_code LIKE #{keyword} ESCAPE '=')<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND s.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'CREATED'\"> AND s.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose><if test='statuses != null and !statuses.isEmpty()'> AND s.status IN <foreach collection='statuses' item='v' open='(' separator=',' close=')'>#{v}</foreach></if><if test='from != null'> AND s.updated_at &gt;= #{from}</if><if test='to != null'> AND s.updated_at &lt;= #{to}</if> ORDER BY s.updated_at DESC,s.id DESC LIMIT #{limit}</script>")
     List<SearchModels.SearchRow> suppliers(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,long actorId);
     @Select("""
+        <script>SELECT a.id,'SUPPLIER_ADMISSION' entity_type,a.application_no title,
+        CONCAT(s.supplier_name,' · ',a.purchase_category) subtitle,a.status,
+        '/suppliers/admissions' route,a.updated_at,a.organization_id,a.created_by owner_id
+        FROM qua_admission_application a
+        JOIN sup_supplier s ON s.id=a.supplier_id AND s.tenant_id=a.tenant_id
+        WHERE a.tenant_id=#{tenantId} AND (a.application_no LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=' OR s.supplier_code LIKE #{keyword} ESCAPE '=')
+        <choose><when test="scopeType == 'TENANT_ALL'"></when>
+        <when test="scopeType == 'ORGANIZATION_SET'"> AND a.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when>
+        <when test="scopeType == 'CREATED'"> AND a.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>
+        <if test='statuses != null and !statuses.isEmpty()'> AND a.status IN <foreach collection='statuses' item='v' open='(' separator=',' close=')'>#{v}</foreach></if>
+        <if test='from != null'> AND a.updated_at &gt;= #{from}</if><if test='to != null'> AND a.updated_at &lt;= #{to}</if>
+        ORDER BY a.updated_at DESC,a.id DESC LIMIT #{limit}</script>
+        """)
+    List<SearchModels.SearchRow> supplierAdmissions(long tenantId,String keyword,java.util.Set<String> statuses,LocalDateTime from,LocalDateTime to,int limit,String scopeType,java.util.Set<Long> organizationIds,long actorId);
+    @Select("""
         <script>SELECT q.id,'SUPPLIER_QUALIFICATION' entity_type,q.certificate_no title,
         CONCAT(s.supplier_name,' · ',t.type_name) subtitle,
         CASE WHEN q.status='VALID' AND q.permanent_flag=0 AND CURRENT_DATE&gt;q.expiry_date THEN 'EXPIRED'

@@ -8,8 +8,8 @@ import { useSessionStore } from '../stores/session';
 type EntityType=components['schemas']['SearchEntityType'];
 type SearchItem=components['schemas']['SearchItem'];
 type SavedSearch=components['schemas']['SavedSearch'];
-const businessTypes:EntityType[]=['SUPPLIER','SUPPLIER_QUALIFICATION','CONTRACT','PROJECT','PERSON','ASSET','SAFETY_ISSUE','QUALITY_NCR','PERFORMANCE_EVALUATION','SITE_ATTENDANCE'];
-const labels:Record<string,string>={SUPPLIER:'供应商',SUPPLIER_QUALIFICATION:'资质证照',CONTRACT:'合同',PROJECT:'项目',PERSON:'供应商人员',ASSET:'车辆设备',SAFETY_ISSUE:'安全隐患',QUALITY_NCR:'质量不符合项',PERFORMANCE_EVALUATION:'绩效评价',SITE_ATTENDANCE:'现场出入'};
+const businessTypes:EntityType[]=['SUPPLIER','SUPPLIER_ADMISSION','SUPPLIER_QUALIFICATION','CONTRACT','PROJECT','PERSON','ASSET','SAFETY_ISSUE','QUALITY_NCR','PERFORMANCE_EVALUATION','SITE_ATTENDANCE'];
+const labels:Record<string,string>={SUPPLIER:'供应商',SUPPLIER_ADMISSION:'准入申请',SUPPLIER_QUALIFICATION:'资质证照',CONTRACT:'合同',PROJECT:'项目',PERSON:'供应商人员',ASSET:'车辆设备',SAFETY_ISSUE:'安全隐患',QUALITY_NCR:'质量不符合项',PERFORMANCE_EVALUATION:'绩效评价',SITE_ATTENDANCE:'现场出入'};
 const session=useSessionStore(),router=useRouter();
 const query=reactive({keyword:'',types:[...businessTypes] as EntityType[],status:'',from:'',to:'',page:0,size:20});
 const rows=ref<SearchItem[]>([]),hasMore=ref(false),searchedTypes=ref<EntityType[]>([]),loading=ref(false);
@@ -83,7 +83,7 @@ async function search(){
 }
 function submit(){query.page=0;void search();}
 function open(row:SearchItem){
-  if(row.type==='SUPPLIER_QUALIFICATION'){void router.push({path:row.route,query:{keyword:row.title}});return;}
+  if(row.type==='SUPPLIER_ADMISSION'||row.type==='SUPPLIER_QUALIFICATION'){void router.push({path:row.route,query:{keyword:row.title}});return;}
   if(row.type==='PERFORMANCE_EVALUATION'){void router.push({path:row.route,query:{evaluationId:row.id}});return;}
   if(row.type==='SITE_ATTENDANCE'){void router.push({path:row.route,query:{attendanceId:row.id}});return;}
   const keyword=row.type==='SUPPLIER'||row.type==='SAFETY_ISSUE'||row.type==='QUALITY_NCR'?(row.subtitle??'').split(' · ')[0]:row.title;

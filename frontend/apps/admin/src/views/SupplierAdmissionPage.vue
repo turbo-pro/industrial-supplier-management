@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 type Row=components['schemas']['AdmissionSummary'];type Supplier=components['schemas']['SupplierSummary'];type Status=components['schemas']['AdmissionStatus'];
-const session=useSessionStore();const loading=ref(false);const saving=ref(false);const dialog=ref(false);const rows=ref<Row[]>([]);const suppliers=ref<Supplier[]>([]);const total=ref(0);
+const session=useSessionStore();const route=useRoute();const loading=ref(false);const saving=ref(false);const dialog=ref(false);const rows=ref<Row[]>([]);const suppliers=ref<Supplier[]>([]);const total=ref(0);
 const query=reactive<{keyword:string;status?:Status;page:number;size:number}>({keyword:'',status:undefined,page:0,size:20});
 const form=reactive({supplierId:'',purchaseCategory:'',reason:'',expectedAnnualAmount:undefined as number|undefined,currency:'CNY',licenseFileId:''});
 const statusNames={DRAFT:'草稿',SUBMITTED:'待审核',REVISION_REQUIRED:'待补正',APPROVED:'已通过',REJECTED:'已拒绝',CANCELLED:'已取消'};
@@ -15,7 +16,7 @@ async function create(){if(!form.supplierId||!form.purchaseCategory||!form.reaso
 async function submit(row:Row){await ElMessageBox.confirm('提交后将进入准入审核，确认继续？','提交确认',{type:'warning'});const {error}=await session.client.POST('/admissions/{id}/submit',{params:{path:{id:row.id},query:{version:row.version}}});if(error)ElMessage.error(error.error.message);else{ElMessage.success('已提交审核');await load();}}
 async function review(row:Row,decision:'APPROVE'|'REQUIRE_REVISION'|'REJECT'){const label={APPROVE:'通过',REQUIRE_REVISION:'退回补正',REJECT:'拒绝'}[decision];const result=await ElMessageBox.prompt(`请输入${label}意见`,`准入审核：${label}`,{inputPattern:/.+/,inputErrorMessage:'审核意见不能为空',type:decision==='APPROVE'?'success':'warning'});const {error}=await session.client.POST('/admissions/{id}/review',{params:{path:{id:row.id}},body:{decision,comment:result.value,version:row.version}});if(error)ElMessage.error(error.error.message);else{ElMessage.success(`审核${label}完成`);await load();}}
 function pageChanged(value:number){query.page=value-1;void load();}
-onMounted(load);
+onMounted(()=>{query.keyword=typeof route.query.keyword==='string'?route.query.keyword:'';return load();});
 </script>
 <template><div class="page"><div class="page-heading"><div><h1>供应商准入</h1><p>管理准入资料、补正与审核决定，通过后自动启用供应商</p></div><el-button type="primary" :icon="Plus" @click="openCreate">发起准入</el-button></div>
   <el-card shadow="never" class="filter-card"><el-form inline><el-form-item label="关键词"><el-input v-model="query.keyword" clearable placeholder="申请单号、供应商" :prefix-icon="Search" @keyup.enter="query.page=0;load()"/></el-form-item><el-form-item label="状态"><el-select v-model="query.status" clearable placeholder="全部状态" style="width:150px"><el-option v-for="(name,key) in statusNames" :key="key" :label="name" :value="key"/></el-select></el-form-item><el-form-item><el-button type="primary" @click="query.page=0;load()">查询</el-button><el-button :icon="Refresh" @click="query.keyword='';query.status=undefined;query.page=0;load()">重置</el-button></el-form-item></el-form></el-card>
