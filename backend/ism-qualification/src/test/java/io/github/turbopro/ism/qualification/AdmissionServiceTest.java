@@ -14,9 +14,11 @@ class AdmissionServiceTest {
     private final AdmissionMapper mapper=mock(AdmissionMapper.class);
     private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
     private final AuditService audit=mock(AuditService.class);
-    private final AdmissionService service=new AdmissionService(mapper,mock(OperationIdGenerator.class),audit,suppliers);
+    private final QualificationFileReference files=mock(QualificationFileReference.class);
+    private final AdmissionService service=new AdmissionService(mapper,mock(OperationIdGenerator.class),audit,suppliers,files);
     @Test void revisionUpdateWritesMaterialReviewAndAuditOnlyAfterVersionCheck(){
         when(mapper.find(10,99)).thenReturn(row("REVISION_REQUIRED"));
+        when(files.active(123)).thenReturn(true);
         when(mapper.update(10,7,99,"设备","补充说明",null,"CNY",0)).thenReturn(1);
         var command=new AdmissionModels.SaveApplication("30","设备","补充说明",null,"CNY",List.of(new AdmissionModels.MaterialCommand("BUSINESS_LICENSE","营业执照","123",true,true,null,10)),0);
         try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){service.update(99,command);}
@@ -46,5 +48,6 @@ class AdmissionServiceTest {
     }
     @Test void requiredMaterialMustBeProvidedBeforeSubmit(){when(mapper.find(10,99)).thenReturn(row("DRAFT"));when(mapper.materials(10,99)).thenReturn(List.of(new AdmissionModels.MaterialRow(1,"LICENSE","营业执照",null,true,false,null,0)));try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.submit(99,0));}verify(mapper,never()).submit(anyLong(),anyLong(),anyLong(),anyInt());}
     @Test void terminalApplicationCannotBeReviewedAgain(){when(mapper.find(10,99)).thenReturn(row("APPROVED"));try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.review(99,new AdmissionModels.ReviewCommand(AdmissionModels.Decision.REJECT,"重复审核",1)));}verify(mapper,never()).review(anyLong(),anyLong(),anyLong(),anyString(),anyInt());}
+    @Test void unavailableFileCannotBeAttached(){when(mapper.find(10,99)).thenReturn(row("REVISION_REQUIRED"));var command=new AdmissionModels.SaveApplication("30","设备","补充说明",null,"CNY",List.of(new AdmissionModels.MaterialCommand("LICENSE","营业执照","123",true,true,null,0)),0);try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.update(99,command));}verify(mapper,never()).update(anyLong(),anyLong(),anyLong(),anyString(),anyString(),any(),any(),anyInt());}
     private AdmissionModels.Row row(String status){var now=LocalDateTime.now();return new AdmissionModels.Row(99,20,30,"ADM-001","SUP-001","测试供应商","设备", "新增供应来源",null,null,status,null,null,7,0,null,null,now,now);}
 }
