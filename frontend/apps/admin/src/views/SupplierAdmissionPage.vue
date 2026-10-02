@@ -7,6 +7,7 @@ import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 import PersonalTableViews from '../components/PersonalTableViews.vue';
 import FileUploadField from '../components/FileUploadField.vue';
+import FileEvidenceActions from '../components/FileEvidenceActions.vue';
 const columnDefinitions=[{key:'applicationNo',label:'申请单号',required:true,width:190},{key:'supplierName',label:'供应商',required:true,width:220},{key:'purchaseCategory',label:'采购类别',required:false,width:150},{key:'status',label:'状态',required:false,width:110},{key:'submittedAt',label:'提交时间',required:false,width:180}];
 const tableColumns=ref(columnDefinitions.map(c=>({key:c.key,visible:true,width:c.width})));
 type Row=components['schemas']['AdmissionSummary'];type View=components['schemas']['AdmissionApplication'];type Supplier=components['schemas']['SupplierSummary'];type Status=components['schemas']['AdmissionStatus'];
@@ -55,7 +56,7 @@ onMounted(async()=>{query.keyword=typeof route.query.keyword==='string'?route.qu
         <el-descriptions-item label="准入原因" :span="2">{{detail.reason}}</el-descriptions-item>
       </el-descriptions>
       <h3>申请材料</h3>
-      <el-table :data="detail.materials" size="small"><el-table-column prop="name" label="材料" min-width="160"/><el-table-column prop="type" label="类型" min-width="150"/><el-table-column label="要求" width="90"><template #default="{row}">{{row.required?'必填':'选填'}}</template></el-table-column><el-table-column label="状态" width="90"><template #default="{row}">{{row.provided?'已提供':'未提供'}}</template></el-table-column><el-table-column prop="fileId" label="文件 ID" min-width="160"/></el-table>
+      <el-table :data="detail.materials" size="small"><el-table-column prop="name" label="材料" min-width="160"/><el-table-column prop="type" label="类型" min-width="150"/><el-table-column label="要求" width="90"><template #default="{row}">{{row.required?'必填':'选填'}}</template></el-table-column><el-table-column label="状态" width="90"><template #default="{row}">{{row.provided?'已提供':'未提供'}}</template></el-table-column><el-table-column label="文件" min-width="250"><template #default="{row}"><FileEvidenceActions :file-id="row.fileId"/></template></el-table-column></el-table>
       <h3>审核轨迹</h3>
       <el-table :data="detail.reviews" size="small"><el-table-column prop="operatedAt" label="时间" width="185"/><el-table-column prop="action" label="动作" width="130"/><el-table-column prop="operatorId" label="操作人" width="115"/><el-table-column prop="comment" label="意见" min-width="180" show-overflow-tooltip/></el-table>
       <template v-if="detail.status==='DRAFT'||detail.status==='REVISION_REQUIRED'"><el-button type="primary" style="margin-top:16px" @click="openEdit(detail)">补充资料</el-button></template>

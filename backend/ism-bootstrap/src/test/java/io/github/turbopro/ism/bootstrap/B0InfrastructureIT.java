@@ -1227,6 +1227,12 @@ class B0InfrastructureIT {
             } catch (Exception exception) {
                 throw new IllegalStateException(exception);
             }
+            try (var otherTenant = TenantContext.open(tenantId + 1, administratorId)) {
+                assertThatThrownBy(() -> fileService.file(Long.parseLong(storedFile.id())))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> fileService.download(Long.parseLong(storedFile.id())))
+                        .isInstanceOf(ApiException.class);
+            }
             assertThat(fileService.initialize(new FileModels.InitializeUpload(
                     "same-content.txt", "text/plain", content.length, contentHash)).status())
                     .isEqualTo("COMPLETED");
