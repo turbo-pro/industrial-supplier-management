@@ -67,6 +67,12 @@ public interface ExitMapper extends TenantScopedMapper {
     int insertAccessReminderEvent(long id,long tenantId,long taskId,long recipientId,long actorId,java.time.LocalDate dueDate);
     @Select("SELECT id,task_id,recipient_id,actor_id,due_date,created_at FROM sup_exit_access_reminder_event WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY created_at,id")
     List<ExitAccessRecoveryModels.ReminderEventRow> accessReminderEvents(long tenantId,long taskId);
+    @Update("UPDATE sup_exit_access_recovery_task SET version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND version=#{version}")
+    int advanceAccessRecoveryVersion(long tenantId,long supplierId,long applicationId,long taskId,int version);
+    @Insert("INSERT INTO sup_exit_access_principal(id,tenant_id,task_id,external_reference,display_label,evidence_file_id,note,recorded_by) VALUES(#{id},#{tenantId},#{taskId},#{externalReference},#{displayLabel},#{evidenceFileId},#{note},#{actorId})")
+    int insertAccessPrincipal(long id,long tenantId,long taskId,String externalReference,String displayLabel,long evidenceFileId,String note,long actorId);
+    @Select("SELECT id,task_id,external_reference,display_label,evidence_file_id,note,recorded_by,recorded_at FROM sup_exit_access_principal WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY recorded_at,id")
+    List<ExitAccessRecoveryModels.PrincipalRow> accessPrincipals(long tenantId,long taskId);
     @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_count=IF(reminder_failure_count>=2147483647,2147483647,reminder_failure_count+1),reminder_failure_code=#{reasonCode},reminder_failure_status='FAILED',reminder_first_failed_at=COALESCE(reminder_first_failed_at,#{now}),reminder_last_failed_at=#{now},reminder_resolved_at=NULL WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId}")
     int recordAccessReminderFailure(long tenantId,long supplierId,long applicationId,long taskId,String reasonCode,java.time.LocalDateTime now);
     @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_status='DELIVERED',reminder_resolved_at=#{now} WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND reminder_failure_status='FAILED'")

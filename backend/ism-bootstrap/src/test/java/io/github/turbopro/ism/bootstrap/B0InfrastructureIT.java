@@ -911,6 +911,25 @@ class B0InfrastructureIT {
                     assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderFailureStatus()).isEqualTo("DELIVERED");
                     assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderResolvedAt()).isNotNull();
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976 AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(beforeAccessMessages+3);
+                    var principalCommand=new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal(
+                        "acct-9976","生产门户账号",Long.toString(fileId),"人工发现的账号标识，未验证停用",4);
+                    var withPrincipal=exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,recoveryTaskId,principalCommand);
+                    assertThat(withPrincipal.tasks().get(0).version()).isEqualTo(5);
+                    assertThat(withPrincipal.tasks().get(0).principals()).singleElement().satisfies(principal->{
+                        assertThat(principal.externalReference()).isEqualTo("acct-9976");
+                        assertThat(principal.evidenceFileId()).isEqualTo(Long.toString(fileId));
+                    });
+                    assertThat(withPrincipal.accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+                    assertThatThrownBy(()->exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,recoveryTaskId,principalCommand)).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal("acct-9976","重复账号",Long.toString(fileId),"重复登记",5))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,recoveryTaskId,
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal("other-9976","无效证据","999999999999","不得登记",5))).isInstanceOf(ApiException.class);
+                    assertThatThrownBy(()->exitAccessRecoveryService.registerPrincipal(supplierId,finalExitId,
+                        Long.parseLong(withPrincipal.tasks().get(1).id()),
+                        new io.github.turbopro.ism.supplier.ExitAccessRecoveryModels.RegisterPrincipal("other-9976","未发现渠道",Long.toString(fileId),"不得登记",0))).isInstanceOf(ApiException.class);
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).version()).isEqualTo(5);
+                    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_principal WHERE tenant_id=? AND task_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
                     assertThat(jdbcTemplate.queryForObject("SELECT access_recovery_status FROM sup_exit_result WHERE tenant_id=? AND application_id=?",String.class,tenantId,finalExitId)).isEqualTo("NOT_VERIFIED");
                     var archive=exitArchiveService.get(supplierId,finalExitId);
                     assertThat(archive.integrityVerified()).isTrue();
@@ -936,6 +955,7 @@ class B0InfrastructureIT {
                 assertThat(improvementMapper.events(tenantId, planId)).hasSize(1);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM sup_exit_access_principal WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_reminder_event WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_assignment_event WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_exit_access_recovery_event WHERE tenant_id=?",tenantId);

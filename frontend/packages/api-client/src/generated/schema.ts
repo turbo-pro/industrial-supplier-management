@@ -232,6 +232,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/principals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Register an observed external account or credential identifier with evidence after a PRESENT discovery. Never accepts a password or secret, performs no connector call and does not verify revocation. */
+        post: operations["registerSupplierExitAccessPrincipal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/exit-applications/{id}/access-recovery/{taskId}/assign": {
         parameters: {
             query?: never;
@@ -2873,6 +2890,17 @@ export interface components {
             events: components["schemas"]["ExitAccessRecoveryEvent"][];
             assignments: components["schemas"]["ExitAccessAssignmentEvent"][];
             reminders: components["schemas"]["ExitAccessReminderEvent"][];
+            principals: components["schemas"]["ExitAccessPrincipal"][];
+        };
+        ExitAccessPrincipal: {
+            id: string;
+            externalReference: string;
+            displayLabel: string;
+            evidenceFileId: string;
+            note: string;
+            recordedBy: string;
+            /** Format: date-time */
+            recordedAt: string;
         };
         ExitAccessReminderEvent: {
             id: string;
@@ -2902,6 +2930,13 @@ export interface components {
             version: number;
         };
         RemindExitAccessRecovery: {
+            version: number;
+        };
+        RegisterExitAccessPrincipal: {
+            externalReference: string;
+            displayLabel: string;
+            evidenceFileId: string;
+            note: string;
             version: number;
         };
         ExitAccessRecoveryEvent: {
@@ -5565,6 +5600,38 @@ export interface operations {
         };
         responses: {
             /** @description Discovery recorded; external recovery still not verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExitAccessRecoveryInventoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    registerSupplierExitAccessPrincipal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterExitAccessPrincipal"];
+            };
+        };
+        responses: {
+            /** @description Observed principal registered; recovery remains unverified */
             200: {
                 headers: {
                     [name: string]: unknown;

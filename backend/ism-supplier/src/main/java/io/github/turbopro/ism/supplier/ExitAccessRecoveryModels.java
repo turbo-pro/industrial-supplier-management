@@ -13,6 +13,9 @@ public final class ExitAccessRecoveryModels {
     public record Assign(@NotBlank String assigneeId,LocalDate dueDate,@NotBlank @Size(max=1000) String note,
                          @PositiveOrZero int version) {}
     public record Remind(@PositiveOrZero int version) {}
+    public record RegisterPrincipal(@NotBlank @Size(max=128) String externalReference,
+                                    @NotBlank @Size(max=120) String displayLabel,@NotBlank String evidenceFileId,
+                                    @NotBlank @Size(max=1000) String note,@PositiveOrZero int version) {}
     public record TaskRow(long id,String channel,String status,String finding,Long evidenceFileId,
                           String discoveryNote,Long discoveredBy,LocalDateTime discoveredAt,
                           Long assigneeId,LocalDate dueDate,String assignmentNote,Long assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
@@ -26,10 +29,14 @@ public final class ExitAccessRecoveryModels {
                                   String note,String actorId,LocalDateTime createdAt) {}
     public record ReminderEventRow(long id,long taskId,long recipientId,long actorId,LocalDate dueDate,LocalDateTime createdAt) {}
     public record ReminderEvent(String id,String recipientId,String actorId,LocalDate dueDate,LocalDateTime createdAt) {}
+    public record PrincipalRow(long id,long taskId,String externalReference,String displayLabel,long evidenceFileId,
+                               String note,long recordedBy,LocalDateTime recordedAt) {}
+    public record Principal(String id,String externalReference,String displayLabel,String evidenceFileId,
+                            String note,String recordedBy,LocalDateTime recordedAt) {}
     public record Task(String id,String channel,String status,String finding,String evidenceFileId,
                        String discoveryNote,String discoveredBy,LocalDateTime discoveredAt,
                        String assigneeId,LocalDate dueDate,String assignmentNote,String assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
                        int reminderFailureCount,String reminderFailureCode,String reminderFailureStatus,LocalDateTime reminderFirstFailedAt,LocalDateTime reminderLastFailedAt,LocalDateTime reminderResolvedAt,
-                       int version,LocalDateTime createdAt,List<Event> events,List<AssignmentEvent> assignments,List<ReminderEvent> reminders) {}
+                       int version,LocalDateTime createdAt,List<Event> events,List<AssignmentEvent> assignments,List<ReminderEvent> reminders,List<Principal> principals) {}
     public record Inventory(String supplierId,String applicationId,String accessRecoveryStatus,List<Task> tasks) {}
 }

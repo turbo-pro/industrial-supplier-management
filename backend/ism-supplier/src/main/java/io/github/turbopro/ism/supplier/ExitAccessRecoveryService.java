@@ -8,6 +8,7 @@ import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.OperationIdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 import java.util.Map;
 
 @Service
@@ -65,6 +66,37 @@ public class ExitAccessRecoveryService {
             throw new ApiException(CommonErrorCode.CONFLICT);
         audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_DISCOVERY","SUPPLIER_EXIT_ACCESS",taskId,null,
             Map.of("status",row.status()),Map.of("status","DISCOVERY_RECORDED","finding",command.finding().name(),
+                "supplierId",supplierId,"applicationId",applicationId),null,null));
+        return inventory(supplierId,applicationId);
+    }
+
+    @Transactional
+    public ExitAccessRecoveryModels.Inventory registerPrincipal(long supplierId,long applicationId,long taskId,
+                                                               ExitAccessRecoveryModels.RegisterPrincipal command){
+        if(!AuthorizationContext.require().hasAction("supplier:exit:review"))throw new ApiException(CommonErrorCode.FORBIDDEN);
+        suppliers.get(supplierId);
+        var identity=TenantContext.require();long tenantId=identity.tenantId();
+        var application=mapper.get(tenantId,supplierId,applicationId);
+        if(application==null||!"BUSINESS_CLOSED".equals(application.status())||mapper.findResult(tenantId,applicationId)==null)
+            throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var row=mapper.lockAccessRecoveryTask(tenantId,supplierId,applicationId,taskId);
+        if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(row.version()!=command.version())throw new ApiException(CommonErrorCode.CONFLICT);
+        if(!"PRESENT".equals(row.finding()))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"请先记录发现访问记录的核查结论");
+        String reference=command.externalReference().trim(),label=command.displayLabel().trim(),note=command.note().trim();
+        if(!reference.matches("[A-Za-z0-9._@:-]{3,128}")||label.isEmpty()||note.isEmpty())
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"标识只允许字母数字及 . _ @ : -；请填写名称和说明，勿填写密钥");
+        long fileId;
+        try{fileId=Long.parseLong(command.evidenceFileId());if(fileId<=0)throw new NumberFormatException();}
+        catch(NumberFormatException ex){throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"证据文件 ID 无效");}
+        if(!evidence.available(fileId))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"证据文件不存在或不可用");
+        if(mapper.advanceAccessRecoveryVersion(tenantId,supplierId,applicationId,taskId,command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        long principalId=ids.nextId();
+        try{mapper.insertAccessPrincipal(principalId,tenantId,taskId,reference,label,fileId,note,identity.actorId());}
+        catch(DuplicateKeyException ex){throw new ApiException(CommonErrorCode.CONFLICT,"该渠道下的外部标识已登记");}
+        audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_PRINCIPAL_REGISTER","SUPPLIER_EXIT_ACCESS",taskId,null,
+            Map.of("status",row.status()),Map.of("status",row.status(),"principalId",principalId,
                 "supplierId",supplierId,"applicationId",applicationId),null,null));
         return inventory(supplierId,applicationId);
     }
@@ -178,12 +210,15 @@ public class ExitAccessRecoveryService {
         var reminders=mapper.accessReminderEvents(tenantId,row.id()).stream()
             .map(e->new ExitAccessRecoveryModels.ReminderEvent(Long.toString(e.id()),Long.toString(e.recipientId()),
                 Long.toString(e.actorId()),e.dueDate(),e.createdAt())).toList();
+        var principals=mapper.accessPrincipals(tenantId,row.id()).stream()
+            .map(e->new ExitAccessRecoveryModels.Principal(Long.toString(e.id()),e.externalReference(),e.displayLabel(),
+                Long.toString(e.evidenceFileId()),e.note(),Long.toString(e.recordedBy()),e.recordedAt())).toList();
         return new ExitAccessRecoveryModels.Task(Long.toString(row.id()),row.channel(),row.status(),row.finding(),
             row.evidenceFileId()==null?null:Long.toString(row.evidenceFileId()),row.discoveryNote(),
             row.discoveredBy()==null?null:Long.toString(row.discoveredBy()),row.discoveredAt(),
             row.assigneeId()==null?null:Long.toString(row.assigneeId()),row.dueDate(),row.assignmentNote(),
             row.assignedBy()==null?null:Long.toString(row.assignedBy()),row.assignedAt(),row.lastRemindedAt(),
             row.reminderFailureCount(),row.reminderFailureCode(),row.reminderFailureStatus(),row.reminderFirstFailedAt(),row.reminderLastFailedAt(),row.reminderResolvedAt(),
-            row.version(),row.createdAt(),events,assignments,reminders);
+            row.version(),row.createdAt(),events,assignments,reminders,principals);
     }
 }

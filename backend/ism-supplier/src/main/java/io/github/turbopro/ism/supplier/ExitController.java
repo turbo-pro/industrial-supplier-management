@@ -25,6 +25,9 @@ public class ExitController {
     @PostMapping("/{id}/access-recovery/{taskId}/discovery") @RequiresPermission("supplier:exit:review")
     public ApiResponse<ExitAccessRecoveryModels.Inventory> recordDiscovery(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
         @Valid @RequestBody ExitAccessRecoveryModels.RecordFinding command){return responses.success(recovery.record(supplierId,id,taskId,command));}
+    @PostMapping("/{id}/access-recovery/{taskId}/principals") @RequiresPermission("supplier:exit:review")
+    public ApiResponse<ExitAccessRecoveryModels.Inventory> registerAccessPrincipal(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
+        @Valid @RequestBody ExitAccessRecoveryModels.RegisterPrincipal command){return responses.success(recovery.registerPrincipal(supplierId,id,taskId,command));}
     @PostMapping("/{id}/access-recovery/{taskId}/assign") @RequiresPermission("supplier:exit:assign")
     public ApiResponse<ExitAccessRecoveryModels.Inventory> assignAccessRecovery(@PathVariable long supplierId,@PathVariable long id,@PathVariable long taskId,
         @Valid @RequestBody ExitAccessRecoveryModels.Assign command){return responses.success(recovery.assign(supplierId,id,taskId,command));}
