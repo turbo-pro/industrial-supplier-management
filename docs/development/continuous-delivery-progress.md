@@ -39,6 +39,8 @@
 
 ## 下一步可安全推进
 
+最新 B2-07 增量：供应商准入与资质证照台账新增独立个人/租户共享列方案，必显标识与操作入口固定；受控目录、权限与跨租户校验见 [验收记录](supplier-onboarding-table-views-review.md)。两表接入后共十一张业务台账，真实后端浏览器 E2E 仍未验收。
+
 最新 B2 增量：全局搜索接入供应商准入申请，按准入独立权限与组织/创建人范围过滤，结果带申请单号进入台账；单测和隔离 MySQL 验证双租户及权限，无迁移。见 [业务搜索验收](business-global-search-review.md)。
 
 最新 B2 增量：全局搜索增加资质证照，按资质独立权限及组织/创建人范围过滤，派生过期/临期状态；管理端结果带证号进入台账。`SearchServiceTest`、隔离 MySQL `B0InfrastructureIT`、管理端构建已通过；未新增迁移，真实后端浏览器 E2E 和搜索性能仍待验收。详见 [业务搜索验收](business-global-search-review.md)。

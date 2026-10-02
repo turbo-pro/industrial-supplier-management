@@ -62,6 +62,23 @@ class TableViewServiceTest {
         }
         verify(mapper).list(10,7,"contract.ledger");verify(mapper).list(10,7,"project.ledger");
     }
+    @Test void admissionAndQualificationCatalogsHaveSeparateRightsAndRequiredIdentity(){
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:admission:view"),Map.of(),Set.of()))){
+            var catalog=service.list("supplier.admission").catalog();
+            assertEquals(List.of("applicationNo","supplierName","purchaseCategory","status","submittedAt"),catalog.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("supplier.qualification")).errorCode());
+            var hidden=catalog.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.create("supplier.admission",new TableViewModels.Save("隐藏申请单号",hidden,false,0))).errorCode());
+        }
+        try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of(),Set.of()))){
+            var catalog=service.list("supplier.qualification").catalog();
+            assertEquals(List.of("supplierName","typeName","certificateNo","expiryDate","status"),catalog.stream().map(TableViewModels.Definition::key).toList());
+            assertEquals(CommonErrorCode.FORBIDDEN,assertThrows(ApiException.class,()->service.list("supplier.admission")).errorCode());
+            var hidden=catalog.stream().map(c->new TableViewModels.Column(c.key(),!c.required(),c.width())).toList();
+            assertEquals(CommonErrorCode.VALIDATION_FAILED,assertThrows(ApiException.class,()->service.create("supplier.qualification",new TableViewModels.Save("隐藏证号",hidden,false,0))).errorCode());
+        }
+        verify(mapper,never()).ensureOwner(anyLong(),anyLong(),anyString());
+    }
     @Test void newTablesRejectHiddenIdentityAndForeignColumnsBeforeWrites(){
         try(var t=TenantContext.open(10,7);var a=AuthorizationContext.open(new PermissionSnapshot(Set.of("contract:view","project:view","resource:person:view","resource:asset:view"),Map.of(),Set.of()))){
             for(var key:List.of("contract.ledger","project.ledger","resource.person","resource.asset")){

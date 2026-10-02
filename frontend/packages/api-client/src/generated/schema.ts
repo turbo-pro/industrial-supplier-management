@@ -2653,7 +2653,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        PersonalTableKey: "supplier.master" | "contract.ledger" | "project.ledger" | "resource.person" | "resource.asset" | "quality.ncr" | "performance.evaluation" | "safety.issue" | "safety.attendance";
+        PersonalTableKey: "supplier.master" | "supplier.admission" | "supplier.qualification" | "contract.ledger" | "project.ledger" | "resource.person" | "resource.asset" | "quality.ncr" | "performance.evaluation" | "safety.issue" | "safety.attendance";
         PersonalTableColumn: {
             key: string;
             visible: boolean;

@@ -20,6 +20,14 @@ public class TableViewService {
     private record Registration(String permission,List<TableViewModels.Definition> columns){}
     private static final Map<String,Registration> TABLES=Map.ofEntries(
         Map.entry("supplier.master",new Registration("supplier:master:view",SUPPLIER_COLUMNS)),
+        Map.entry("supplier.admission",new Registration("supplier:admission:view",List.of(
+            new TableViewModels.Definition("applicationNo","申请单号",true,190),new TableViewModels.Definition("supplierName","供应商",true,220),
+            new TableViewModels.Definition("purchaseCategory","采购类别",false,150),new TableViewModels.Definition("status","状态",false,110),
+            new TableViewModels.Definition("submittedAt","提交时间",false,180)))),
+        Map.entry("supplier.qualification",new Registration("supplier:qualification:view",List.of(
+            new TableViewModels.Definition("supplierName","供应商",true,210),new TableViewModels.Definition("typeName","资质类型",false,150),
+            new TableViewModels.Definition("certificateNo","证书编号",true,160),new TableViewModels.Definition("expiryDate","有效期",false,150),
+            new TableViewModels.Definition("status","状态",false,110)))),
         Map.entry("contract.ledger",new Registration("contract:view",List.of(
             new TableViewModels.Definition("contractNo","合同编号",true,160),new TableViewModels.Definition("name","合同/供应商",true,250),
             new TableViewModels.Definition("amount","金额",false,150),new TableViewModels.Definition("period","期限",false,240),

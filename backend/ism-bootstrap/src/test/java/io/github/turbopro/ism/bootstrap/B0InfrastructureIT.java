@@ -1638,7 +1638,7 @@ class B0InfrastructureIT {
         String key="supplier.master";
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantA,"TABLE_VIEW_A","列方案租户 A");
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantB,"TABLE_VIEW_B","列方案租户 B");
-        var permission=new PermissionSnapshot(Set.of("supplier:master:view","contract:view","project:view","resource:person:view","resource:asset:view","table:view:manage"),Map.of(),Set.of());
+        var permission=new PermissionSnapshot(Set.of("supplier:master:view","supplier:admission:view","supplier:qualification:view","contract:view","project:view","resource:person:view","resource:asset:view","table:view:manage"),Map.of(),Set.of());
         var publisherPermission=new PermissionSnapshot(Set.of("supplier:master:view","table:view:manage","table:view:publish"),Map.of(),Set.of());
         var columns=List.of("code","name","type","riskLevel","status","updatedAt").stream().map(k->new io.github.turbopro.ism.integration.table.TableViewModels.Column(k,!k.equals("type"),160)).toList();
         String firstId,secondId;
@@ -1714,6 +1714,20 @@ class B0InfrastructureIT {
                     }
                     tableViewService.delete(resourceKey,Long.parseLong(resourceView.id()),1);
                     assertThat(tableViewService.list(resourceKey).views()).isEmpty();
+                }
+                for(String supplierKey:List.of("supplier.admission","supplier.qualification")){
+                    var supplierColumns=tableViewService.list(supplierKey).catalog().stream().map(c->new io.github.turbopro.ism.integration.table.TableViewModels.Column(c.key(),true,c.width())).toList();
+                    var supplierTableView=tableViewService.create(supplierKey,new io.github.turbopro.ism.integration.table.TableViewModels.Save("常用供应商列",supplierColumns,true,0));
+                    assertThat(tableViewService.list(supplierKey).views()).extracting(io.github.turbopro.ism.integration.table.TableViewModels.View::id).containsExactly(supplierTableView.id());
+                    try(var other=TenantContext.open(tenantA,otherOwner)){
+                        assertThat(tableViewService.list(supplierKey).views()).isEmpty();
+                        assertThatThrownBy(()->tableViewService.delete(supplierKey,Long.parseLong(supplierTableView.id()),supplierTableView.version())).isInstanceOf(ApiException.class);
+                    }
+                    try(var otherTenant=TenantContext.open(tenantB,owner)){
+                        assertThat(tableViewService.list(supplierKey).views()).isEmpty();
+                    }
+                    tableViewService.delete(supplierKey,Long.parseLong(supplierTableView.id()),supplierTableView.version());
+                    assertThat(tableViewService.list(supplierKey).views()).isEmpty();
                 }
             }
             String sharedId;
