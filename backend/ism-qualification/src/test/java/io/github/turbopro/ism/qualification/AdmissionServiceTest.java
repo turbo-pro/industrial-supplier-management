@@ -13,7 +13,22 @@ import static org.mockito.Mockito.*;
 class AdmissionServiceTest {
     private final AdmissionMapper mapper=mock(AdmissionMapper.class);
     private final io.github.turbopro.ism.supplier.SupplierReferenceService suppliers=mock(io.github.turbopro.ism.supplier.SupplierReferenceService.class);
-    private final AdmissionService service=new AdmissionService(mapper,mock(OperationIdGenerator.class),mock(AuditService.class),suppliers);
+    private final AuditService audit=mock(AuditService.class);
+    private final AdmissionService service=new AdmissionService(mapper,mock(OperationIdGenerator.class),audit,suppliers);
+    @Test void revisionUpdateWritesMaterialReviewAndAuditOnlyAfterVersionCheck(){
+        when(mapper.find(10,99)).thenReturn(row("REVISION_REQUIRED"));
+        when(mapper.update(10,7,99,"设备","补充说明",null,"CNY",0)).thenReturn(1);
+        var command=new AdmissionModels.SaveApplication("30","设备","补充说明",null,"CNY",List.of(new AdmissionModels.MaterialCommand("BUSINESS_LICENSE","营业执照","123",true,true,null,10)),0);
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){service.update(99,command);}
+        verify(mapper).deleteMaterials(10,99);
+        verify(mapper).insertMaterial(anyLong(),eq(10L),eq(99L),eq("BUSINESS_LICENSE"),eq("营业执照"),eq(123L),eq(true),eq(true),isNull(),eq(10));
+        verify(mapper).insertReview(anyLong(),eq(10L),eq(99L),eq("UPDATE"),eq("REVISION_REQUIRED"),eq("REVISION_REQUIRED"),anyString(),eq(7L));
+        verify(audit).append(any(AuditService.AuditCommand.class));
+        reset(mapper,audit);
+        when(mapper.find(10,99)).thenReturn(row("REVISION_REQUIRED"));
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.update(99,command));}
+        verify(mapper,never()).deleteMaterials(anyLong(),anyLong());verify(mapper,never()).insertReview(anyLong(),anyLong(),anyLong(),anyString(),anyString(),anyString(),anyString(),anyLong());verifyNoInteractions(audit);
+    }
     @Test void restrictionBlocksApproval(){
         when(mapper.find(10,99)).thenReturn(row("SUBMITTED"));
         try(var tenant=TenantContext.open(10,8);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:admission",DataScope.all()),Set.of()))){

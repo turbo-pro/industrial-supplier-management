@@ -83,7 +83,8 @@ async function search(){
 }
 function submit(){query.page=0;void search();}
 function open(row:SearchItem){
-  if(row.type==='SUPPLIER_ADMISSION'||row.type==='SUPPLIER_QUALIFICATION'){void router.push({path:row.route,query:{keyword:row.title}});return;}
+  if(row.type==='SUPPLIER_ADMISSION'){void router.push({path:row.route,query:{admissionId:row.id}});return;}
+  if(row.type==='SUPPLIER_QUALIFICATION'){void router.push({path:row.route,query:{keyword:row.title}});return;}
   if(row.type==='PERFORMANCE_EVALUATION'){void router.push({path:row.route,query:{evaluationId:row.id}});return;}
   if(row.type==='SITE_ATTENDANCE'){void router.push({path:row.route,query:{attendanceId:row.id}});return;}
   const keyword=row.type==='SUPPLIER'||row.type==='SAFETY_ISSUE'||row.type==='QUALITY_NCR'?(row.subtitle??'').split(' · ')[0]:row.title;
