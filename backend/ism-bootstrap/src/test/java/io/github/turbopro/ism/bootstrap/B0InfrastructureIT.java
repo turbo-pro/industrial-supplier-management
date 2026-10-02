@@ -898,12 +898,18 @@ class B0InfrastructureIT {
                     exitAccessAutoReminderWorker.poll();
                     assertThat(jdbcTemplate.queryForObject("SELECT version FROM sup_exit_access_recovery_task WHERE id=?",Integer.class,recoveryTaskId)).isEqualTo(3);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_reminder_event WHERE tenant_id=? AND task_id=?",Integer.class,tenantId,recoveryTaskId)).isOne();
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderFailureCount()).isOne();
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderFailureStatus()).isEqualTo("FAILED");
+                    exitAccessAutoReminderWorker.poll();
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderFailureCount()).isEqualTo(2);
                     jdbcTemplate.update("UPDATE msg_template SET status='ACTIVE' WHERE tenant_id=? AND template_code='SUPPLIER_EXIT_ACCESS_REMINDER'",tenantId);
                     exitAccessAutoReminderWorker.poll();
                     exitAccessAutoReminderWorker.poll();
                     assertThat(jdbcTemplate.queryForObject("SELECT version FROM sup_exit_access_recovery_task WHERE id=?",Integer.class,recoveryTaskId)).isEqualTo(4);
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sup_exit_access_reminder_event WHERE tenant_id=? AND task_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(2);
                     assertThat(jdbcTemplate.queryForObject("SELECT actor_id FROM sup_exit_access_reminder_event WHERE tenant_id=? AND task_id=? ORDER BY created_at DESC,id DESC LIMIT 1",Long.class,tenantId,recoveryTaskId)).isZero();
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderFailureStatus()).isEqualTo("DELIVERED");
+                    assertThat(exitAccessRecoveryService.inventory(supplierId,finalExitId).tasks().get(0).reminderResolvedAt()).isNotNull();
                     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=? AND recipient_id=9976 AND business_type='SUPPLIER_EXIT_ACCESS' AND business_id=?",Integer.class,tenantId,recoveryTaskId)).isEqualTo(beforeAccessMessages+3);
                     assertThat(jdbcTemplate.queryForObject("SELECT access_recovery_status FROM sup_exit_result WHERE tenant_id=? AND application_id=?",String.class,tenantId,finalExitId)).isEqualTo("NOT_VERIFIED");
                     var archive=exitArchiveService.get(supplierId,finalExitId);

@@ -2857,6 +2857,16 @@ export interface components {
             assignedAt?: string | null;
             /** Format: date-time */
             lastRemindedAt?: string | null;
+            reminderFailureCount: number;
+            reminderFailureCode?: string | null;
+            /** @enum {string|null} */
+            reminderFailureStatus?: "FAILED" | "DELIVERED" | null;
+            /** Format: date-time */
+            reminderFirstFailedAt?: string | null;
+            /** Format: date-time */
+            reminderLastFailedAt?: string | null;
+            /** Format: date-time */
+            reminderResolvedAt?: string | null;
             version: number;
             /** Format: date-time */
             createdAt: string;

@@ -50,7 +50,7 @@ public interface ExitMapper extends TenantScopedMapper {
     int insertResult(long id,long tenantId,long applicationId,long supplierId,long actorId,String comment);
     @Insert("INSERT INTO sup_exit_access_recovery_task(id,tenant_id,application_id,supplier_id,channel,created_by) VALUES(#{id},#{tenantId},#{applicationId},#{supplierId},#{channel},#{actorId})")
     int insertAccessRecoveryTask(long id,long tenantId,long applicationId,long supplierId,String channel,long actorId);
-    String ACCESS_FIELDS="id,channel,status,finding,evidence_file_id,discovery_note,discovered_by,discovered_at,assignee_id,due_date,assignment_note,assigned_by,assigned_at,last_reminded_at,version,created_at";
+    String ACCESS_FIELDS="id,channel,status,finding,evidence_file_id,discovery_note,discovered_by,discovered_at,assignee_id,due_date,assignment_note,assigned_by,assigned_at,last_reminded_at,reminder_failure_count,reminder_failure_code,reminder_failure_status,reminder_first_failed_at,reminder_last_failed_at,reminder_resolved_at,version,created_at";
     @Select("SELECT "+ACCESS_FIELDS+" FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} ORDER BY channel")
     List<ExitAccessRecoveryModels.TaskRow> accessRecoveryTasks(long tenantId,long supplierId,long applicationId);
     @Select("SELECT "+ACCESS_FIELDS+" FROM sup_exit_access_recovery_task WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} FOR UPDATE")
@@ -67,6 +67,10 @@ public interface ExitMapper extends TenantScopedMapper {
     int insertAccessReminderEvent(long id,long tenantId,long taskId,long recipientId,long actorId,java.time.LocalDate dueDate);
     @Select("SELECT id,task_id,recipient_id,actor_id,due_date,created_at FROM sup_exit_access_reminder_event WHERE tenant_id=#{tenantId} AND task_id=#{taskId} ORDER BY created_at,id")
     List<ExitAccessRecoveryModels.ReminderEventRow> accessReminderEvents(long tenantId,long taskId);
+    @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_count=IF(reminder_failure_count>=2147483647,2147483647,reminder_failure_count+1),reminder_failure_code=#{reasonCode},reminder_failure_status='FAILED',reminder_first_failed_at=COALESCE(reminder_first_failed_at,#{now}),reminder_last_failed_at=#{now},reminder_resolved_at=NULL WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId}")
+    int recordAccessReminderFailure(long tenantId,long supplierId,long applicationId,long taskId,String reasonCode,java.time.LocalDateTime now);
+    @Update("UPDATE sup_exit_access_recovery_task SET reminder_failure_status='DELIVERED',reminder_resolved_at=#{now} WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND reminder_failure_status='FAILED'")
+    int resolveAccessReminderFailure(long tenantId,long supplierId,long applicationId,long taskId,java.time.LocalDateTime now);
     @Update("UPDATE sup_exit_access_recovery_task SET status='DISCOVERY_RECORDED',finding=#{finding},evidence_file_id=#{fileId},discovery_note=#{note},discovered_by=#{actorId},discovered_at=CURRENT_TIMESTAMP(3),version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND application_id=#{applicationId} AND id=#{taskId} AND version=#{version}")
     int recordAccessRecoveryFinding(long tenantId,long supplierId,long applicationId,long taskId,String finding,long fileId,String note,long actorId,int version);
     @Insert("INSERT INTO sup_exit_access_recovery_event(id,tenant_id,task_id,finding,evidence_file_id,note,actor_id) VALUES(#{id},#{tenantId},#{taskId},#{finding},#{fileId},#{note},#{actorId})")

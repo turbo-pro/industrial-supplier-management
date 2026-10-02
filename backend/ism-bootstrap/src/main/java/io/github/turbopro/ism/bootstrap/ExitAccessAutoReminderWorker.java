@@ -1,6 +1,7 @@
 package io.github.turbopro.ism.bootstrap;
 
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.supplier.ExitAccessRecoveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,10 +43,15 @@ public class ExitAccessAutoReminderWorker {
                         if(!"1".equals(dispatch.enabled(candidate.tenantId())))return;
                         String configured=dispatch.intervalHours(candidate.tenantId());
                         int hours=Integer.parseInt(configured==null?"24":configured);
-                        recovery.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours);
+                        if(recovery.autoRemind(candidate.supplierId(),candidate.applicationId(),candidate.id(),hours))
+                            recovery.resolveAutoReminderFailure(candidate.supplierId(),candidate.applicationId(),candidate.id());
                     });
                 }catch(Exception ex){
                     log.warn("Automatic exit access reminder failed for tenant={} task={}",candidate.tenantId(),candidate.id(),ex);
+                    try(var context=TenantContext.openSystem(candidate.tenantId())){
+                        String reason=ex instanceof ApiException api?api.errorCode().code():"WORKER_FAILED";
+                        transactions.executeWithoutResult(status->recovery.recordAutoReminderFailure(candidate.supplierId(),candidate.applicationId(),candidate.id(),reason));
+                    }catch(Exception ledgerError){log.error("Cannot record exit access reminder failure for tenant={} task={}",candidate.tenantId(),candidate.id(),ledgerError);}
                 }
             }
             cursor=batch.get(batch.size()-1).id();scanCursor=cursor;

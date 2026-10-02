@@ -16,6 +16,7 @@ public final class ExitAccessRecoveryModels {
     public record TaskRow(long id,String channel,String status,String finding,Long evidenceFileId,
                           String discoveryNote,Long discoveredBy,LocalDateTime discoveredAt,
                           Long assigneeId,LocalDate dueDate,String assignmentNote,Long assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
+                          int reminderFailureCount,String reminderFailureCode,String reminderFailureStatus,LocalDateTime reminderFirstFailedAt,LocalDateTime reminderLastFailedAt,LocalDateTime reminderResolvedAt,
                           int version,LocalDateTime createdAt) {}
     public record EventRow(long id,long taskId,String finding,long evidenceFileId,String note,long actorId,LocalDateTime createdAt) {}
     public record Event(String id,String finding,String evidenceFileId,String note,String actorId,LocalDateTime createdAt) {}
@@ -28,6 +29,7 @@ public final class ExitAccessRecoveryModels {
     public record Task(String id,String channel,String status,String finding,String evidenceFileId,
                        String discoveryNote,String discoveredBy,LocalDateTime discoveredAt,
                        String assigneeId,LocalDate dueDate,String assignmentNote,String assignedBy,LocalDateTime assignedAt,LocalDateTime lastRemindedAt,
+                       int reminderFailureCount,String reminderFailureCode,String reminderFailureStatus,LocalDateTime reminderFirstFailedAt,LocalDateTime reminderLastFailedAt,LocalDateTime reminderResolvedAt,
                        int version,LocalDateTime createdAt,List<Event> events,List<AssignmentEvent> assignments,List<ReminderEvent> reminders) {}
     public record Inventory(String supplierId,String applicationId,String accessRecoveryStatus,List<Task> tasks) {}
 }

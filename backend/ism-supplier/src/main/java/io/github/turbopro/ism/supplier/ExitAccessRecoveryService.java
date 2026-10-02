@@ -123,6 +123,7 @@ public class ExitAccessRecoveryService {
         if(mapper.insertAccessReminderEvent(ids.nextId(),tenantId,taskId,row.assigneeId(),identity.actorId(),row.dueDate())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
         notifications.accessReminded(supplierId,applicationId,taskId,row.channel(),row.assigneeId(),row.dueDate());
+        mapper.resolveAccessReminderFailure(tenantId,supplierId,applicationId,taskId,now);
         audit.append(new AuditService.AuditCommand("SUPPLIER_EXIT_ACCESS_REMIND","SUPPLIER_EXIT_ACCESS",taskId,null,
             Map.of("status",row.status()),Map.of("status",row.status(),"assigneeId",row.assigneeId(),
                 "supplierId",supplierId,"applicationId",applicationId),null,null));
@@ -150,6 +151,22 @@ public class ExitAccessRecoveryService {
         return true;
     }
 
+    @Transactional
+    public void recordAutoReminderFailure(long supplierId,long applicationId,long taskId,String reasonCode){
+        var identity=TenantContext.require();
+        if(identity.actorId()!=0||reasonCode==null||!reasonCode.matches("[A-Z0-9_]{1,64}"))throw new IllegalArgumentException("system actor and safe reason code required");
+        if(mapper.recordAccessReminderFailure(identity.tenantId(),supplierId,applicationId,taskId,reasonCode,
+            java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))!=1)throw new ApiException(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Transactional
+    public void resolveAutoReminderFailure(long supplierId,long applicationId,long taskId){
+        var identity=TenantContext.require();
+        if(identity.actorId()!=0)throw new IllegalArgumentException("system actor required");
+        mapper.resolveAccessReminderFailure(identity.tenantId(),supplierId,applicationId,taskId,
+            java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
     private ExitAccessRecoveryModels.Task task(long tenantId,ExitAccessRecoveryModels.TaskRow row){
         var events=mapper.accessRecoveryEvents(tenantId,row.id()).stream()
             .map(e->new ExitAccessRecoveryModels.Event(Long.toString(e.id()),e.finding(),Long.toString(e.evidenceFileId()),
@@ -165,6 +182,8 @@ public class ExitAccessRecoveryService {
             row.evidenceFileId()==null?null:Long.toString(row.evidenceFileId()),row.discoveryNote(),
             row.discoveredBy()==null?null:Long.toString(row.discoveredBy()),row.discoveredAt(),
             row.assigneeId()==null?null:Long.toString(row.assigneeId()),row.dueDate(),row.assignmentNote(),
-            row.assignedBy()==null?null:Long.toString(row.assignedBy()),row.assignedAt(),row.lastRemindedAt(),row.version(),row.createdAt(),events,assignments,reminders);
+            row.assignedBy()==null?null:Long.toString(row.assignedBy()),row.assignedAt(),row.lastRemindedAt(),
+            row.reminderFailureCount(),row.reminderFailureCode(),row.reminderFailureStatus(),row.reminderFirstFailedAt(),row.reminderLastFailedAt(),row.reminderResolvedAt(),
+            row.version(),row.createdAt(),events,assignments,reminders);
     }
 }

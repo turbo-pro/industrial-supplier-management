@@ -1876,7 +1876,7 @@ components:
     ExitLocalArchiveResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ExitLocalArchive' } } } ] }
     ExitAccessRecoveryTask:
       type: object
-      required: [id, channel, status, version, createdAt, events, assignments, reminders]
+      required: [id, channel, status, reminderFailureCount, version, createdAt, events, assignments, reminders]
       properties:
         id: { type: string }
         channel: { type: string, enum: [PORTAL_ACCOUNT, DOOR_ACCESS, API_CREDENTIAL] }
@@ -1892,6 +1892,12 @@ components:
         assignedBy: { type: string, nullable: true }
         assignedAt: { type: string, format: date-time, nullable: true }
         lastRemindedAt: { type: string, format: date-time, nullable: true }
+        reminderFailureCount: { type: integer, minimum: 0 }
+        reminderFailureCode: { type: string, nullable: true }
+        reminderFailureStatus: { type: string, enum: [FAILED, DELIVERED], nullable: true }
+        reminderFirstFailedAt: { type: string, format: date-time, nullable: true }
+        reminderLastFailedAt: { type: string, format: date-time, nullable: true }
+        reminderResolvedAt: { type: string, format: date-time, nullable: true }
         version: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
         events: { type: array, items: { $ref: '#/components/schemas/ExitAccessRecoveryEvent' } }
