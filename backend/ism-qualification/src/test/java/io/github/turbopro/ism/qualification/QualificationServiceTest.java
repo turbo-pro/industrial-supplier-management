@@ -12,7 +12,24 @@ import static org.mockito.Mockito.*;
 
 class QualificationServiceTest {
     private final QualificationMapper mapper=mock(QualificationMapper.class);
-    private final QualificationService service=new QualificationService(mapper,mock(OperationIdGenerator.class),mock(AuditService.class));
+    private final AuditService audit=mock(AuditService.class);
+    private final QualificationService service=new QualificationService(mapper,mock(OperationIdGenerator.class),audit);
+    @Test void draftEditWritesAuditAfterOptimisticUpdate(){
+        when(mapper.find(10,99)).thenReturn(row("DRAFT",LocalDate.now().plusYears(1),30));when(mapper.type(10,40)).thenReturn(type(true));
+        when(mapper.update(10,7,99,"CERT-001",null,LocalDate.now(),LocalDate.now(),LocalDate.now().plusYears(1),false,30,50,0)).thenReturn(1);
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){service.update(99,command(false,LocalDate.now().plusYears(1)));}
+        verify(audit).append(any(AuditService.AuditCommand.class));
+        reset(mapper,audit);when(mapper.find(10,99)).thenReturn(row("DRAFT",LocalDate.now().plusYears(1),30));when(mapper.type(10,40)).thenReturn(type(true));
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.update(99,command(false,LocalDate.now().plusYears(1))));}
+        verifyNoInteractions(audit);
+    }
+    @Test void effectiveQualificationCannotBypassRenewalWithEdit(){
+        when(mapper.find(10,99)).thenReturn(row("VALID",LocalDate.now().plusYears(1),30));
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.update(99,command(false,LocalDate.now().plusYears(1))));}
+        when(mapper.find(10,99)).thenReturn(row("REJECTED",LocalDate.now().plusYears(1),30));
+        try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.update(99,command(false,LocalDate.now().plusYears(1))));}
+        verify(mapper,never()).update(anyLong(),anyLong(),anyLong(),anyString(),any(),any(),any(),any(),anyBoolean(),anyInt(),anyLong(),anyInt());verifyNoInteractions(audit);
+    }
     @Test void validityRequiredTypeRejectsMissingExpiry(){when(mapper.supplierOrganization(10,30)).thenReturn(20L);when(mapper.type(10,40)).thenReturn(type(true));try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThrows(ApiException.class,()->service.create(command(false,null)));}verify(mapper,never()).insert(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),any(),anyString(),any(),any(),any(),any(),anyBoolean(),anyInt(),anyLong());}
     @Test void expiringStatusIsCalculatedWithoutMutatingRecord(){when(mapper.find(10,99)).thenReturn(row("VALID",LocalDate.now().plusDays(10),30));try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertEquals(QualificationModels.Status.EXPIRING,service.get(99).status());}}
     @Test void cannotVerifyQualificationOutsideOrganizationScope(){when(mapper.find(10,99)).thenReturn(row("DRAFT",LocalDate.now().plusYears(1),30));try(var tenant=TenantContext.open(10,7);var auth=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.organizations(Set.of(21L))),Set.of()))){assertThrows(ApiException.class,()->service.verify(99,new QualificationModels.VerifyCommand(QualificationModels.Decision.APPROVE,"核验通过",0)));}}
