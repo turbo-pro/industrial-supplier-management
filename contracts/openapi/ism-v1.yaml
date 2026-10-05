@@ -1099,6 +1099,40 @@ paths:
       parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CompleteWorkflowTask' } } } }
       responses: { '200': { description: Task completed, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } } }
+  /supplier-purchase-categories:
+    get:
+      operationId: listSupplierPurchaseCategories
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Tenant purchase categories, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryListResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' } }
+    post:
+      operationId: createSupplierPurchaseCategory
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePurchaseCategory' } } } }
+      responses: { '200': { description: Category created, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-purchase-categories/{id}:
+    put:
+      operationId: updateSupplierPurchaseCategory
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePurchaseCategory' } } } }
+      responses: { '200': { description: Category updated, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /suppliers/{id}/purchase-categories:
+    get:
+      operationId: getSupplierPurchaseCategories
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Supplier category assignment, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryAssignmentResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
+    put:
+      operationId: assignSupplierPurchaseCategories
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AssignPurchaseCategories' } } } }
+      responses: { '200': { description: Supplier categories replaced, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryAssignmentResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers:
     get:
       operationId: listSuppliers
@@ -1110,6 +1144,7 @@ paths:
         - { name: organizationId, in: query, schema: { type: string } }
         - { name: type, in: query, schema: { $ref: '#/components/schemas/SupplierType' } }
         - { name: riskLevel, in: query, schema: { $ref: '#/components/schemas/SupplierRiskLevel' } }
+        - { name: categoryId, in: query, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses: { '200': { description: Data-scope filtered supplier page, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
@@ -2041,6 +2076,14 @@ components:
     ManualClearanceRecord: { type: object, required: [status, evidenceFileId, statement, submittedBy, submittedAt, version], properties: { status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED, REVOKED] }, evidenceFileId: { type: string }, statement: { type: string }, submittedBy: { type: string }, submittedAt: { type: string, format: date-time }, reviewedBy: { type: string }, reviewedAt: { type: string, format: date-time }, reviewComment: { type: string }, version: { type: integer } } }
     ManualClearanceView: { type: object, required: [manualEnabled], properties: { manualEnabled: { type: boolean }, record: { nullable: true, allOf: [{ $ref: '#/components/schemas/ManualClearanceRecord' }] } } }
     ManualClearanceResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ManualClearanceView' } } }] }
+    PurchaseCategoryStatus: { type: string, enum: [ACTIVE, INACTIVE] }
+    PurchaseCategory: { type: object, required: [id, code, name, status, version, updatedAt], properties: { id: { type: string }, code: { type: string }, name: { type: string }, status: { $ref: '#/components/schemas/PurchaseCategoryStatus' }, version: { type: integer }, updatedAt: { type: string, format: date-time } } }
+    SavePurchaseCategory: { type: object, required: [code, name, status, version], properties: { code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }, name: { type: string, minLength: 1, maxLength: 100 }, status: { $ref: '#/components/schemas/PurchaseCategoryStatus' }, version: { type: integer, minimum: 0 } } }
+    PurchaseCategoryAssignment: { type: object, required: [supplierId, categoryIds, version], properties: { supplierId: { type: string }, categoryIds: { type: array, maxItems: 20, items: { type: string } }, version: { type: integer } } }
+    AssignPurchaseCategories: { type: object, required: [categoryIds, version], properties: { categoryIds: { type: array, maxItems: 20, items: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }, version: { type: integer, minimum: 0 } } }
+    PurchaseCategoryListResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/PurchaseCategory' } } } }] }
+    PurchaseCategoryResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PurchaseCategory' } } }] }
+    PurchaseCategoryAssignmentResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PurchaseCategoryAssignment' } } }] }
     SupplierType:
       type: string
       enum: [MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER]

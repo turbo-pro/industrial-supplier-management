@@ -10,6 +10,7 @@ const props=defineProps<{modelValue:boolean;supplierId?:string}>();
 const emit=defineEmits<{(e:'update:modelValue',value:boolean):void;(e:'changed'):void}>();
 const session=useSessionStore();
 const detail=ref<Supplier|null>(null),form=ref<Save|null>(null),editing=ref(false),busy=ref(false);
+const categories=ref<components['schemas']['PurchaseCategory'][]>([]),categoryIds=ref<string[]>([]),categoryVersion=ref(0),categoryEditing=ref(false),categoryBusy=ref(false);
 const typeNames={MANUFACTURER:'生产商',TRADER:'贸易商',SERVICE_PROVIDER:'服务商',CONTRACTOR:'承包商',OTHER:'其他'};
 const statusNames={DRAFT:'草稿',ACTIVE:'有效',SUSPENDED:'停用',EXITED:'已退出'};
 const riskNames={LOW:'低',MEDIUM:'中',HIGH:'高'};
@@ -19,9 +20,14 @@ async function load(){if(!props.supplierId)return;const id=props.supplierId;
     if(id!==props.supplierId||!props.modelValue)return;
     if(error||!data?.data){ElMessage.error('供应商不存在或当前账号无权查看');emit('update:modelValue',false);return;}
     detail.value=data.data;
+    const [catalog,assigned]=await Promise.all([session.client.GET('/supplier-purchase-categories'),session.client.GET('/suppliers/{id}/purchase-categories',{params:{path:{id}}})]);
+    if(id!==props.supplierId||!props.modelValue)return;
+    categories.value=catalog.data?.data??[];
+    if(assigned.data?.data){categoryIds.value=assigned.data.data.categoryIds;categoryVersion.value=assigned.data.data.version;}
   }catch{if(id===props.supplierId&&props.modelValue){ElMessage.error('供应商读取失败，请重试');emit('update:modelValue',false);}}
 }
-watch([()=>props.modelValue,()=>props.supplierId],([open])=>{if(open){editing.value=false;form.value=null;void load();}else{detail.value=null;form.value=null;}},{immediate:true});
+watch([()=>props.modelValue,()=>props.supplierId],([open])=>{if(open){editing.value=false;categoryEditing.value=false;form.value=null;void load();}else{detail.value=null;form.value=null;categoryIds.value=[];}},{immediate:true});
+async function saveCategories(){const d=detail.value;if(!d)return;if(categoryIds.value.length>20){ElMessage.warning('最多关联 20 个采购品类');return;}categoryBusy.value=true;try{const {data,error}=await session.client.PUT('/suppliers/{id}/purchase-categories',{params:{path:{id:d.id}},body:{categoryIds:categoryIds.value,version:categoryVersion.value}});if(error||!data?.data){ElMessage.error(error?.error.message??'采购品类保存失败');await load();return;}categoryVersion.value=data.data.version;categoryEditing.value=false;await load();emit('changed');ElMessage.success('采购品类已保存');}finally{categoryBusy.value=false;}}
 function beginEdit(){const d=detail.value;if(!d||d.status==='EXITED')return;
   form.value={code:d.code,name:d.name,shortName:d.shortName,unifiedSocialCreditCode:d.unifiedSocialCreditCode,type:d.type,industry:d.industry,countryCode:d.countryCode??'CN',province:d.province,city:d.city,address:d.address,legalRepresentative:d.legalRepresentative,registeredCapital:d.registeredCapital,currency:d.currency,establishedDate:d.establishedDate,website:d.website,riskLevel:d.riskLevel,remark:d.remark,organizationId:d.organizationId,
     contacts:(d.contacts??[]).map(c=>({name:c.name,position:c.position,mobile:c.mobile,telephone:c.telephone,email:c.email,primary:c.primary,sortOrder:c.sortOrder})),version:d.version};editing.value=true;
@@ -58,6 +64,9 @@ async function changeStatus(status:'ACTIVE'|'SUSPENDED'){const d=detail.value;if
           <el-descriptions-item label="成立日期">{{detail.establishedDate??'—'}}</el-descriptions-item><el-descriptions-item label="网站">{{detail.website??'—'}}</el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{detail.remark??'—'}}</el-descriptions-item>
         </el-descriptions>
+        <h3>采购品类</h3>
+        <div v-if="!categoryEditing"><el-tag v-for="id in categoryIds" :key="id" style="margin-right:8px">{{categories.find(c=>c.id===id)?.name??id}}</el-tag><span v-if="!categoryIds.length">未关联</span><el-button v-if="detail.status!=='EXITED'" link type="primary" @click="categoryEditing=true">编辑品类</el-button></div>
+        <div v-else><el-select v-model="categoryIds" multiple filterable style="width:420px" placeholder="选择采购品类，最多 20 项"><el-option v-for="c in categories" :key="c.id" :label="c.name+(c.status==='INACTIVE'?'（已停用）':'')" :value="c.id" :disabled="c.status==='INACTIVE'&&!categoryIds.includes(c.id)"/></el-select><el-button :loading="categoryBusy" type="primary" style="margin-left:8px" @click="saveCategories">保存</el-button><el-button @click="categoryEditing=false;load()">取消</el-button></div>
         <h3>联系人</h3><el-table :data="detail.contacts??[]" size="small"><el-table-column prop="name" label="姓名" min-width="100"/><el-table-column prop="position" label="职务" min-width="100"/><el-table-column prop="mobile" label="手机" min-width="130"/><el-table-column prop="telephone" label="电话" min-width="130"/><el-table-column prop="email" label="邮箱" min-width="180"/><el-table-column label="主要" width="70"><template #default="{row}">{{row.primary?'是':'否'}}</template></el-table-column></el-table>
         <div v-if="detail.status!=='EXITED'" style="margin-top:16px"><el-button type="primary" @click="beginEdit">编辑档案</el-button><el-button v-if="detail.status==='ACTIVE'" type="warning" :loading="busy" @click="changeStatus('SUSPENDED')">停用</el-button><el-button v-if="detail.status==='DRAFT'||detail.status==='SUSPENDED'" type="success" :loading="busy" @click="changeStatus('ACTIVE')">启用</el-button></div>
       </template>

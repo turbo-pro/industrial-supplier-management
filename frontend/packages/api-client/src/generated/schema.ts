@@ -1556,6 +1556,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/supplier-purchase-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierPurchaseCategories"];
+        put?: never;
+        post: operations["createSupplierPurchaseCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/supplier-purchase-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateSupplierPurchaseCategory"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{id}/purchase-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupplierPurchaseCategories"];
+        put: operations["assignSupplierPurchaseCategories"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers": {
         parameters: {
             query?: never;
@@ -3161,6 +3209,41 @@ export interface components {
         };
         ManualClearanceResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["ManualClearanceView"];
+        };
+        /** @enum {string} */
+        PurchaseCategoryStatus: "ACTIVE" | "INACTIVE";
+        PurchaseCategory: {
+            id: string;
+            code: string;
+            name: string;
+            status: components["schemas"]["PurchaseCategoryStatus"];
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SavePurchaseCategory: {
+            code: string;
+            name: string;
+            status: components["schemas"]["PurchaseCategoryStatus"];
+            version: number;
+        };
+        PurchaseCategoryAssignment: {
+            supplierId: string;
+            categoryIds: string[];
+            version: number;
+        };
+        AssignPurchaseCategories: {
+            categoryIds: string[];
+            version: number;
+        };
+        PurchaseCategoryListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PurchaseCategory"][];
+        };
+        PurchaseCategoryResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PurchaseCategory"];
+        };
+        PurchaseCategoryAssignmentResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PurchaseCategoryAssignment"];
         };
         /** @enum {string} */
         SupplierType: "MANUFACTURER" | "TRADER" | "SERVICE_PROVIDER" | "CONTRACTOR" | "OTHER";
@@ -8158,6 +8241,138 @@ export interface operations {
             };
         };
     };
+    listSupplierPurchaseCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant purchase categories */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryListResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    createSupplierPurchaseCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePurchaseCategory"];
+            };
+        };
+        responses: {
+            /** @description Category created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    updateSupplierPurchaseCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePurchaseCategory"];
+            };
+        };
+        responses: {
+            /** @description Category updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierPurchaseCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supplier category assignment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryAssignmentResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    assignSupplierPurchaseCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignPurchaseCategories"];
+            };
+        };
+        responses: {
+            /** @description Supplier categories replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryAssignmentResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     listSuppliers: {
         parameters: {
             query?: {
@@ -8166,6 +8381,7 @@ export interface operations {
                 organizationId?: string;
                 type?: components["schemas"]["SupplierType"];
                 riskLevel?: components["schemas"]["SupplierRiskLevel"];
+                categoryId?: string;
                 page?: number;
                 size?: number;
             };

@@ -226,6 +226,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.supplier.ExitReminderFailureService exitReminderFailureService;
     @Autowired private io.github.turbopro.ism.supplier.RestrictionExplanationService restrictionExplanationService;
     @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
+    @Autowired private io.github.turbopro.ism.supplier.PurchaseCategoryService purchaseCategoryService;
     @Autowired private SupplierMapper supplierMapper;
     @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
     @Autowired private io.github.turbopro.ism.resource.supplier.ResourceExitCheck resourceExitCheck;
@@ -425,6 +426,46 @@ class B0InfrastructureIT {
     }
 
     @Test
+    void shouldManageTenantPurchaseCategoriesAndSupplierAssignments() {
+        long tenantId=99651,organizationId=99652,supplierId=99653;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",tenantId,"CATEGORY_IT","Category Tenant","ACTIVE");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",organizationId,tenantId,"CATEGORY_ORG","Category Organization","SITE","ACTIVE");
+            jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",supplierId,tenantId,organizationId,"CATEGORY_SUP","Category Supplier","MANUFACTURER","ACTIVE",1,1);
+            var permissions=new PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",DataScope.all()),java.util.Set.of());
+            try(var tenant=TenantContext.open(tenantId,1);var authorization=AuthorizationContext.open(permissions)){
+                var chemical=purchaseCategoryService.create(new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("CHEMICAL_RAW","化工原料",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.ACTIVE,0));
+                var service=purchaseCategoryService.create(new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("INDUSTRIAL_SERVICE","工业服务",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.ACTIVE,0));
+                assertThat(purchaseCategoryService.categories()).hasSize(2);
+                var assigned=purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(chemical.id(),service.id()),0));
+                assertThat(assigned.version()).isOne();
+                assertThat(purchaseCategoryService.assignment(supplierId).categoryIds()).containsExactlyInAnyOrder(chemical.id(),service.id());
+                assertThat(supplierService.list("", "",null,null,null,Long.parseLong(chemical.id()),0,20).items()).extracting(io.github.turbopro.ism.supplier.SupplierModels.SupplierSummary::id).containsExactly(Long.toString(supplierId));
+                assertThat(supplierService.list("", "",null,null,null,Long.parseLong(chemical.id()),0,20).total()).isOne();
+                assertThatThrownBy(()->purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(),0))).isInstanceOf(ApiException.class);
+                purchaseCategoryService.update(Long.parseLong(chemical.id()),new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("CHEMICAL_RAW","化工原料",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.INACTIVE,0));
+                assertThat(purchaseCategoryService.assignment(supplierId).categoryIds()).contains(chemical.id());
+                var retained=purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(chemical.id()),1));
+                assertThat(retained.version()).isEqualTo(2);
+                assertThatThrownBy(()->purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(chemical.id(),service.id(),chemical.id()),2))).isInstanceOf(ApiException.class);
+                try(var other=TenantContext.open(tenantId+1,1)){
+                    assertThat(purchaseCategoryService.categories()).isEmpty();
+                    assertThatThrownBy(()->purchaseCategoryService.assignment(supplierId)).isInstanceOf(ApiException.class);
+                }
+                assertThat(supplierService.list("", "",null,null,null,Long.parseLong(chemical.id()),0,20).total()).isOne();
+                assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PURCHASE_CATEGORIES_UPDATE'",Integer.class,tenantId)).isEqualTo(2);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM sup_supplier_purchase_category WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM sup_purchase_category WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM iam_organization WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM sys_audit_event WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?",tenantId);
+        }
+    }
+
+    @Test
     void shouldPersistPerformanceRuleScorecardAndReview() {
         long tenantId = 9941, orgId = 9942, supplierId = 9943, fileId = 9944, evaluationId = 9945;
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
@@ -527,16 +568,16 @@ class B0InfrastructureIT {
                 assertThat(blacklistMapper.observed(tenantId, supplierId)).isOne();
                 assertThat(blacklistMapper.active(tenantId, supplierId, java.time.LocalDate.now())).isZero();
                 assertThat(supplierReferenceService.activeForNewBusiness(supplierId)).isNotNull();
-                assertThat(supplierMapper.list(tenantId, null, null, null, null, null, "TENANT_ALL", java.util.Set.of(), 1, 0, 20))
+                assertThat(supplierMapper.list(tenantId, null, null, null, null, null, null, "TENANT_ALL", java.util.Set.of(), 1, 0, 20))
                         .anySatisfy(supplier -> { assertThat(supplier.id()).isEqualTo(Long.toString(supplierId)); assertThat(supplier.observed()).isTrue(); });
-                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1)).isOne();
-                assertThat(supplierMapper.list(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1,0,20))
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW",null,"TENANT_ALL",java.util.Set.of(),1)).isOne();
+                assertThat(supplierMapper.list(tenantId,null,null,null,"SERVICE_PROVIDER","LOW",null,"TENANT_ALL",java.util.Set.of(),1,0,20))
                         .extracting(io.github.turbopro.ism.supplier.SupplierModels.SupplierSummary::id).containsExactly(Long.toString(supplierId));
-                assertThat(supplierMapper.count(tenantId,null,null,null,"CONTRACTOR","LOW","TENANT_ALL",java.util.Set.of(),1)).isZero();
-                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","HIGH","TENANT_ALL",java.util.Set.of(),1)).isZero();
-                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW","ORGANIZATION_SET",java.util.Set.of(orgId+1),1)).isZero();
+                assertThat(supplierMapper.count(tenantId,null,null,null,"CONTRACTOR","LOW",null,"TENANT_ALL",java.util.Set.of(),1)).isZero();
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","HIGH",null,"TENANT_ALL",java.util.Set.of(),1)).isZero();
+                assertThat(supplierMapper.count(tenantId,null,null,null,"SERVICE_PROVIDER","LOW",null,"ORGANIZATION_SET",java.util.Set.of(orgId+1),1)).isZero();
                 try(var otherTenant=TenantContext.open(tenantId+100000,1)){
-                    assertThat(supplierMapper.count(tenantId+100000,null,null,null,"SERVICE_PROVIDER","LOW","TENANT_ALL",java.util.Set.of(),1)).isZero();
+                    assertThat(supplierMapper.count(tenantId+100000,null,null,null,"SERVICE_PROVIDER","LOW",null,"TENANT_ALL",java.util.Set.of(),1)).isZero();
                 }
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "WATCH")).isOne();
                 assertThat(blacklistMapper.openCase(tenantId, supplierId, java.time.LocalDate.now(), "BLACKLIST")).isZero();
