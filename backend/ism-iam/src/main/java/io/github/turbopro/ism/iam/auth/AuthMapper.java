@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public interface AuthMapper {
     @Select("""
         SELECT u.id,u.tenant_id,u.username,u.display_name,u.password_hash,u.status,
-               u.force_password_change,u.locked_until,u.failed_count,u.token_version
+               u.force_password_change,u.locked_until,u.failed_count,u.token_version,u.last_login_at
         FROM iam_user u JOIN iam_tenant t ON t.id=u.tenant_id
         WHERE t.tenant_code=#{tenantCode} AND t.status='ACTIVE'
           AND u.username=#{username} AND u.deleted=0
@@ -17,11 +17,19 @@ public interface AuthMapper {
 
     @Select("""
         SELECT u.id,u.tenant_id,u.username,u.display_name,u.password_hash,u.status,u.force_password_change,
-               u.locked_until,u.failed_count,u.token_version
+               u.locked_until,u.failed_count,u.token_version,u.last_login_at
         FROM iam_user u JOIN iam_tenant t ON t.id=u.tenant_id
         WHERE u.id=#{id} AND u.deleted=0 AND t.status='ACTIVE'
         """)
     AuthModels.AuthUser findById(long id);
+
+    @Select("""
+        SELECT COALESCE((SELECT setting_value FROM cfg_tenant_setting
+                         WHERE tenant_id=#{tenantId} AND setting_key='security.inactivePasswordDays'),
+                        (SELECT default_value FROM cfg_setting_definition
+                         WHERE setting_key='security.inactivePasswordDays' AND status='ACTIVE'))
+        """)
+    String inactivePasswordDays(long tenantId);
 
     @Update("UPDATE iam_user SET failed_count=#{count}, locked_until=#{lockedUntil} WHERE id=#{id}")
     int updateLoginFailure(long id, int count, LocalDateTime lockedUntil);

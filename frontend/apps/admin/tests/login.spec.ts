@@ -7,7 +7,7 @@ test('tenant administrator can log in with the generated API client', async ({ p
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       success: true,
       data: { accessToken: 'a', refreshToken: 'r', expiresIn: 900,
-        user: { id: '1', tenantId: '10', username: 'admin', displayName: '演示管理员', passwordChangeRequired: false } },
+        user: { id: '1', tenantId: '10', username: 'admin', displayName: '演示管理员', passwordChangeRequired: false, passwordChangeRecommended: true } },
       traceId: 'e2e-login', timestamp: new Date().toISOString(),
     }) });
   });
@@ -33,12 +33,38 @@ test('tenant administrator can log in with the generated API client', async ({ p
   await page.getByLabel('用户名').fill('admin');
   await page.getByLabel('密码').fill('Demo-password-1');
   await page.getByRole('button', { name: '登录系统', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '修改登录密码' })).toContainText('长期未登录');
+  await page.getByRole('button', { name: '稍后再说' }).click();
   await expect(page.getByRole('heading', { name: '供应商档案' })).toBeVisible();
-  await expect(page.getByText('华东设备制造')).toBeVisible();
+  await expect(page.locator('strong').filter({ hasText: '华东设备制造' })).toBeVisible();
   await page.getByText('系统管理').click();
   await expect(page.getByRole('menuitem', { name: '组织管理' })).toBeVisible();
   await page.getByRole('menuitem', { name: '组织管理' }).click();
   await expect(page).toHaveURL(/\/coming-soon$/);
   await page.reload();
   await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
+});
+
+test('first login requires password change before loading the workspace', async ({ page }) => {
+  await page.route('**/api/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    success: true, data: { accessToken: 'initial-token', refreshToken: 'refresh', expiresIn: 900,
+      user: { id: '1', tenantId: '10', username: 'admin', displayName: '管理员',
+        passwordChangeRequired: true, passwordChangeRecommended: false } },
+  }) }));
+  let workspaceRequests = 0;
+  await page.route('**/api/organizations/**', route => { workspaceRequests++; return route.abort(); });
+  await page.route('**/api/navigation/menus', route => { workspaceRequests++; return route.abort(); });
+  await page.route('**/api/auth/change-password', async route => {
+    expect(route.request().postDataJSON()).toEqual({ oldPassword: 'Initial#Pass123', newPassword: 'Changed#Pass456' });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: null }) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '登录系统' }).click();
+  await expect(page.getByRole('dialog', { name: '修改登录密码' })).toBeVisible();
+  expect(workspaceRequests).toBe(0);
+  await page.getByLabel('当前密码').fill('Initial#Pass123');
+  await page.getByLabel('新密码', { exact: true }).fill('Changed#Pass456');
+  await page.getByLabel('确认新密码').fill('Changed#Pass456');
+  await page.getByRole('button', { name: '确认修改' }).click();
+  await expect(page.getByRole('button', { name: '登录系统' })).toBeVisible();
 });

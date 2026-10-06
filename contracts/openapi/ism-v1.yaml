@@ -3264,13 +3264,14 @@ components:
         newPassword: { type: string, minLength: 12, maxLength: 128, format: password, writeOnly: true }
     UserSummary:
       type: object
-      required: [id, tenantId, username, displayName, passwordChangeRequired]
+      required: [id, tenantId, username, displayName, passwordChangeRequired, passwordChangeRecommended]
       properties:
         id: { type: string }
         tenantId: { type: string }
         username: { type: string }
         displayName: { type: string }
         passwordChangeRequired: { type: boolean }
+        passwordChangeRecommended: { type: boolean, description: 登录前长期未登录的非强制改密提醒；首次登录及禁用阈值时为 false }
     ConsoleUserSummary:
       type: object
       required: [id, username, displayName, passwordChangeRequired, permissions]

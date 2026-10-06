@@ -5149,6 +5149,8 @@ export interface components {
             username: string;
             displayName: string;
             passwordChangeRequired: boolean;
+            /** @description 登录前长期未登录的非强制改密提醒；首次登录及禁用阈值时为 false */
+            passwordChangeRecommended: boolean;
         };
         ConsoleUserSummary: {
             id: string;

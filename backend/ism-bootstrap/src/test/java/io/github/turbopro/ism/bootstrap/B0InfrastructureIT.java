@@ -1394,6 +1394,7 @@ class B0InfrastructureIT {
             AuthModels.TokenPair first = authService.login(
                     new AuthModels.LoginCommand("T-A", "admin", "Initial#Pass123", "device-a"), "127.0.0.1");
             assertThat(first.user().passwordChangeRequired()).isTrue();
+            assertThat(first.user().passwordChangeRecommended()).isFalse();
             assertThat(jwtTokenService.decode(first.accessToken()).getSubject()).isEqualTo(Long.toString(userId));
 
             AuthModels.TokenPair second = authService.refresh(
@@ -1423,7 +1424,25 @@ class B0InfrastructureIT {
             AuthModels.TokenPair afterChange = authService.login(
                     new AuthModels.LoginCommand("T-A", "admin", "Changed#Pass456", "device-a"), "127.0.0.1");
             assertThat(afterChange.user().passwordChangeRequired()).isFalse();
+            assertThat(afterChange.user().passwordChangeRecommended()).isFalse();
+            jdbcTemplate.update("UPDATE iam_user SET last_login_at=? WHERE id=?",
+                    LocalDateTime.now().minusDays(91), userId);
+            AuthModels.TokenPair inactive = authService.login(
+                    new AuthModels.LoginCommand("T-A", "admin", "Changed#Pass456", "device-a"), "127.0.0.1");
+            assertThat(inactive.user().passwordChangeRecommended()).isTrue();
+            assertThat(inactive.user().passwordChangeRequired()).isFalse();
+            assertThat(authService.login(new AuthModels.LoginCommand(
+                    "T-A", "admin", "Changed#Pass456", "device-a"), "127.0.0.1")
+                    .user().passwordChangeRecommended()).isFalse();
+            jdbcTemplate.update("INSERT INTO cfg_tenant_setting(id,tenant_id,setting_key,value_type,setting_value) "
+                    + "VALUES(?,?,?,?,?)", 1098L, tenantId, "security.inactivePasswordDays", "INTEGER", "0");
+            jdbcTemplate.update("UPDATE iam_user SET last_login_at=? WHERE id=?",
+                    LocalDateTime.now().minusDays(91), userId);
+            assertThat(authService.login(new AuthModels.LoginCommand(
+                    "T-A", "admin", "Changed#Pass456", "device-a"), "127.0.0.1")
+                    .user().passwordChangeRecommended()).isFalse();
         } finally {
+            jdbcTemplate.update("DELETE FROM cfg_tenant_setting WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id=?", userId);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id=?", userId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);

@@ -25,14 +25,15 @@ public final class AuthModels {
             @NotBlank @Size(min = 12, max = 128) String newPassword) {}
 
     public record UserSummary(String id, String tenantId, String username, String displayName,
-                              boolean passwordChangeRequired) {}
+                              boolean passwordChangeRequired, boolean passwordChangeRecommended) {}
 
     public record TokenPair(String accessToken, String refreshToken, long expiresIn,
                             UserSummary user) {}
 
     public record AuthUser(long id, long tenantId, String username, String displayName,
                            String passwordHash, String status, boolean forcePasswordChange,
-                           LocalDateTime lockedUntil, int failedCount, int tokenVersion) {}
+                           LocalDateTime lockedUntil, int failedCount, int tokenVersion,
+                           LocalDateTime lastLoginAt) {}
 
     public record RefreshTokenRecord(long id, long tenantId, long userId, String tokenHash,
                                      String familyId, LocalDateTime expiresAt, LocalDateTime revokedAt,

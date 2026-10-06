@@ -57,8 +57,9 @@ public class AuthService {
             mapper.updateLoginFailure(user.id(), failures, lockedUntil);
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
+        boolean recommendChange = passwordChangeRecommended(user, now);
         mapper.markLoginSuccess(user.id(), now);
-        return issuePair(user, UUID.randomUUID().toString(), command.deviceId(), ip, now);
+        return issuePair(user, UUID.randomUUID().toString(), command.deviceId(), ip, now, recommendChange);
     }
 
     @Transactional(noRollbackFor = ApiException.class)
@@ -90,7 +91,7 @@ public class AuthService {
         mapper.insertRefreshToken(randomId(), user.tenantId(), user.id(), replacementHash, current.familyId(),
                 now, now.plus(refreshTtl), command.deviceId(), ip);
         mapper.revokeToken(current.id(), now, "ROTATED", replacementHash);
-        return tokenPair(user, refreshToken, current.familyId());
+        return tokenPair(user, refreshToken, current.familyId(), false);
     }
 
     @Transactional
@@ -133,18 +134,33 @@ public class AuthService {
     }
 
     private AuthModels.TokenPair issuePair(AuthModels.AuthUser user, String familyId, String deviceId,
-                                            String ip, LocalDateTime now) {
+                                            String ip, LocalDateTime now, boolean recommendChange) {
         String refreshToken = randomToken();
         mapper.insertRefreshToken(randomId(), user.tenantId(), user.id(), hash(refreshToken), familyId,
                 now, now.plus(refreshTtl), deviceId, ip);
-        return tokenPair(user, refreshToken, familyId);
+        return tokenPair(user, refreshToken, familyId, recommendChange);
     }
 
-    private AuthModels.TokenPair tokenPair(AuthModels.AuthUser user, String refreshToken, String familyId) {
+    private AuthModels.TokenPair tokenPair(AuthModels.AuthUser user, String refreshToken, String familyId,
+                                           boolean recommendChange) {
         AuthModels.UserSummary summary = new AuthModels.UserSummary(Long.toString(user.id()),
-                Long.toString(user.tenantId()), user.username(), user.displayName(), user.forcePasswordChange());
+                Long.toString(user.tenantId()), user.username(), user.displayName(), user.forcePasswordChange(), recommendChange);
         return new AuthModels.TokenPair(jwtTokenService.createAccessToken(user, familyId), refreshToken,
                 jwtTokenService.accessTtlSeconds(), summary);
+    }
+
+    private boolean passwordChangeRecommended(AuthModels.AuthUser user, LocalDateTime now) {
+        if (user.forcePasswordChange() || user.lastLoginAt() == null) {
+            return false;
+        }
+        String configured = mapper.inactivePasswordDays(user.tenantId());
+        int days;
+        try {
+            days = configured == null ? 90 : Integer.parseInt(configured);
+        } catch (NumberFormatException exception) {
+            days = 90;
+        }
+        return days > 0 && !user.lastLoginAt().plusDays(days).isAfter(now);
     }
 
     private static boolean isStrong(String password) {

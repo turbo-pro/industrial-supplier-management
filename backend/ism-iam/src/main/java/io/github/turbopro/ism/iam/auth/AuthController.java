@@ -40,7 +40,7 @@ public class AuthController {
     ApiResponse<AuthModels.UserSummary> me(@AuthenticationPrincipal AuthPrincipal principal) {
         AuthModels.AuthUser user = authService.requireActiveUser(principal.userId(), principal.tokenVersion());
         return responses.success(new AuthModels.UserSummary(Long.toString(user.id()), Long.toString(user.tenantId()),
-                user.username(), user.displayName(), user.forcePasswordChange()));
+                user.username(), user.displayName(), user.forcePasswordChange(), false));
     }
 
     @PostMapping("/change-password")
