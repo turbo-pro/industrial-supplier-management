@@ -16,13 +16,15 @@ public final class AdmissionModels {
     public record SaveApplication(@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String supplierId,
         @NotBlank @Size(max=100) String purchaseCategory,@NotBlank @Size(max=500) String reason,
         @DecimalMin("0.00") BigDecimal expectedAnnualAmount,@Pattern(regexp="^[A-Z]{3}$") String currency,
-        @Valid @NotEmpty @Size(max=50) List<MaterialCommand> materials,@NotNull @PositiveOrZero Integer version) {
+        @Valid @NotEmpty @Size(max=50) List<MaterialCommand> materials,@NotNull @PositiveOrZero Integer version,
+        @Pattern(regexp="[1-9][0-9]{0,18}") String purchaseCategoryId) {
         public SaveApplication { materials=materials==null?List.of():List.copyOf(materials); }
+        public SaveApplication(String supplierId,String purchaseCategory,String reason,BigDecimal expectedAnnualAmount,String currency,List<MaterialCommand> materials,Integer version){this(supplierId,purchaseCategory,reason,expectedAnnualAmount,currency,materials,version,null);}
     }
     public record ReviewCommand(@NotNull Decision decision,@NotBlank @Size(max=1000) String comment,
         @NotNull @PositiveOrZero Integer version) {}
     public record Row(long id,long organizationId,long supplierId,String applicationNo,String supplierCode,String supplierName,
-        String purchaseCategory,String admissionReason,BigDecimal expectedAnnualAmount,String currency,String status,
+        String purchaseCategory,Long purchaseCategoryId,String admissionReason,BigDecimal expectedAnnualAmount,String currency,String status,
         String workflowInstanceId,Long currentReviewerId,long createdBy,int version,LocalDateTime submittedAt,
         LocalDateTime decidedAt,LocalDateTime createdAt,LocalDateTime updatedAt) {}
     public record MaterialRow(long id,String materialType,String materialName,Long fileId,boolean required,boolean provided,String remark,int sortOrder) {}
@@ -34,6 +36,6 @@ public final class AdmissionModels {
     public record View(String id,String organizationId,String supplierId,String applicationNo,String supplierCode,String supplierName,
         String purchaseCategory,String reason,BigDecimal expectedAnnualAmount,String currency,Status status,String workflowInstanceId,
         int version,LocalDateTime submittedAt,LocalDateTime decidedAt,LocalDateTime createdAt,LocalDateTime updatedAt,
-        List<MaterialView> materials,List<ReviewView> reviews) {}
+        List<MaterialView> materials,List<ReviewView> reviews,String purchaseCategoryId) {}
     public record Page(long total,int page,int size,List<Summary> items) {}
 }

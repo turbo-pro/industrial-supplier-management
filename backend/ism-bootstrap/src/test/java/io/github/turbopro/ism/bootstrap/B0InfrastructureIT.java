@@ -227,6 +227,7 @@ class B0InfrastructureIT {
     @Autowired private io.github.turbopro.ism.supplier.RestrictionExplanationService restrictionExplanationService;
     @Autowired private io.github.turbopro.ism.supplier.SupplierService supplierService;
     @Autowired private io.github.turbopro.ism.supplier.PurchaseCategoryService purchaseCategoryService;
+    @Autowired private io.github.turbopro.ism.qualification.AdmissionService admissionService;
     @Autowired private SupplierMapper supplierMapper;
     @Autowired private io.github.turbopro.ism.project.ContractProjectExitCheck contractProjectExitCheck;
     @Autowired private io.github.turbopro.ism.resource.supplier.ResourceExitCheck resourceExitCheck;
@@ -432,7 +433,7 @@ class B0InfrastructureIT {
         try {
             jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,?,?,?,?)",organizationId,tenantId,"CATEGORY_ORG","Category Organization","SITE","ACTIVE");
             jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,status,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)",supplierId,tenantId,organizationId,"CATEGORY_SUP","Category Supplier","MANUFACTURER","ACTIVE",1,1);
-            var permissions=new PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",DataScope.all()),java.util.Set.of());
+            var permissions=new PermissionSnapshot(java.util.Set.of(),java.util.Map.of("supplier:master",DataScope.all(),"supplier:admission",DataScope.all()),java.util.Set.of());
             try(var tenant=TenantContext.open(tenantId,1);var authorization=AuthorizationContext.open(permissions)){
                 var chemical=purchaseCategoryService.create(new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("CHEMICAL_RAW","化工原料",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.ACTIVE,0));
                 var service=purchaseCategoryService.create(new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("INDUSTRIAL_SERVICE","工业服务",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.ACTIVE,0));
@@ -440,10 +441,16 @@ class B0InfrastructureIT {
                 var assigned=purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(chemical.id(),service.id()),0));
                 assertThat(assigned.version()).isOne();
                 assertThat(purchaseCategoryService.assignment(supplierId).categoryIds()).containsExactlyInAnyOrder(chemical.id(),service.id());
+                var material=new io.github.turbopro.ism.qualification.AdmissionModels.MaterialCommand("BUSINESS_LICENSE","营业执照",null,true,false,null,10);
+                assertThatThrownBy(()->admissionService.create(new io.github.turbopro.ism.qualification.AdmissionModels.SaveApplication(Long.toString(supplierId),"自由填写","准入验证",null,"CNY",java.util.List.of(material),0))).isInstanceOf(ApiException.class);
+                var application=admissionService.create(new io.github.turbopro.ism.qualification.AdmissionModels.SaveApplication(Long.toString(supplierId),"任意客户端文本","准入验证",null,"CNY",java.util.List.of(material),0,chemical.id()));
+                assertThat(application.purchaseCategoryId()).isEqualTo(chemical.id());
+                assertThat(application.purchaseCategory()).isEqualTo("化工原料");
                 assertThat(supplierService.list("", "",null,null,null,Long.parseLong(chemical.id()),0,20).items()).extracting(io.github.turbopro.ism.supplier.SupplierModels.SupplierSummary::id).containsExactly(Long.toString(supplierId));
                 assertThat(supplierService.list("", "",null,null,null,Long.parseLong(chemical.id()),0,20).total()).isOne();
                 assertThatThrownBy(()->purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(),0))).isInstanceOf(ApiException.class);
                 purchaseCategoryService.update(Long.parseLong(chemical.id()),new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Save("CHEMICAL_RAW","化工原料",io.github.turbopro.ism.supplier.PurchaseCategoryModels.Status.INACTIVE,0));
+                assertThatThrownBy(()->admissionService.submit(Long.parseLong(application.id()),application.version())).isInstanceOf(ApiException.class);
                 assertThat(purchaseCategoryService.assignment(supplierId).categoryIds()).contains(chemical.id());
                 var retained=purchaseCategoryService.assign(supplierId,new io.github.turbopro.ism.supplier.PurchaseCategoryModels.Assign(java.util.List.of(chemical.id()),1));
                 assertThat(retained.version()).isEqualTo(2);
@@ -456,6 +463,9 @@ class B0InfrastructureIT {
                 assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PURCHASE_CATEGORIES_UPDATE'",Integer.class,tenantId)).isEqualTo(2);
             }
         } finally {
+            jdbcTemplate.update("DELETE FROM qua_admission_review WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM qua_admission_material WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM qua_admission_application WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier_purchase_category WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_purchase_category WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM sup_supplier WHERE tenant_id=?",tenantId);

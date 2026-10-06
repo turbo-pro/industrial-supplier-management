@@ -3349,6 +3349,8 @@ export interface components {
         SaveAdmissionApplication: {
             supplierId: string;
             purchaseCategory: string;
+            /** @description Directory category ID; required for new applications when active tenant categories exist */
+            purchaseCategoryId?: string;
             reason: string;
             expectedAnnualAmount?: number;
             currency?: string;
@@ -3372,6 +3374,8 @@ export interface components {
         };
         AdmissionApplication: components["schemas"]["AdmissionSummary"] & {
             reason: string;
+            /** @description Absent on legacy free-text applications */
+            purchaseCategoryId?: string;
             expectedAnnualAmount?: number;
             currency?: string;
             workflowInstanceId?: string;

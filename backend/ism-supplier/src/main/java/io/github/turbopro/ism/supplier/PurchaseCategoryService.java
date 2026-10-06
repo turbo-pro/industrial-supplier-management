@@ -16,6 +16,12 @@ public class PurchaseCategoryService {
     private final AuditService audit;
     public PurchaseCategoryService(PurchaseCategoryMapper mapper,SupplierService suppliers,OperationIdGenerator ids,AuditService audit){this.mapper=mapper;this.suppliers=suppliers;this.ids=ids;this.audit=audit;}
     public List<PurchaseCategoryModels.Category> categories(){return mapper.categories(TenantContext.require().tenantId()).stream().map(this::view).toList();}
+    public boolean hasActiveCategories(){return mapper.activeCount(TenantContext.require().tenantId())>0;}
+    public String requireAdmissionCategory(long supplierId,long categoryId){
+        var row=mapper.activeAssignedForUpdate(TenantContext.require().tenantId(),supplierId,categoryId);
+        if(row==null)throw validation("采购品类不存在、已停用或尚未关联该供应商");
+        return row.categoryName();
+    }
     @Transactional public PurchaseCategoryModels.Category create(PurchaseCategoryModels.Save command){
         if(command.version()!=0)throw validation("新建品类版本必须为 0");
         var i=TenantContext.require();long id=ids.nextId();
