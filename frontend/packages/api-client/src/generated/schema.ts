@@ -1588,6 +1588,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/supplier-purchase-categories/{id}/required-materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPurchaseCategoryRequiredMaterials"];
+        put: operations["savePurchaseCategoryRequiredMaterials"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{id}/purchase-categories": {
         parameters: {
             query?: never;
@@ -3244,6 +3260,22 @@ export interface components {
         };
         PurchaseCategoryAssignmentResponse: components["schemas"]["SuccessEnvelope"] & {
             data?: components["schemas"]["PurchaseCategoryAssignment"];
+        };
+        PurchaseCategoryRequiredMaterial: {
+            type: string;
+            name: string;
+        };
+        SavePurchaseCategoryRequiredMaterials: {
+            materials: components["schemas"]["PurchaseCategoryRequiredMaterial"][];
+            version: number;
+        };
+        PurchaseCategoryMaterialPolicy: {
+            categoryId: string;
+            version: number;
+            materials: components["schemas"]["PurchaseCategoryRequiredMaterial"][];
+        };
+        PurchaseCategoryMaterialPolicyResponse: components["schemas"]["SuccessEnvelope"] & {
+            data?: components["schemas"]["PurchaseCategoryMaterialPolicy"];
         };
         /** @enum {string} */
         SupplierType: "MANUFACTURER" | "TRADER" | "SERVICE_PROVIDER" | "CONTRACTOR" | "OTHER";
@@ -8315,6 +8347,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PurchaseCategoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPurchaseCategoryRequiredMaterials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category admission material policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryMaterialPolicyResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    savePurchaseCategoryRequiredMaterials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePurchaseCategoryRequiredMaterials"];
+            };
+        };
+        responses: {
+            /** @description Category admission material policy saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseCategoryMaterialPolicyResponse"];
                 };
             };
             400: components["responses"]["ApiFailure"];

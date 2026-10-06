@@ -20,6 +20,14 @@ public interface PurchaseCategoryMapper extends TenantScopedMapper {
     long activeCount(long tenantId);
     @Select("SELECT c.id,c.category_code,c.category_name,c.status,c.version,c.updated_at FROM sup_purchase_category c JOIN sup_supplier_purchase_category sc ON sc.tenant_id=c.tenant_id AND sc.category_id=c.id WHERE c.tenant_id=#{tenantId} AND c.id=#{categoryId} AND sc.supplier_id=#{supplierId} AND c.status='ACTIVE' FOR UPDATE")
     PurchaseCategoryModels.Row activeAssignedForUpdate(long tenantId,long supplierId,long categoryId);
+    @Select("SELECT material_type `type`,material_name `name` FROM sup_purchase_category_admission_material WHERE tenant_id=#{tenantId} AND category_id=#{categoryId} ORDER BY sort_order,material_type")
+    List<PurchaseCategoryModels.RequiredMaterial> requiredMaterials(long tenantId,long categoryId);
+    @Update("UPDATE sup_purchase_category SET version=version+1 WHERE tenant_id=#{tenantId} AND id=#{categoryId} AND version=#{version}")
+    int claimMaterialPolicy(long tenantId,long categoryId,int version);
+    @Delete("DELETE FROM sup_purchase_category_admission_material WHERE tenant_id=#{tenantId} AND category_id=#{categoryId}")
+    int clearRequiredMaterials(long tenantId,long categoryId);
+    @Insert("INSERT INTO sup_purchase_category_admission_material(tenant_id,category_id,material_type,material_name,sort_order) VALUES(#{tenantId},#{categoryId},#{type},#{name},#{sortOrder})")
+    int insertRequiredMaterial(long tenantId,long categoryId,String type,String name,int sortOrder);
     @Select("<script>SELECT id FROM sup_purchase_category WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND id IN <foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach> FOR UPDATE</script>")
     List<Long> activeIdsForUpdate(long tenantId,List<Long> ids);
     @Update("UPDATE sup_supplier SET version=version+1 WHERE tenant_id=#{tenantId} AND id=#{supplierId} AND deleted=0 AND status<>'EXITED' AND version=#{version}")

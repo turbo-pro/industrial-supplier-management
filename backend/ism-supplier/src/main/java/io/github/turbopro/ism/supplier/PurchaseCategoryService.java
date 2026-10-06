@@ -22,6 +22,28 @@ public class PurchaseCategoryService {
         if(row==null)throw validation("采购品类不存在、已停用或尚未关联该供应商");
         return row.categoryName();
     }
+    public List<PurchaseCategoryModels.RequiredMaterial> requiredMaterials(long categoryId){
+        return mapper.requiredMaterials(TenantContext.require().tenantId(),categoryId);
+    }
+    public PurchaseCategoryModels.MaterialPolicy materialPolicy(long categoryId){
+        var i=TenantContext.require();var row=mapper.category(i.tenantId(),categoryId);
+        if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        return new PurchaseCategoryModels.MaterialPolicy(Long.toString(categoryId),row.version(),requiredMaterials(categoryId));
+    }
+    @Transactional public PurchaseCategoryModels.MaterialPolicy saveMaterialPolicy(long categoryId,PurchaseCategoryModels.SaveRequiredMaterials command){
+        var i=TenantContext.require();var row=mapper.category(i.tenantId(),categoryId);
+        if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var entries=command.materials();
+        if(entries.stream().map(PurchaseCategoryModels.RequiredMaterial::type).distinct().count()!=entries.size())throw validation("必交资料类型不可重复");
+        var before=mapper.requiredMaterials(i.tenantId(),categoryId);
+        if(mapper.claimMaterialPolicy(i.tenantId(),categoryId,command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.clearRequiredMaterials(i.tenantId(),categoryId);
+        for(int j=0;j<entries.size();j++){
+            var item=entries.get(j);mapper.insertRequiredMaterial(i.tenantId(),categoryId,item.type(),item.name().trim(),(j+1)*10);
+        }
+        audit.append(new AuditService.AuditCommand("PURCHASE_CATEGORY_MATERIAL_POLICY_UPDATE","PURCHASE_CATEGORY",categoryId,null,Map.of("materials",before),Map.of("materials",entries),null,null));
+        return materialPolicy(categoryId);
+    }
     @Transactional public PurchaseCategoryModels.Category create(PurchaseCategoryModels.Save command){
         if(command.version()!=0)throw validation("新建品类版本必须为 0");
         var i=TenantContext.require();long id=ids.nextId();

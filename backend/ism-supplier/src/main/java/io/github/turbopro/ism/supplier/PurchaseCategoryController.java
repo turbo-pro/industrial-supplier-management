@@ -17,6 +17,10 @@ public class PurchaseCategoryController {
     ApiResponse<PurchaseCategoryModels.Category> create(@Valid @RequestBody PurchaseCategoryModels.Save command){return responses.success(service.create(command));}
     @PutMapping("/api/supplier-purchase-categories/{id}") @RequiresPermission("supplier:category:manage")
     ApiResponse<PurchaseCategoryModels.Category> update(@PathVariable long id,@Valid @RequestBody PurchaseCategoryModels.Save command){return responses.success(service.update(id,command));}
+    @GetMapping("/api/supplier-purchase-categories/{id}/required-materials") @RequiresPermission("supplier:master:view")
+    ApiResponse<PurchaseCategoryModels.MaterialPolicy> materialPolicy(@PathVariable long id){return responses.success(service.materialPolicy(id));}
+    @PutMapping("/api/supplier-purchase-categories/{id}/required-materials") @RequiresPermission("supplier:category:manage")
+    ApiResponse<PurchaseCategoryModels.MaterialPolicy> saveMaterialPolicy(@PathVariable long id,@Valid @RequestBody PurchaseCategoryModels.SaveRequiredMaterials command){return responses.success(service.saveMaterialPolicy(id,command));}
     @GetMapping("/api/suppliers/{id}/purchase-categories") @RequiresPermission("supplier:master:view")
     ApiResponse<PurchaseCategoryModels.Assignment> assignment(@PathVariable long id){return responses.success(service.assignment(id));}
     @PutMapping("/api/suppliers/{id}/purchase-categories") @RequiresPermission("supplier:master:update")

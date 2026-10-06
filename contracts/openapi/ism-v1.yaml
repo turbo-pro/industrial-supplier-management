@@ -1119,6 +1119,20 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePurchaseCategory' } } } }
       responses: { '200': { description: Category updated, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+  /supplier-purchase-categories/{id}/required-materials:
+    get:
+      operationId: getPurchaseCategoryRequiredMaterials
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Category admission material policy, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryMaterialPolicyResponse' } } } }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' } }
+    put:
+      operationId: savePurchaseCategoryRequiredMaterials
+      tags: [Supplier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePurchaseCategoryRequiredMaterials' } } } }
+      responses: { '200': { description: Category admission material policy saved, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseCategoryMaterialPolicyResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /suppliers/{id}/purchase-categories:
     get:
       operationId: getSupplierPurchaseCategories
@@ -2084,6 +2098,10 @@ components:
     PurchaseCategoryListResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/PurchaseCategory' } } } }] }
     PurchaseCategoryResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PurchaseCategory' } } }] }
     PurchaseCategoryAssignmentResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PurchaseCategoryAssignment' } } }] }
+    PurchaseCategoryRequiredMaterial: { type: object, required: [type, name], properties: { type: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }, name: { type: string, minLength: 1, maxLength: 100 } } }
+    SavePurchaseCategoryRequiredMaterials: { type: object, required: [materials, version], properties: { materials: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/PurchaseCategoryRequiredMaterial' } }, version: { type: integer, minimum: 0 } } }
+    PurchaseCategoryMaterialPolicy: { type: object, required: [categoryId, version, materials], properties: { categoryId: { type: string }, version: { type: integer }, materials: { type: array, items: { $ref: '#/components/schemas/PurchaseCategoryRequiredMaterial' } } } }
+    PurchaseCategoryMaterialPolicyResponse: { allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/PurchaseCategoryMaterialPolicy' } } }] }
     SupplierType:
       type: string
       enum: [MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER]
