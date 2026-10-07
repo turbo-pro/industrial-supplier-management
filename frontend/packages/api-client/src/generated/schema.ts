@@ -5157,6 +5157,8 @@ export interface components {
             username: string;
             displayName: string;
             passwordChangeRequired: boolean;
+            /** @description Console 登录前长期未登录的非强制改密提醒 */
+            passwordChangeRecommended: boolean;
             permissions: string[];
         };
         TokenPair: {

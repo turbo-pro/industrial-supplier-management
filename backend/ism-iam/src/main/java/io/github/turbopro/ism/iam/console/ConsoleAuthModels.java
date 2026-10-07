@@ -18,11 +18,12 @@ public final class ConsoleAuthModels {
                                         @NotBlank @Size(min = 12, max = 128) String newPassword) {}
     public record PlatformUser(long id, String username, String displayName, String passwordHash,
                                String status, boolean forcePasswordChange, LocalDateTime lockedUntil,
-                               int failedCount, int tokenVersion) {}
+                               int failedCount, int tokenVersion, LocalDateTime lastLoginAt) {}
     public record RefreshToken(long id, long userId, String tokenHash, String familyId,
                                LocalDateTime expiresAt, LocalDateTime revokedAt,
                                String replacedByHash, String deviceId) {}
     public record UserSummary(String id, String username, String displayName,
-                              boolean passwordChangeRequired, Set<String> permissions) {}
+                              boolean passwordChangeRequired, boolean passwordChangeRecommended,
+                              Set<String> permissions) {}
     public record TokenPair(String accessToken, String refreshToken, long expiresIn, UserSummary user) {}
 }

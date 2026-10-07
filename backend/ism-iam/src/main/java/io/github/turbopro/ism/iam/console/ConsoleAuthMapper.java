@@ -9,14 +9,14 @@ import java.util.Set;
 public interface ConsoleAuthMapper {
     @Select("""
         SELECT id,username,display_name,password_hash,status,force_password_change,
-               locked_until,failed_count,token_version
+               locked_until,failed_count,token_version,last_login_at
         FROM plt_user WHERE username=#{username}
         """)
     ConsoleAuthModels.PlatformUser findForLogin(String username);
 
     @Select("""
         SELECT id,username,display_name,password_hash,status,force_password_change,
-               locked_until,failed_count,token_version
+               locked_until,failed_count,token_version,last_login_at
         FROM plt_user WHERE id=#{id}
         """)
     ConsoleAuthModels.PlatformUser findById(long id);

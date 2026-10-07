@@ -81,3 +81,5 @@ ism:
     login:
       max-failures: ${ISM_LOGIN_MAX_FAILURES:5}
       lock-duration: ${ISM_LOGIN_LOCK_DURATION:PT15M}
+    console:
+      inactive-password-days: ${ISM_CONSOLE_INACTIVE_PASSWORD_DAYS:90}

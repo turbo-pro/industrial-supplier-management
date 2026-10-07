@@ -21,18 +21,21 @@ public class ConsoleAuthService {
     private final Duration refreshTtl;
     private final int maxFailures;
     private final Duration lockDuration;
+    private final int inactivePasswordDays;
     private final String dummyHash;
 
     public ConsoleAuthService(ConsoleAuthMapper mapper, PasswordEncoder passwords, ConsoleJwtTokenService tokens,
                               @Value("${ism.security.jwt.refresh-ttl:P7D}") Duration refreshTtl,
                               @Value("${ism.security.login.max-failures:5}") int maxFailures,
-                              @Value("${ism.security.login.lock-duration:PT15M}") Duration lockDuration) {
+                              @Value("${ism.security.login.lock-duration:PT15M}") Duration lockDuration,
+                              @Value("${ism.security.console.inactive-password-days:90}") int inactivePasswordDays) {
         this.mapper = mapper;
         this.passwords = passwords;
         this.tokens = tokens;
         this.refreshTtl = refreshTtl;
         this.maxFailures = maxFailures;
         this.lockDuration = lockDuration;
+        this.inactivePasswordDays = inactivePasswordDays;
         this.dummyHash = passwords.encode("dummy-console-password-never-used");
     }
 
@@ -53,8 +56,11 @@ public class ConsoleAuthService {
                     failures >= maxFailures ? now.plus(lockDuration) : null);
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
+        boolean recommendChange = !user.forcePasswordChange() && inactivePasswordDays > 0
+                && user.lastLoginAt() != null
+                && !user.lastLoginAt().plusDays(inactivePasswordDays).isAfter(now);
         mapper.markLoginSuccess(user.id(), now);
-        return issuePair(user, UUID.randomUUID().toString(), command.deviceId(), ip, now);
+        return issuePair(user, UUID.randomUUID().toString(), command.deviceId(), ip, now, recommendChange);
     }
 
     @Transactional(noRollbackFor = ApiException.class)
@@ -79,7 +85,7 @@ public class ConsoleAuthService {
         mapper.insertRefreshToken(randomId(), user.id(), replacementHash, current.familyId(), now,
                 now.plus(refreshTtl), command.deviceId(), ip);
         mapper.revokeToken(current.id(), now, "ROTATED", replacementHash);
-        return tokenPair(user, refreshToken, current.familyId());
+        return tokenPair(user, refreshToken, current.familyId(), false);
     }
 
     @Transactional
@@ -122,19 +128,22 @@ public class ConsoleAuthService {
 
     ConsoleAuthModels.UserSummary summary(ConsoleAuthModels.PlatformUser user) {
         return new ConsoleAuthModels.UserSummary(Long.toString(user.id()), user.username(), user.displayName(),
-                user.forcePasswordChange(), permissions(user.id()));
+                user.forcePasswordChange(), false, permissions(user.id()));
     }
 
     private ConsoleAuthModels.TokenPair issuePair(ConsoleAuthModels.PlatformUser user, String familyId,
-                                                   String deviceId, String ip, LocalDateTime now) {
+                                                   String deviceId, String ip, LocalDateTime now, boolean recommendChange) {
         String refresh = randomToken();
         mapper.insertRefreshToken(randomId(), user.id(), hash(refresh), familyId, now, now.plus(refreshTtl), deviceId, ip);
-        return tokenPair(user, refresh, familyId);
+        return tokenPair(user, refresh, familyId, recommendChange);
     }
 
-    private ConsoleAuthModels.TokenPair tokenPair(ConsoleAuthModels.PlatformUser user, String refresh, String familyId) {
+    private ConsoleAuthModels.TokenPair tokenPair(ConsoleAuthModels.PlatformUser user, String refresh, String familyId,
+                                                  boolean recommendChange) {
         return new ConsoleAuthModels.TokenPair(tokens.createAccessToken(user, familyId), refresh,
-                tokens.accessTtlSeconds(), summary(user));
+                tokens.accessTtlSeconds(), new ConsoleAuthModels.UserSummary(Long.toString(user.id()),
+                        user.username(), user.displayName(), user.forcePasswordChange(), recommendChange,
+                        permissions(user.id())));
     }
 
     private static String randomToken() {

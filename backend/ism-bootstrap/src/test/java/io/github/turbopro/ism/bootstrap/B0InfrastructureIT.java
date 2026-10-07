@@ -1166,6 +1166,44 @@ class B0InfrastructureIT {
     }
 
     @Test
+    void shouldGuideConsoleForcedAndInactivePasswordChanges() throws Exception {
+        long userId = 9009L;
+        jdbcTemplate.update("""
+                INSERT INTO plt_user(id,username,display_name,password_hash,status,force_password_change)
+                VALUES(?,?,?,?,?,?)
+                """, userId, "platform-password-policy", "密码策略验收员",
+                passwordEncoder.encode("Console#Pass123"), "ACTIVE", true);
+        try {
+            ConsoleAuthModels.LoginCommand initial = new ConsoleAuthModels.LoginCommand(
+                    "platform-password-policy", "Console#Pass123", "policy-device");
+            ConsoleAuthModels.TokenPair forced = consoleAuthService.login(initial, "127.0.0.1");
+            assertThat(forced.user().passwordChangeRequired()).isTrue();
+            assertThat(forced.user().passwordChangeRecommended()).isFalse();
+            mockMvc.perform(get("/api/console/packages").header("Authorization", "Bearer " + forced.accessToken()))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("IAM_PASSWORD_CHANGE_REQUIRED"));
+            consoleAuthService.changePassword(userId,
+                    new ConsoleAuthModels.ChangePasswordCommand("Console#Pass123", "Changed#Pass456"));
+            mockMvc.perform(get("/api/console/packages").header("Authorization", "Bearer " + forced.accessToken()))
+                    .andExpect(status().isUnauthorized());
+            ConsoleAuthModels.LoginCommand changed = new ConsoleAuthModels.LoginCommand(
+                    "platform-password-policy", "Changed#Pass456", "policy-device");
+            ConsoleAuthModels.TokenPair normal = consoleAuthService.login(changed, "127.0.0.1");
+            assertThat(normal.user().passwordChangeRequired()).isFalse();
+            assertThat(normal.user().passwordChangeRecommended()).isFalse();
+            jdbcTemplate.update("UPDATE plt_user SET last_login_at=? WHERE id=?",
+                    LocalDateTime.now().minusDays(91), userId);
+            ConsoleAuthModels.TokenPair inactive = consoleAuthService.login(changed, "127.0.0.1");
+            assertThat(inactive.user().passwordChangeRequired()).isFalse();
+            assertThat(inactive.user().passwordChangeRecommended()).isTrue();
+            assertThat(consoleAuthService.login(changed, "127.0.0.1").user().passwordChangeRecommended()).isFalse();
+        } finally {
+            jdbcTemplate.update("DELETE FROM plt_refresh_token WHERE user_id=?", userId);
+            jdbcTemplate.update("DELETE FROM plt_user WHERE id=?", userId);
+        }
+    }
+
+    @Test
     void shouldPublishImmutablePackagesPreviewDowngradeAndEnforceQuota() {
         var plan = packagePlanService.create(new PackagePlanModels.CreatePackage("CHEMICAL_ENTERPRISE", "化工企业版"));
         long packageId = Long.parseLong(plan.id());

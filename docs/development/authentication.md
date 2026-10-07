@@ -25,7 +25,9 @@
 
 连续登录失败默认达到 5 次后锁定 15 分钟。不存在账号和密码错误对外统一返回 `IAM_INVALID_CREDENTIALS`，避免账号枚举。
 
-首次登录或密码过期用户获得带 `passwordChangeRequired` 标记的令牌，只允许调用修改密码和退出接口。改密成功后递增 `tokenVersion` 并撤销该用户所有刷新令牌。
+被标记为强制改密的用户获得带 `passwordChangeRequired` 标记的令牌，只允许调用修改密码和退出接口。改密成功后递增 `tokenVersion` 并撤销该用户所有刷新令牌。长期未登录只在登录响应中返回 `passwordChangeRecommended` 建议标记，不等于密码到期或强制改密。
+
+租户用户提醒阈值使用 `security.inactivePasswordDays` 租户配置（默认 90 天）；Console 平台账号使用独立的部署配置。首次登录没有上次登录时间时不产生长期未登录建议；阈值 `0` 关闭提醒。
 
 ## 配置
 
@@ -36,5 +38,6 @@
 | `ISM_JWT_REFRESH_TTL` | `P7D` | 刷新令牌有效期 |
 | `ISM_LOGIN_MAX_FAILURES` | `5` | 锁定前连续失败次数 |
 | `ISM_LOGIN_LOCK_DURATION` | `PT15M` | 临时锁定时间 |
+| `ISM_CONSOLE_INACTIVE_PASSWORD_DAYS` | `90` | Console 平台账号长期未登录改密建议阈值，`0` 关闭 |
 
 日志、审计和接口响应均不得记录密码、访问令牌或刷新令牌。
