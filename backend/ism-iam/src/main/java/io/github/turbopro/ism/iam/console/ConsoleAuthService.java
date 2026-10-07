@@ -2,6 +2,7 @@ package io.github.turbopro.ism.iam.console;
 
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
+import io.github.turbopro.ism.iam.auth.PasswordPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -100,7 +101,7 @@ public class ConsoleAuthService {
         if (user == null || !passwords.matches(command.oldPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
-        if (!isStrong(command.newPassword()) || passwords.matches(command.newPassword(), user.passwordHash())) {
+        if (!PasswordPolicy.isStrong(command.newPassword()) || passwords.matches(command.newPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.PASSWORD_POLICY);
         }
         LocalDateTime now = LocalDateTime.now();
@@ -151,12 +152,6 @@ public class ConsoleAuthService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
     }
     private static long randomId() { return RANDOM.nextLong(Long.MAX_VALUE - 1) + 1; }
-    private static boolean isStrong(String password) {
-        return password.length() >= 12 && password.chars().anyMatch(Character::isUpperCase)
-                && password.chars().anyMatch(Character::isLowerCase)
-                && password.chars().anyMatch(Character::isDigit)
-                && password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
-    }
     private static String hash(String token) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

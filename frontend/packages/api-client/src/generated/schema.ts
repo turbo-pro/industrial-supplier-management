@@ -932,6 +932,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/users/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["resetAccessUserPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configuration/dictionaries": {
         parameters: {
             query?: never;
@@ -5010,7 +5026,10 @@ export interface components {
         InitializeTenant: {
             adminUsername: string;
             adminDisplayName: string;
-            /** Format: password */
+            /**
+             * Format: password
+             * @description Requires uppercase, lowercase, digit, and non-alphanumeric character.
+             */
             initialPassword: string;
             headquartersName: string;
         };
@@ -5147,6 +5166,14 @@ export interface components {
         ChangeAccessUserStatus: {
             /** @enum {string} */
             status: "ACTIVE" | "DISABLED";
+            version: number;
+        };
+        ResetAccessUserPassword: {
+            /**
+             * Format: password
+             * @description Requires uppercase, lowercase, digit, and non-alphanumeric character.
+             */
+            temporaryPassword: string;
             version: number;
         };
         AccessUser: {
@@ -7188,6 +7215,39 @@ export interface operations {
                 };
             };
             401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    resetAccessUserPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetAccessUserPassword"];
+            };
+        };
+        responses: {
+            /** @description Temporary password set; existing sessions revoked and next login requires password change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessUserResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];

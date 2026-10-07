@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -11,10 +11,19 @@ const loading = ref(false);
 const saving = ref(false);
 const showCreate = ref(false);
 const showRoles = ref(false);
+const showReset = ref(false);
 const selectedUser = ref<components['schemas']['AccessUser'] | null>(null);
+const resetTarget = ref<components['schemas']['AccessUser'] | null>(null);
+const temporaryPassword = ref('');
 const editRoleIds = ref<string[]>([]);
 const form = reactive({ username: '', displayName: '', initialPassword: '', primaryOrganizationId: '', roleIds: [] as string[] });
 const roleName = (id: string) => roles.value.find(role => role.id === id)?.name ?? `未知角色 (${id})`;
+const canReset = computed(() => {
+  const adminRole = roles.value.find(role => role.code === 'TENANT_ADMIN' && role.status === 'ACTIVE');
+  return !!adminRole && !!users.value.find(user => user.id === session.actorId)?.roleIds.includes(adminRole.id);
+});
+const strongPassword = (value: string) => value.length >= 12 && value.length <= 128 && /[A-Z]/.test(value)
+  && /[a-z]/.test(value) && /[0-9]/.test(value) && /[^\p{L}\p{N}]/u.test(value);
 
 async function load() {
   loading.value = true;
@@ -35,8 +44,8 @@ async function load() {
 
 async function createUser() {
   if (!/^[a-zA-Z][a-zA-Z0-9._-]{2,99}$/.test(form.username) || !form.displayName.trim() ||
-      form.initialPassword.length < 12 || !form.primaryOrganizationId || form.roleIds.length === 0) {
-    ElMessage.warning('请填写有效账号、至少 12 位初始密码、主组织和角色');
+      !strongPassword(form.initialPassword) || !form.primaryOrganizationId || form.roleIds.length === 0) {
+    ElMessage.warning('请填写有效账号、符合复杂度要求的初始密码、主组织和角色');
     return;
   }
   saving.value = true;
@@ -122,6 +131,40 @@ async function saveRoles() {
   }
 }
 
+function openReset(user: components['schemas']['AccessUser']) {
+  resetTarget.value = user;
+  temporaryPassword.value = '';
+  showReset.value = true;
+}
+
+async function resetPassword() {
+  const user = resetTarget.value;
+  if (!user || !strongPassword(temporaryPassword.value)) {
+    ElMessage.warning('临时密码需 12–128 位，包含大小写字母、数字和特殊字符');
+    return;
+  }
+  saving.value = true;
+  try {
+    const { error, response } = await session.client.PUT('/access/users/{id}/password-reset', {
+      params: { path: { id: user.id }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+      body: { temporaryPassword: temporaryPassword.value, version: user.version },
+    });
+    if (error) {
+      ElMessage.error(response.status === 409 ? '用户版本已变化或不能重置当前账号，请刷新后重试' : error.error.message);
+      await load();
+      return;
+    }
+    temporaryPassword.value = '';
+    showReset.value = false;
+    await load();
+    ElMessage.success('密码已重置，旧会话已失效；请通过安全渠道交付临时密码');
+  } catch {
+    ElMessage.error('操作结果不确定，请刷新核对；不要重复发送临时密码');
+  } finally {
+    saving.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -135,7 +178,7 @@ onMounted(load);
         <el-table-column label="角色" min-width="220"><template #default="{row}">{{row.roleIds.map(roleName).join('、') || '未分配'}}</template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="row.status==='ACTIVE'?'success':'info'">{{row.status==='ACTIVE'?'启用':'停用'}}</el-tag></template></el-table-column>
         <el-table-column label="首次改密" width="120"><template #default="{row}">{{row.passwordChangeRequired?'待完成':'已完成'}}</template></el-table-column>
-        <el-table-column label="操作" width="200"><template #default="{row}"><el-button link :disabled="saving||roles.length===0" @click="openRoles(row)">编辑角色</el-button><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
+        <el-table-column label="操作" width="290"><template #default="{row}"><el-button link :disabled="saving||roles.length===0" @click="openRoles(row)">编辑角色</el-button><el-button link :disabled="saving||!canReset||row.id===session.actorId" @click="openReset(row)">重置密码</el-button><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
       </el-table>
     </el-card>
     <el-dialog v-model="showCreate" title="新建租户用户" width="560px" @closed="form.initialPassword=''">
@@ -153,6 +196,11 @@ onMounted(load);
       <el-alert title="保存后该用户的旧登录会话立即失效；修改自己的角色后需重新登录。不能移除最后一名有效租户管理员的管理员角色。" type="warning" :closable="false"/>
       <el-form label-position="top" style="margin-top:16px"><el-form-item label="已分配角色"><el-select v-model="editRoleIds" multiple filterable style="width:100%"><el-option v-for="role in roles" :key="role.id" :label="`${role.name}${role.status==='ACTIVE'?'':'（已停用）'}`" :value="role.id" :disabled="role.status!=='ACTIVE'"/></el-select></el-form-item></el-form>
       <template #footer><el-button @click="showRoles=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRoles">保存角色</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="showReset" :title="`重置 ${resetTarget?.username ?? ''} 的密码`" width="560px" @closed="temporaryPassword=''">
+      <el-alert title="重置后旧会话立即失效；账号下次登录须修改密码。临时密码仅通过安全渠道交付，不记录在审计或响应中。" type="warning" :closable="false"/>
+      <el-form label-position="top" style="margin-top:16px"><el-form-item label="临时密码"><el-input v-model="temporaryPassword" type="password" show-password autocomplete="new-password" maxlength="128"/></el-form-item></el-form>
+      <template #footer><el-button @click="showReset=false">取消</el-button><el-button type="primary" :loading="saving" @click="resetPassword">确认重置</el-button></template>
     </el-dialog>
   </div>
 </template>

@@ -109,7 +109,7 @@ public class AuthService {
         if (user == null || !passwordEncoder.matches(command.oldPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
-        if (!isStrong(command.newPassword()) || passwordEncoder.matches(command.newPassword(), user.passwordHash())) {
+        if (!PasswordPolicy.isStrong(command.newPassword()) || passwordEncoder.matches(command.newPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.PASSWORD_POLICY);
         }
         LocalDateTime now = LocalDateTime.now();
@@ -161,13 +161,6 @@ public class AuthService {
             days = 90;
         }
         return days > 0 && !user.lastLoginAt().plusDays(days).isAfter(now);
-    }
-
-    private static boolean isStrong(String password) {
-        return password.length() >= 12 && password.chars().anyMatch(Character::isUpperCase)
-                && password.chars().anyMatch(Character::isLowerCase)
-                && password.chars().anyMatch(Character::isDigit)
-                && password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
     }
 
     private static String randomToken() {

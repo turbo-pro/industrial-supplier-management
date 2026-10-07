@@ -39,6 +39,12 @@ test('tenant user page creates and disables a member with versioned request', as
     members = members.map(member => member.id === '2' ? { ...member, roleIds: ['11', '10'], version: 2 } : member);
     await route.fulfill(response(members[1]));
   });
+  await page.route('**/api/access/users/2/password-reset', async route => {
+    expect(route.request().postDataJSON()).toEqual({ temporaryPassword: 'Temporary#Pass123', version: 2 });
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    members = members.map(member => member.id === '2' ? { ...member, passwordChangeRequired: true, version: 3 } : member);
+    await route.fulfill(response(members[1]));
+  });
   await page.goto('/');
   await page.getByRole('button', { name: '登录系统' }).click();
   await page.goto('/system/users');
@@ -54,6 +60,11 @@ test('tenant user page creates and disables a member with versioned request', as
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').getByRole('button', { name: '保存角色' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('租户管理员');
+  await expect(adminRow.getByRole('button', { name: '重置密码' })).toBeDisabled();
+  await page.getByRole('row').filter({ hasText: 'member' }).getByRole('button', { name: '重置密码' }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: '临时密码' }).fill('Temporary#Pass123');
+  await page.getByRole('dialog').getByRole('button', { name: '确认重置' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('待完成');
   await page.getByRole('button', { name: '新建用户' }).click();
   await page.getByRole('textbox', { name: '用户名' }).fill('newmember');
   await page.getByRole('textbox', { name: '姓名' }).fill('新成员');

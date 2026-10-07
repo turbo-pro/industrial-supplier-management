@@ -4,6 +4,8 @@ import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.api.error.CommonErrorCode;
 import io.github.turbopro.ism.common.infrastructure.authorization.DataScope;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.iam.auth.IamErrorCode;
+import io.github.turbopro.ism.iam.auth.PasswordPolicy;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -88,6 +90,7 @@ public class AccessService {
     @Transactional
     public AccessModels.UserView createUser(AccessModels.CreateUser command) {
         long tenantId=tenantId(), userId=id(), organizationId=parseId(command.primaryOrganizationId());
+        if(!PasswordPolicy.isStrong(command.initialPassword())) throw new ApiException(IamErrorCode.PASSWORD_POLICY);
         ensureAdminRoleAssignmentAllowed(tenantId,parseIds(command.roleIds()));
         try {
             mapper.insertUser(tenantId,userId,command.username(),command.displayName(),passwords.encode(command.initialPassword()));
@@ -140,6 +143,25 @@ public class AccessService {
         if(mapper.updateUserStatus(tenantId,userId,command.status(),command.version())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
         if("DISABLED".equals(command.status())) mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"ACCOUNT_DISABLED");
+        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
+    }
+
+    @Transactional
+    public AccessModels.UserView resetUserPassword(long userId,AccessModels.ResetUserPassword command) {
+        long tenantId=tenantId(), actorId=TenantContext.require().actorId();
+        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        AccessModels.UserRow target=mapper.userForStatusUpdate(tenantId,userId);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(actorId==userId) throw new ApiException(AccessErrorCode.SELF_PASSWORD_RESET);
+        if(mapper.tenantAdministratorRole(tenantId,actorId)==0)
+            throw new ApiException(AccessErrorCode.PASSWORD_RESET_REQUIRES_ADMIN);
+        if(!PasswordPolicy.isStrong(command.temporaryPassword())
+                || passwords.matches(command.temporaryPassword(),mapper.passwordHash(tenantId,userId)))
+            throw new ApiException(IamErrorCode.PASSWORD_POLICY);
+        if(mapper.resetUserPassword(tenantId,userId,passwords.encode(command.temporaryPassword()),command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"PASSWORD_RESET");
         return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
     }
 

@@ -64,6 +64,10 @@ public interface AccessMapper extends TenantScopedMapper {
     Long tenantAdminRoleId(long tenantId);
     @Update("UPDATE iam_user SET status=#{status},version=version+1,token_version=token_version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND version=#{version}")
     int updateUserStatus(long tenantId,long userId,String status,int version);
+    @Select("SELECT password_hash FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0")
+    String passwordHash(long tenantId,long userId);
+    @Update("UPDATE iam_user SET password_hash=#{hash},force_password_change=1,password_changed_at=NULL,failed_count=0,locked_until=NULL,token_version=token_version+1,version=version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND version=#{version}")
+    int resetUserPassword(long tenantId,long userId,String hash,int version);
     @Update("UPDATE iam_refresh_token SET revoked_at=#{now},revoke_reason=#{reason} WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND revoked_at IS NULL")
     int revokeRefreshTokens(long tenantId,long userId,LocalDateTime now,String reason);
     @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0 FOR SHARE")

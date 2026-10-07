@@ -1482,6 +1482,48 @@ class B0InfrastructureIT {
                         Set.of(Long.toString(tenantId + 10)))))
                         .isInstanceOfSatisfying(ApiException.class,
                                 error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.ADMIN_GRANT_REQUIRES_ADMIN));
+                assertThatThrownBy(() -> accessService.resetUserPassword(adminId,
+                        new AccessModels.ResetUserPassword("Temporary#Pass123", 0)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.PASSWORD_RESET_REQUIRES_ADMIN));
+            }
+            try (var context = TenantContext.open(tenantId, adminId)) {
+                AuthModels.TokenPair beforeReset = authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "reset-device"), "127.0.0.1");
+                assertThatThrownBy(() -> accessService.resetUserPassword(adminId,
+                        new AccessModels.ResetUserPassword("Temporary#Pass123", 0)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.SELF_PASSWORD_RESET));
+                assertThatThrownBy(() -> accessService.resetUserPassword(foreignTenantId + 1,
+                        new AccessModels.ResetUserPassword("Temporary#Pass123", 0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.resetUserPassword(memberId,
+                        new AccessModels.ResetUserPassword("weak-password", 4)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(IamErrorCode.PASSWORD_POLICY));
+                assertThatThrownBy(() -> accessService.resetUserPassword(memberId,
+                        new AccessModels.ResetUserPassword("Initial#Pass123", 4)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(IamErrorCode.PASSWORD_POLICY));
+                assertThatThrownBy(() -> accessService.resetUserPassword(memberId,
+                        new AccessModels.ResetUserPassword("Temporary#Pass123", 3))).isInstanceOf(ApiException.class);
+                var reset = accessService.resetUserPassword(memberId,
+                        new AccessModels.ResetUserPassword("Temporary#Pass123", 4));
+                assertThat(reset.version()).isEqualTo(5);
+                assertThat(reset.passwordChangeRequired()).isTrue();
+                assertThatThrownBy(() -> authService.requireActiveUser(memberId, 4)).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.refresh(new AuthModels.RefreshCommand(
+                        beforeReset.refreshToken(), "reset-device"), "127.0.0.1")).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "reset-device"), "127.0.0.1"))
+                        .isInstanceOf(ApiException.class);
+                assertThat(authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Temporary#Pass123", "reset-device"), "127.0.0.1")
+                        .user().passwordChangeRequired()).isTrue();
+                authService.changePassword(memberId,
+                        new AuthModels.ChangePasswordCommand("Temporary#Pass123", "Changed#Pass456"));
+                assertThat(authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Changed#Pass456", "reset-device"), "127.0.0.1")
+                        .user().passwordChangeRequired()).isFalse();
             }
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);

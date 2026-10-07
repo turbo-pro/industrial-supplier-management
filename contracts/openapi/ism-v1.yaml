@@ -720,6 +720,21 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/{id}/password-reset:
+    put:
+      operationId: resetAccessUserPassword
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ResetAccessUserPassword' } } } }
+      responses:
+        '200': { description: Temporary password set; existing sessions revoked and next login requires password change, content: { application/json: { schema: { $ref: '#/components/schemas/AccessUserResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /configuration/dictionaries:
     get:
       operationId: listDictionaries
@@ -3112,7 +3127,7 @@ components:
       properties:
         adminUsername: { type: string, pattern: '^[a-zA-Z][a-zA-Z0-9._-]{2,99}$' }
         adminDisplayName: { type: string, maxLength: 100 }
-        initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128 }
+        initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128, description: 'Requires uppercase, lowercase, digit, and non-alphanumeric character.' }
         headquartersName: { type: string, maxLength: 200 }
     UpdateTenant:
       type: object
@@ -3260,6 +3275,12 @@ components:
       required: [status, version]
       properties:
         status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer, minimum: 0 }
+    ResetAccessUserPassword:
+      type: object
+      required: [temporaryPassword, version]
+      properties:
+        temporaryPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128, description: 'Requires uppercase, lowercase, digit, and non-alphanumeric character.' }
         version: { type: integer, minimum: 0 }
     AccessUser:
       type: object

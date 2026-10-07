@@ -8,7 +8,9 @@ public enum AccessErrorCode implements ErrorCode {
     BUILT_IN_ROLE("IAM_BUILT_IN_ROLE_PROTECTED", "内置角色不能停用", 409),
     SELF_DISABLE("IAM_SELF_DISABLE", "不能停用当前登录账号", 409),
     LAST_ADMIN("IAM_LAST_ADMIN", "不能停用最后一个有效租户管理员", 409),
-    ADMIN_GRANT_REQUIRES_ADMIN("IAM_ADMIN_GRANT_REQUIRES_ADMIN", "只有租户管理员可以调整租户管理员角色或账号", 403);
+    ADMIN_GRANT_REQUIRES_ADMIN("IAM_ADMIN_GRANT_REQUIRES_ADMIN", "只有租户管理员可以调整租户管理员角色或账号", 403),
+    PASSWORD_RESET_REQUIRES_ADMIN("IAM_PASSWORD_RESET_REQUIRES_ADMIN", "只有租户管理员可以重置用户密码", 403),
+    SELF_PASSWORD_RESET("IAM_SELF_PASSWORD_RESET", "请使用个人密码修改入口", 409);
 
     private final String code; private final String message; private final int status;
     AccessErrorCode(String code, String message, int status) { this.code=code;this.message=message;this.status=status; }
