@@ -34,7 +34,7 @@ public final class AccessModels {
                              Set<String> roleIds) {
         public CreateUser { roleIds = roleIds == null ? Set.of() : Set.copyOf(roleIds); }
     }
-    public record AssignUserRoles(@NotEmpty Set<String> roleIds) {}
+    public record AssignUserRoles(@NotEmpty Set<String> roleIds, @PositiveOrZero int version) {}
     public record ChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
                                    @PositiveOrZero int version) {}
     public record RoleRow(long id, String roleCode, String roleName, boolean builtIn, String status, int version) {}
@@ -42,5 +42,6 @@ public final class AccessModels {
     public record UserRow(long id, String username, String displayName, String status,
                           boolean forcePasswordChange, int version) {}
     public record UserView(String id, String username, String displayName, String status,
-                           boolean passwordChangeRequired, int version) {}
+                           boolean passwordChangeRequired, int version, Set<String> roleIds) {}
+    public record UserRoleRow(long userId, long roleId) {}
 }

@@ -5142,6 +5142,7 @@ export interface components {
         };
         AssignUserRoles: {
             roleIds: string[];
+            version: number;
         };
         ChangeAccessUserStatus: {
             /** @enum {string} */
@@ -5156,6 +5157,7 @@ export interface components {
             status: "ACTIVE" | "SUSPENDED" | "DISABLED";
             passwordChangeRequired: boolean;
             version: number;
+            roleIds: string[];
         };
         AccessUserListResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["AccessUser"][];
@@ -7120,6 +7122,7 @@ export interface operations {
                     "application/json": components["schemas"]["AccessUserResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };
@@ -7148,9 +7151,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmptyResponse"];
+                    "application/json": components["schemas"]["AccessUserResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };
     };

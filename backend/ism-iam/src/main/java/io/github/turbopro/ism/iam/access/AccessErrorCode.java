@@ -7,7 +7,8 @@ public enum AccessErrorCode implements ErrorCode {
     INVALID_GRANT("IAM_ACCESS_INVALID_GRANT", "授权项不存在或不属于当前租户", 422),
     BUILT_IN_ROLE("IAM_BUILT_IN_ROLE_PROTECTED", "内置角色不能停用", 409),
     SELF_DISABLE("IAM_SELF_DISABLE", "不能停用当前登录账号", 409),
-    LAST_ADMIN("IAM_LAST_ADMIN", "不能停用最后一个有效租户管理员", 409);
+    LAST_ADMIN("IAM_LAST_ADMIN", "不能停用最后一个有效租户管理员", 409),
+    ADMIN_GRANT_REQUIRES_ADMIN("IAM_ADMIN_GRANT_REQUIRES_ADMIN", "只有租户管理员可以调整租户管理员角色或账号", 403);
 
     private final String code; private final String message; private final int status;
     AccessErrorCode(String code, String message, int status) { this.code=code;this.message=message;this.status=status; }

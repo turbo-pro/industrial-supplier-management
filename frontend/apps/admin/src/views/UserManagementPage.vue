@@ -10,7 +10,11 @@ const roles = ref<components['schemas']['Role'][]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const showCreate = ref(false);
+const showRoles = ref(false);
+const selectedUser = ref<components['schemas']['AccessUser'] | null>(null);
+const editRoleIds = ref<string[]>([]);
 const form = reactive({ username: '', displayName: '', initialPassword: '', primaryOrganizationId: '', roleIds: [] as string[] });
+const roleName = (id: string) => roles.value.find(role => role.id === id)?.name ?? `未知角色 (${id})`;
 
 async function load() {
   loading.value = true;
@@ -20,8 +24,8 @@ async function load() {
     ]);
     if (userResult.error) throw new Error('用户列表加载失败');
     users.value = userResult.data.data;
-    if (roleResult.error) { roles.value = []; ElMessage.warning('角色列表无权限或加载失败，暂不能创建用户'); }
-    else roles.value = roleResult.data.data.filter(role => role.status === 'ACTIVE');
+    if (roleResult.error) { roles.value = []; ElMessage.warning('角色列表无权限或加载失败，暂不能创建或编辑用户角色'); }
+    else roles.value = roleResult.data.data;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '用户列表加载失败');
   } finally {
@@ -80,6 +84,44 @@ async function changeStatus(user: components['schemas']['AccessUser']) {
   }
 }
 
+function openRoles(user: components['schemas']['AccessUser']) {
+  selectedUser.value = user;
+  editRoleIds.value = [...user.roleIds];
+  showRoles.value = true;
+}
+
+async function saveRoles() {
+  const user = selectedUser.value;
+  if (!user || editRoleIds.value.length === 0) { ElMessage.warning('至少保留一个角色'); return; }
+  if (editRoleIds.value.some(id => roles.value.find(role => role.id === id)?.status !== 'ACTIVE')) {
+    ElMessage.warning('请移除已停用或未知角色后再保存'); return;
+  }
+  saving.value = true;
+  try {
+    const { error, response } = await session.client.PUT('/access/users/{id}/roles', {
+      params: { path: { id: user.id }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+      body: { roleIds: editRoleIds.value, version: user.version },
+    });
+    if (error) {
+      ElMessage.error(response.status === 409 ? '角色或用户版本已变化，请刷新后重试' : error.error.message);
+      await load();
+      return;
+    }
+    showRoles.value = false;
+    if (user.id === session.actorId) {
+      ElMessage.warning('当前账号的角色已变化，请重新登录');
+      session.logout();
+    } else {
+      await load();
+      ElMessage.success('角色已更新，目标用户原会话已失效');
+    }
+  } catch {
+    ElMessage.error('操作结果不确定，请刷新核对');
+  } finally {
+    saving.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -90,9 +132,10 @@ onMounted(load);
       <el-table :data="users" row-key="id">
         <el-table-column prop="username" label="用户名" min-width="180"/>
         <el-table-column prop="displayName" label="姓名" min-width="180"/>
+        <el-table-column label="角色" min-width="220"><template #default="{row}">{{row.roleIds.map(roleName).join('、') || '未分配'}}</template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="row.status==='ACTIVE'?'success':'info'">{{row.status==='ACTIVE'?'启用':'停用'}}</el-tag></template></el-table-column>
         <el-table-column label="首次改密" width="120"><template #default="{row}">{{row.passwordChangeRequired?'待完成':'已完成'}}</template></el-table-column>
-        <el-table-column label="操作" width="150"><template #default="{row}"><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
+        <el-table-column label="操作" width="200"><template #default="{row}"><el-button link :disabled="saving||roles.length===0" @click="openRoles(row)">编辑角色</el-button><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
       </el-table>
     </el-card>
     <el-dialog v-model="showCreate" title="新建租户用户" width="560px" @closed="form.initialPassword=''">
@@ -102,9 +145,14 @@ onMounted(load);
         <el-form-item label="姓名"><el-input v-model="form.displayName" maxlength="100"/></el-form-item>
         <el-form-item label="初始密码"><el-input v-model="form.initialPassword" type="password" show-password autocomplete="new-password" maxlength="128"/></el-form-item>
         <el-form-item label="主组织"><el-select v-model="form.primaryOrganizationId" filterable style="width:100%"><el-option v-for="org in session.organizationOptions" :key="org.id" :label="org.label" :value="org.id"/></el-select></el-form-item>
-        <el-form-item label="角色"><el-select v-model="form.roleIds" multiple filterable style="width:100%"><el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id"/></el-select></el-form-item>
+        <el-form-item label="角色"><el-select v-model="form.roleIds" multiple filterable style="width:100%"><el-option v-for="role in roles.filter(item=>item.status==='ACTIVE')" :key="role.id" :label="role.name" :value="role.id"/></el-select></el-form-item>
       </el-form>
-      <template #footer><el-button @click="showCreate=false">取消</el-button><el-button type="primary" :loading="saving" :disabled="roles.length===0" @click="createUser">创建</el-button></template>
+      <template #footer><el-button @click="showCreate=false">取消</el-button><el-button type="primary" :loading="saving" :disabled="!roles.some(role=>role.status==='ACTIVE')" @click="createUser">创建</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="showRoles" :title="`编辑 ${selectedUser?.username ?? ''} 的角色`" width="560px">
+      <el-alert title="保存后该用户的旧登录会话立即失效；修改自己的角色后需重新登录。不能移除最后一名有效租户管理员的管理员角色。" type="warning" :closable="false"/>
+      <el-form label-position="top" style="margin-top:16px"><el-form-item label="已分配角色"><el-select v-model="editRoleIds" multiple filterable style="width:100%"><el-option v-for="role in roles" :key="role.id" :label="`${role.name}${role.status==='ACTIVE'?'':'（已停用）'}`" :value="role.id" :disabled="role.status!=='ACTIVE'"/></el-select></el-form-item></el-form>
+      <template #footer><el-button @click="showRoles=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRoles">保存角色</el-button></template>
     </el-dialog>
   </div>
 </template>

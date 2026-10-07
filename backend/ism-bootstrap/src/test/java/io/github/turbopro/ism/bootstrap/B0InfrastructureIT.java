@@ -25,6 +25,7 @@ import io.github.turbopro.ism.iam.authorization.DatabaseAuthorizationGrantLoader
 import io.github.turbopro.ism.iam.authorization.TenantAuthorizationMapper;
 import io.github.turbopro.ism.iam.navigation.NavigationService;
 import io.github.turbopro.ism.iam.access.AccessModels;
+import io.github.turbopro.ism.iam.access.AccessErrorCode;
 import io.github.turbopro.ism.iam.access.AccessService;
 import io.github.turbopro.ism.iam.configuration.ConfigurationModels;
 import io.github.turbopro.ism.iam.configuration.ConfigurationService;
@@ -1428,10 +1429,15 @@ class B0InfrastructureIT {
             AuthModels.TokenPair memberToken = authService.login(new AuthModels.LoginCommand(
                     "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1");
             try (var context = TenantContext.open(tenantId, adminId)) {
+                assertThat(accessService.users()).filteredOn(user -> user.id().equals(Long.toString(memberId)))
+                        .singleElement().satisfies(user -> assertThat(user.roleIds()).containsExactly(Long.toString(tenantId + 11)));
                 assertThatThrownBy(() -> accessService.changeUserStatus(adminId, new AccessModels.ChangeUserStatus("DISABLED", 0)))
                         .isInstanceOf(ApiException.class);
                 assertThatThrownBy(() -> accessService.assignUserRoles(adminId,
-                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 11)))))
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 11)), 0)))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.assignUserRoles(foreignTenantId + 1,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 11)), 0)))
                         .isInstanceOf(ApiException.class);
                 assertThatThrownBy(() -> accessService.changeUserStatus(foreignTenantId + 1,
                         new AccessModels.ChangeUserStatus("DISABLED", 0))).isInstanceOf(ApiException.class);
@@ -1447,13 +1453,35 @@ class B0InfrastructureIT {
                         .isInstanceOf(ApiException.class);
                 assertThat(accessService.changeUserStatus(memberId, new AccessModels.ChangeUserStatus("ACTIVE", 1)).status())
                         .isEqualTo("ACTIVE");
-                assertThat(authService.login(new AuthModels.LoginCommand(
-                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1").accessToken())
-                        .isNotBlank();
+                AuthModels.TokenPair restored = authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1");
+                assertThat(restored.accessToken()).isNotBlank();
+                assertThatThrownBy(() -> accessService.assignUserRoles(memberId,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 10)), 1)))
+                        .isInstanceOf(ApiException.class);
+                var reassigned = accessService.assignUserRoles(memberId,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 10),Long.toString(tenantId + 11)), 2));
+                assertThat(reassigned.version()).isEqualTo(3);
+                assertThat(reassigned.roleIds()).containsExactlyInAnyOrder(Long.toString(tenantId + 10),Long.toString(tenantId + 11));
+                assertThatThrownBy(() -> authService.requireActiveUser(memberId, 2)).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.refresh(new AuthModels.RefreshCommand(
+                        restored.refreshToken(), "lifecycle-device"), "127.0.0.1")).isInstanceOf(ApiException.class);
+                assertThat(accessService.assignUserRoles(memberId,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 11)), 3)).roleIds())
+                        .containsExactly(Long.toString(tenantId + 11));
             }
             try (var context = TenantContext.open(tenantId, memberId)) {
                 assertThatThrownBy(() -> accessService.changeUserStatus(adminId,
                         new AccessModels.ChangeUserStatus("DISABLED", 0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.assignUserRoles(memberId,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 10)), 4)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.ADMIN_GRANT_REQUIRES_ADMIN));
+                assertThatThrownBy(() -> accessService.createUser(new AccessModels.CreateUser(
+                        "unauthorized-admin", "未授权管理员", "Initial#Pass123", "1",
+                        Set.of(Long.toString(tenantId + 10)))))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.ADMIN_GRANT_REQUIRES_ADMIN));
             }
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);

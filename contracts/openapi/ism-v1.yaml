@@ -687,6 +687,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateAccessUser' } } } }
       responses:
         '200': { description: User created with forced password change, content: { application/json: { schema: { $ref: '#/components/schemas/AccessUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
   /access/users/{id}/roles:
@@ -699,7 +700,10 @@ paths:
         - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AssignUserRoles' } } } }
       responses:
-        '200': { description: Roles assigned and existing sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '200': { description: Roles assigned and existing sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/AccessUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
   /access/users/{id}/status:
     put:
@@ -3247,8 +3251,10 @@ components:
         roleIds: { type: array, uniqueItems: true, items: { type: string } }
     AssignUserRoles:
       type: object
-      required: [roleIds]
-      properties: { roleIds: { type: array, minItems: 1, uniqueItems: true, items: { type: string } } }
+      required: [roleIds, version]
+      properties:
+        roleIds: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
+        version: { type: integer, minimum: 0 }
     ChangeAccessUserStatus:
       type: object
       required: [status, version]
@@ -3257,7 +3263,7 @@ components:
         version: { type: integer, minimum: 0 }
     AccessUser:
       type: object
-      required: [id, username, displayName, status, passwordChangeRequired, version]
+      required: [id, username, displayName, status, passwordChangeRequired, version, roleIds]
       properties:
         id: { type: string }
         username: { type: string }
@@ -3265,6 +3271,7 @@ components:
         status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] }
         passwordChangeRequired: { type: boolean }
         version: { type: integer }
+        roleIds: { type: array, uniqueItems: true, items: { type: string } }
     AccessUserListResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/AccessUser' } } } }]
     AccessUserResponse:
