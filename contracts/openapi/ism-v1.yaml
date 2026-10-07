@@ -752,6 +752,14 @@ paths:
         '200': { description: Effective tenant settings, content: { application/json: { schema: { $ref: '#/components/schemas/SettingListResponse' } } } }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '403': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/branding:
+    get:
+      operationId: getTenantBranding
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Effective branding fields of authenticated tenant only, content: { application/json: { schema: { $ref: '#/components/schemas/BrandingResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
   /configuration/settings/exit-escalation-users:
     get:
       operationId: listExitEscalationUsers
@@ -2925,6 +2933,16 @@ components:
         valueType: { type: string, enum: [STRING, URL, INTEGER] }
         value: { type: string }
         version: { type: integer }
+    TenantBranding:
+      type: object
+      required: [systemName, logoUrl, faviconUrl, footerText]
+      properties:
+        systemName: { type: string }
+        logoUrl: { type: string }
+        faviconUrl: { type: string }
+        footerText: { type: string }
+    BrandingResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/TenantBranding' } } }]
     EscalationUser:
       type: object
       required: [id, username, displayName]

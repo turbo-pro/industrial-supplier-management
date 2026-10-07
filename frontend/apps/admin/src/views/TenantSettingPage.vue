@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import BrandingSettings from '../components/BrandingSettings.vue';
 const session=useSessionStore();
 const setting=ref<components['schemas']['TenantSetting']>();
 const reminderEnabled=ref<components['schemas']['TenantSetting']>();
@@ -133,8 +134,9 @@ onMounted(load);
 </script>
 <template>
   <div class="page">
-    <div class="page-heading"><div><h1>租户配置 · 风险观察</h1><p>仅影响当前租户，配置修改须经后端权限校验</p></div><el-button :disabled="saving||loading" @click="load">刷新</el-button></div>
-    <el-card v-loading="loading" shadow="never">
+    <div class="page-heading"><div><h1>租户配置</h1><p>仅影响当前租户，配置修改须经后端权限校验</p></div><el-button :disabled="saving||loading" @click="load">刷新</el-button></div>
+    <BrandingSettings />
+    <el-card v-loading="loading" shadow="never" style="margin-top:16px">
       <el-alert title="实际观察期取租户配置、部署级最低观察期及待审申请快照中的最大值。下调配置不会缩短已有待审申请的观察期。" type="info" :closable="false"/>
       <el-form v-if="setting" label-position="top">
         <el-form-item label="观察名单最短观察天数"><el-input-number v-model="days" :min="1" :max="3650" :precision="0" :disabled="saving"/></el-form-item>

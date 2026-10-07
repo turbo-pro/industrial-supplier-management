@@ -980,6 +980,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/configuration/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTenantBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configuration/settings/exit-escalation-users": {
         parameters: {
             query?: never;
@@ -4820,6 +4836,15 @@ export interface components {
             value: string;
             version: number;
         };
+        TenantBranding: {
+            systemName: string;
+            logoUrl: string;
+            faviconUrl: string;
+            footerText: string;
+        };
+        BrandingResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["TenantBranding"];
+        };
         EscalationUser: {
             id: string;
             username: string;
@@ -7232,6 +7257,27 @@ export interface operations {
             };
             401: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
+        };
+    };
+    getTenantBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective branding fields of authenticated tenant only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandingResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
         };
     };
     listExitEscalationUsers: {

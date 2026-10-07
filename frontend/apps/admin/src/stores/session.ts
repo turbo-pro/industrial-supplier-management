@@ -5,12 +5,29 @@ import { createIsmClient, type components } from '@ism/api-client';
 const TOKEN_KEY = 'ism.admin.accessToken';
 const ACTOR_KEY = 'ism.admin.actorId';
 const REQUIRED_KEY = 'ism.admin.passwordChangeRequired';
+const DEFAULT_BRANDING: components['schemas']['TenantBranding'] = {
+  systemName: '工业供应商管理系统', logoUrl: '', faviconUrl: '', footerText: '',
+};
+
+function safeImageUrl(value: string) {
+  if (value.startsWith('/') && !value.startsWith('//')) return value;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol) ? value : ''; } catch { return ''; }
+}
+
+function applyBrowserBranding(value: components['schemas']['TenantBranding']) {
+  document.title = value.systemName || DEFAULT_BRANDING.systemName;
+  let icon = document.getElementById('ism-tenant-favicon') as HTMLLinkElement | null;
+  if (!value.faviconUrl) { icon?.remove(); return; }
+  if (!icon) { icon = document.createElement('link'); icon.id = 'ism-tenant-favicon'; icon.rel = 'icon'; document.head.appendChild(icon); }
+  icon.href = value.faviconUrl;
+}
 
 export const useSessionStore = defineStore('session', () => {
   const accessToken = ref<string | undefined>(sessionStorage.getItem(TOKEN_KEY) ?? undefined);
   const actorId = ref<string | undefined>(sessionStorage.getItem(ACTOR_KEY) ?? undefined);
   const passwordChangeRequired = ref(sessionStorage.getItem(REQUIRED_KEY) === 'true');
   const passwordChangeRecommended = ref(false);
+  const branding = ref<components['schemas']['TenantBranding']>({ ...DEFAULT_BRANDING });
   const organizations = ref<components['schemas']['OrganizationNode'][]>([]);
   const currentOrganization = ref<components['schemas']['CurrentOrganization']>();
   const menus = ref<components['schemas']['MenuNode'][]>([]);
@@ -52,6 +69,23 @@ export const useSessionStore = defineStore('session', () => {
     organizations.value = tree.data.data;
     currentOrganization.value = current.data.data;
     menus.value = navigation.data.data;
+    await loadBranding();
+  }
+
+  async function loadBranding() {
+    const token = accessToken.value;
+    if (!token || passwordChangeRequired.value) return;
+    try {
+      const { data, error } = await client.GET('/configuration/branding');
+      if (error || token !== accessToken.value) return;
+      branding.value = {
+        systemName: data.data.systemName || DEFAULT_BRANDING.systemName,
+        logoUrl: safeImageUrl(data.data.logoUrl),
+        faviconUrl: safeImageUrl(data.data.faviconUrl),
+        footerText: data.data.footerText,
+      };
+      applyBrowserBranding(branding.value);
+    } catch { /* Keep generic branding when the optional endpoint is unavailable. */ }
   }
 
   async function changePassword(oldPassword: string, newPassword: string) {
@@ -75,13 +109,15 @@ export const useSessionStore = defineStore('session', () => {
     actorId.value = undefined;
     passwordChangeRequired.value = false;
     passwordChangeRecommended.value = false;
+    branding.value = { ...DEFAULT_BRANDING };
+    applyBrowserBranding(branding.value);
     organizations.value = [];
     menus.value = [];
     currentOrganization.value = undefined;
   }
 
   if (accessToken.value) void loadWorkspace().catch(() => undefined);
-  return { accessToken, actorId, passwordChangeRequired, passwordChangeRecommended,
+  return { accessToken, actorId, passwordChangeRequired, passwordChangeRecommended, branding,
     organizations, currentOrganization, menus, organizationOptions, client,
-    login, loadWorkspace, changePassword, switchOrganization, logout };
+    login, loadWorkspace, loadBranding, changePassword, switchOrganization, logout };
 });

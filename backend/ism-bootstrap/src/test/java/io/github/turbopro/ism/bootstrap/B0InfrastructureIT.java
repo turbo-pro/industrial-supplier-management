@@ -102,6 +102,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.aMapWithSize;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -1484,6 +1485,62 @@ class B0InfrastructureIT {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id=?", userId);
             jdbcTemplate.update("DELETE FROM iam_user WHERE id=?", userId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id=?", tenantId);
+        }
+    }
+
+    @Test
+    void shouldReadOnlyAuthenticatedTenantsEffectiveBrandingWithoutSettingPermission() throws Exception {
+        long tenantA = 97001L, tenantB = 97002L, userA = 97003L, userB = 97004L;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantA, "BRAND-A", "品牌租户 A", "ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
+                tenantB, "BRAND-B", "品牌租户 B", "ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) "
+                + "VALUES(?,?,?,?,?,?)", userA, tenantA, "brand-user", "品牌用户 A",
+                passwordEncoder.encode("Brand#Pass123"), "ACTIVE");
+        jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) "
+                + "VALUES(?,?,?,?,?,?)", userB, tenantB, "brand-user", "品牌用户 B",
+                passwordEncoder.encode("Brand#Pass123"), "ACTIVE");
+        try {
+            try (TenantContext.Scope ignored = TenantContext.open(tenantA, userA)) {
+                assertThatThrownBy(() -> configurationService.updateSetting("branding.systemName",
+                        new ConfigurationModels.UpdateSetting(" ", 0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> configurationService.updateSetting("branding.logoUrl",
+                        new ConfigurationModels.UpdateSetting("//untrusted.example/logo.png", 0))).isInstanceOf(ApiException.class);
+                configurationService.updateSetting("branding.systemName",
+                        new ConfigurationModels.UpdateSetting("化工集团 A", 0));
+                configurationService.updateSetting("branding.logoUrl",
+                        new ConfigurationModels.UpdateSetting("/assets/tenant-a-logo.png", 0));
+                configurationService.updateSetting("branding.footerText",
+                        new ConfigurationModels.UpdateSetting("仅 A 租户页脚", 0));
+            }
+            var a = authService.login(new AuthModels.LoginCommand(
+                    "BRAND-A", "brand-user", "Brand#Pass123", "brand-device-a"), "127.0.0.1");
+            var b = authService.login(new AuthModels.LoginCommand(
+                    "BRAND-B", "brand-user", "Brand#Pass123", "brand-device-b"), "127.0.0.1");
+            mockMvc.perform(get("/api/configuration/branding"))
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/configuration/settings")
+                            .header("Authorization", "Bearer " + a.accessToken()))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/configuration/branding")
+                            .header("Authorization", "Bearer " + a.accessToken()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.systemName").value("化工集团 A"))
+                    .andExpect(jsonPath("$.data.logoUrl").value("/assets/tenant-a-logo.png"))
+                    .andExpect(jsonPath("$.data.footerText").value("仅 A 租户页脚"))
+                    .andExpect(jsonPath("$.data.faviconUrl").value(""))
+                    .andExpect(jsonPath("$.data").value(aMapWithSize(4)));
+            mockMvc.perform(get("/api/configuration/branding")
+                            .header("Authorization", "Bearer " + b.accessToken()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.systemName").value("工业供应商管理系统"))
+                    .andExpect(jsonPath("$.data.footerText").value(""));
+        } finally {
+            jdbcTemplate.update("DELETE FROM cfg_tenant_setting WHERE tenant_id IN (?,?)", tenantA, tenantB);
+            jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE user_id IN (?,?)", userA, userB);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE id IN (?,?)", userA, userB);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantA, tenantB);
         }
     }
 

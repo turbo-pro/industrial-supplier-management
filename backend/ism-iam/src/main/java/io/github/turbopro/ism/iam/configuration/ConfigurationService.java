@@ -31,6 +31,12 @@ public class ConfigurationService {
     @Transactional
     public void removeItem(String typeCode,String itemCode,int version){long tenantId=tenant();requireType(tenantId,typeCode);if(mapper.deleteItem(tenantId,typeCode,itemCode,version)!=1)throw new ApiException(CommonErrorCode.CONFLICT);}
     public List<ConfigurationModels.SettingView> settings(){var overrides=mapper.tenantSettings(tenant()).stream().collect(Collectors.toMap(ConfigurationModels.SettingRow::settingKey,Function.identity()));return systemMapper.settings().stream().map(definition->{var value=overrides.get(definition.settingKey());return value==null?new ConfigurationModels.SettingView(definition.settingKey(),definition.valueType(),definition.defaultValue(),0):new ConfigurationModels.SettingView(value.settingKey(),value.valueType(),value.settingValue(),value.version());}).toList();}
+    public ConfigurationModels.BrandingView branding(){
+        var effective=settings().stream().collect(Collectors.toMap(ConfigurationModels.SettingView::key,ConfigurationModels.SettingView::value));
+        return new ConfigurationModels.BrandingView(effective.getOrDefault("branding.systemName","工业供应商管理系统"),
+            effective.getOrDefault("branding.logoUrl",""),effective.getOrDefault("branding.faviconUrl",""),
+            effective.getOrDefault("branding.footerText",""));
+    }
     public ConfigurationModels.EscalationUserPage escalationUsers(String keyword,int page,int size){
         if(page<0||page>10000||size<1||size>50||keyword!=null&&keyword.length()>100)
             throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
@@ -56,8 +62,11 @@ public class ConfigurationService {
             throw new ApiException(CommonErrorCode.CONFLICT);
         return settings().stream().filter(item->item.key().equals(key)).findFirst().orElseThrow();
     }
-    private void validate(String type,String value){try{switch(type){case "INTEGER"->{if(Long.parseLong(value)<0)throw new IllegalArgumentException();}case "URL"->{if(!value.isBlank()){URI uri=URI.create(value);if(!value.startsWith("/")&&!List.of("http","https").contains(uri.getScheme()))throw new IllegalArgumentException();}}default->{}}}catch(Exception exception){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}}
+    private void validate(String type,String value){try{switch(type){case "INTEGER"->{if(Long.parseLong(value)<0)throw new IllegalArgumentException();}case "URL"->{if(!value.isBlank()){URI uri=URI.create(value);if(value.startsWith("//")||!value.startsWith("/")&&!List.of("http","https").contains(uri.getScheme()))throw new IllegalArgumentException();}}default->{}}}catch(Exception exception){throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);}}
     private void validateKey(String key,String value){
+        if("branding.systemName".equals(key)&&(value.isBlank()||value.length()>100)
+                ||"branding.footerText".equals(key)&&value.length()>300)
+            throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);
         if(("exit.autoReminderEnabled".equals(key)||"exit.accessAutoReminderEnabled".equals(key))&&!List.of("0","1").contains(value))
             throw new ApiException(ConfigurationErrorCode.INVALID_SETTING_VALUE);
         if("exit.autoReminderIntervalHours".equals(key)||"exit.accessAutoReminderIntervalHours".equals(key)){

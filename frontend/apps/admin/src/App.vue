@@ -25,7 +25,7 @@ function route(path:string){return router.resolve(path).matched.some(r=>r.path==
       <template #footer><el-button v-if="!session.passwordChangeRequired" @click="dismissPasswordDialog">稍后再说</el-button><el-button type="primary" :loading="changing" @click="changePassword">确认修改</el-button></template>
     </el-dialog>
     <el-aside :width="collapsed?'68px':'232px'" class="sidebar">
-      <div class="logo"><strong>ISM</strong><span v-if="!collapsed">工业供应链</span></div>
+      <div class="logo"><img v-if="session.branding.logoUrl" :src="session.branding.logoUrl" alt="租户 Logo" style="max-width:44px;max-height:36px;object-fit:contain"/><strong v-else>ISM</strong><span v-if="!collapsed">{{session.branding.systemName}}</span></div>
       <nav class="sidebar-menu-scroll" aria-label="主导航">
         <el-menu router :collapse="collapsed" :default-active="$route.path" background-color="#102a43" text-color="#b8c7d5" active-text-color="#fff">
           <el-sub-menu v-for="menu in session.menus" :key="menu.id" :index="menu.route">
@@ -35,6 +35,6 @@ function route(path:string){return router.resolve(path).matched.some(r=>r.path==
         </el-menu>
       </nav>
     </el-aside>
-    <el-container><el-header class="topbar"><div class="topbar-left"><el-button text :icon="Fold" @click="collapsed=!collapsed"/><el-breadcrumb separator="/"><el-breadcrumb-item>供应商管理平台</el-breadcrumb-item><el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><el-button text :icon="Search" @click="router.push('/search')">业务搜索</el-button><el-select :model-value="session.currentOrganization?.id" style="width:220px" @change="session.switchOrganization"><el-option v-for="item in session.organizationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><span class="user-name">租户管理员</span><el-button text @click="showPasswordDialog=true">修改密码</el-button><el-button text :icon="SwitchButton" @click="logout">退出</el-button></div></el-header><el-main class="content"><router-view v-if="!session.passwordChangeRequired" /></el-main></el-container>
+    <el-container><el-header class="topbar"><div class="topbar-left"><el-button text :icon="Fold" @click="collapsed=!collapsed"/><el-breadcrumb separator="/"><el-breadcrumb-item>{{session.branding.systemName}}</el-breadcrumb-item><el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item></el-breadcrumb></div><div class="topbar-right"><el-button text :icon="Search" @click="router.push('/search')">业务搜索</el-button><el-select :model-value="session.currentOrganization?.id" style="width:220px" @change="session.switchOrganization"><el-option v-for="item in session.organizationOptions" :key="item.id" :label="item.label" :value="item.id"/></el-select><span class="user-name">租户管理员</span><el-button text @click="showPasswordDialog=true">修改密码</el-button><el-button text :icon="SwitchButton" @click="logout">退出</el-button></div></el-header><el-main class="content"><router-view v-if="!session.passwordChangeRequired" /><footer v-if="session.branding.footerText" style="margin-top:24px;text-align:center;color:#71808f">{{session.branding.footerText}}</footer></el-main></el-container>
   </el-container>
 </template>

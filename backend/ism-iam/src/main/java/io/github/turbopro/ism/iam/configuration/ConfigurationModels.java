@@ -16,6 +16,7 @@ public final class ConfigurationModels {
         @NotBlank @Size(max=100) String label,@NotBlank @Size(max=200) String value,int sortOrder,
         @Pattern(regexp="ACTIVE|DISABLED") String status,@PositiveOrZero int version) {}
     public record SettingView(String key,String valueType,String value,int version) {}
+    public record BrandingView(String systemName,String logoUrl,String faviconUrl,String footerText) {}
     public record UpdateSetting(@NotNull @Size(max=2000) String value,@PositiveOrZero int version) {}
     public record DictionaryTypeRow(String typeCode,String typeName,boolean tenantExtensible) {}
     public record DictionaryItemRow(Long id,String itemCode,String itemLabel,String itemValue,int sortOrder,String status,int version,String source) {}
