@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 @Mapper
 public interface AccessMapper extends TenantScopedMapper {
@@ -39,6 +40,30 @@ public interface AccessMapper extends TenantScopedMapper {
     int grantScopeOrganizations(long tenantId,long roleId,String resource,Set<Long> ids);
     @Select("SELECT id,username,display_name,status,force_password_change,version FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY created_at,id")
     List<AccessModels.UserRow> users(long tenantId);
+    @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY id LIMIT 1 FOR UPDATE")
+    Long lockTenant(long tenantId);
+    @Select("SELECT id,username,display_name,status,force_password_change,version FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 FOR UPDATE")
+    AccessModels.UserRow userForStatusUpdate(long tenantId,long userId);
+    @Select("""
+        SELECT COUNT(DISTINCT u.id) FROM iam_user u
+        JOIN iam_user_role ur ON ur.tenant_id=u.tenant_id AND ur.user_id=u.id
+        JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id
+        WHERE u.tenant_id=#{tenantId} AND u.status='ACTIVE' AND u.deleted=0
+          AND r.role_code='TENANT_ADMIN' AND r.status='ACTIVE'
+        """)
+    int activeTenantAdministrators(long tenantId);
+    @Select("""
+        SELECT COUNT(*) FROM iam_user_role ur JOIN iam_role r ON r.id=ur.role_id AND r.tenant_id=ur.tenant_id
+        WHERE ur.tenant_id=#{tenantId} AND ur.user_id=#{userId}
+          AND r.role_code='TENANT_ADMIN' AND r.status='ACTIVE'
+        """)
+    int tenantAdministratorRole(long tenantId,long userId);
+    @Select("SELECT id FROM iam_role WHERE tenant_id=#{tenantId} AND role_code='TENANT_ADMIN' AND status='ACTIVE'")
+    Long tenantAdminRoleId(long tenantId);
+    @Update("UPDATE iam_user SET status=#{status},version=version+1,token_version=token_version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND version=#{version}")
+    int updateUserStatus(long tenantId,long userId,String status,int version);
+    @Update("UPDATE iam_refresh_token SET revoked_at=#{now},revoke_reason=#{reason} WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND revoked_at IS NULL")
+    int revokeRefreshTokens(long tenantId,long userId,LocalDateTime now,String reason);
     @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0 FOR SHARE")
     Long activeUserForAssignment(long tenantId,long userId);
     @Insert("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status,force_password_change) VALUES(#{id},#{tenantId},#{username},#{displayName},#{passwordHash},'ACTIVE',1)")

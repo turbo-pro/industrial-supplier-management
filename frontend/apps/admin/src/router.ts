@@ -12,6 +12,7 @@ import QualityNonconformancePage from './views/QualityNonconformancePage.vue';
 import PerformanceEvaluationPage from './views/PerformanceEvaluationPage.vue';
 import ComingSoonPage from './views/ComingSoonPage.vue';
 import TenantSettingPage from './views/TenantSettingPage.vue';
+import UserManagementPage from './views/UserManagementPage.vue';
 import InboxPage from './views/InboxPage.vue';
 import ExitTaskPage from './views/ExitTaskPage.vue';
 import ExitMonitorPage from './views/ExitMonitorPage.vue';
@@ -37,6 +38,7 @@ export default createRouter({history:createWebHistory(),routes:[
   {path:'/quality/nonconformances',component:QualityNonconformancePage,meta:{title:'质量不符合项'}},
   {path:'/performance/evaluations',component:PerformanceEvaluationPage,meta:{title:'供应商绩效'}},
   {path:'/system/settings',component:TenantSettingPage,meta:{title:'租户配置'}},
+  {path:'/system/users',component:UserManagementPage,meta:{title:'用户管理'}},
   {path:'/coming-soon',component:ComingSoonPage,meta:{title:'功能建设中'}},
   {path:'/:pathMatch(.*)*',component:ComingSoonPage,meta:{title:'功能建设中'}}
 ]});

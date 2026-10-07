@@ -13,6 +13,7 @@ import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 @Service
 public class AccessService {
@@ -94,8 +95,36 @@ public class AccessService {
     @Transactional
     public void assignUserRoles(long userId, AccessModels.AssignUserRoles command) {
         long tenantId=tenantId();
+        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        AccessModels.UserRow user=mapper.userForStatusUpdate(tenantId,userId);
+        if(user==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        Long adminRoleId=mapper.tenantAdminRoleId(tenantId);
+        if(adminRoleId!=null&&"ACTIVE".equals(user.status())&&mapper.tenantAdministratorRole(tenantId,userId)>0
+                &&mapper.activeTenantAdministrators(tenantId)<=1
+                &&!command.roleIds().contains(Long.toString(adminRoleId)))
+            throw new ApiException(AccessErrorCode.LAST_ADMIN);
         assignRoles(tenantId,userId,command.roleIds());
         if(mapper.revokeUserSessions(tenantId,userId)!=1) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"ROLE_CHANGED");
+    }
+
+    @Transactional
+    public AccessModels.UserView changeUserStatus(long userId,AccessModels.ChangeUserStatus command) {
+        long tenantId=tenantId();
+        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        AccessModels.UserRow current=mapper.userForStatusUpdate(tenantId,userId);
+        if(current==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(current.version()!=command.version()||current.status().equals(command.status()))
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        if("DISABLED".equals(command.status())) {
+            if(userId==TenantContext.require().actorId()) throw new ApiException(AccessErrorCode.SELF_DISABLE);
+            if(mapper.tenantAdministratorRole(tenantId,userId)>0&&mapper.activeTenantAdministrators(tenantId)<=1)
+                throw new ApiException(AccessErrorCode.LAST_ADMIN);
+        }
+        if(mapper.updateUserStatus(tenantId,userId,command.status(),command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        if("DISABLED".equals(command.status())) mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"ACCOUNT_DISABLED");
+        return mapper.users(tenantId).stream().filter(row->row.id()==userId).map(this::userView).findFirst().orElseThrow();
     }
 
     private void assignRoles(long tenantId,long userId,Set<String> values){

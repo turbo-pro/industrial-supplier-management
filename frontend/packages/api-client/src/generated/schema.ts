@@ -916,6 +916,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeUserStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configuration/dictionaries": {
         parameters: {
             query?: never;
@@ -5127,6 +5143,11 @@ export interface components {
         AssignUserRoles: {
             roleIds: string[];
         };
+        ChangeAccessUserStatus: {
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+        };
         AccessUser: {
             id: string;
             username: string;
@@ -7131,6 +7152,39 @@ export interface operations {
                 };
             };
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    changeUserStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeAccessUserStatus"];
+            };
+        };
+        responses: {
+            /** @description Tenant user status updated; active sessions invalidated on disable */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessUserResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     listDictionaries: {

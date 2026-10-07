@@ -35,6 +35,8 @@ public final class AccessModels {
         public CreateUser { roleIds = roleIds == null ? Set.of() : Set.copyOf(roleIds); }
     }
     public record AssignUserRoles(@NotEmpty Set<String> roleIds) {}
+    public record ChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
+                                   @PositiveOrZero int version) {}
     public record RoleRow(long id, String roleCode, String roleName, boolean builtIn, String status, int version) {}
     public record RoleView(String id, String code, String name, boolean builtIn, String status, int version) {}
     public record UserRow(long id, String username, String displayName, String status,

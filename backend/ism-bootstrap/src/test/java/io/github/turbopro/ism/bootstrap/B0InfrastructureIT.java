@@ -1410,6 +1410,61 @@ class B0InfrastructureIT {
     }
 
     @Test
+    void shouldEnforceTenantUserStatusAndLastAdministratorSafety() {
+        long tenantId = 198000L, adminId = 198001L, memberId = 198002L, foreignTenantId = 198100L;
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?, 'ACTIVE')", tenantId, "ACCESS-LIFECYCLE", "账号生命周期");
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?, 'ACTIVE')", foreignTenantId, "ACCESS-FOREIGN", "外部租户");
+        try {
+            jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,'ACTIVE')",
+                    adminId, tenantId, "lifecycle-admin", "管理员", passwordEncoder.encode("Initial#Pass123"));
+            jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,'ACTIVE')",
+                    memberId, tenantId, "lifecycle-member", "成员", passwordEncoder.encode("Initial#Pass123"));
+            jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,'ACTIVE')",
+                    foreignTenantId + 1, foreignTenantId, "foreign-member", "外部成员", passwordEncoder.encode("Initial#Pass123"));
+            jdbcTemplate.update("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(?,?, 'TENANT_ADMIN','租户管理员',1,'ACTIVE')", tenantId + 10, tenantId);
+            jdbcTemplate.update("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(?,?, 'MEMBER','普通成员',0,'ACTIVE')", tenantId + 11, tenantId);
+            jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, adminId, tenantId + 10);
+            jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, memberId, tenantId + 11);
+            AuthModels.TokenPair memberToken = authService.login(new AuthModels.LoginCommand(
+                    "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1");
+            try (var context = TenantContext.open(tenantId, adminId)) {
+                assertThatThrownBy(() -> accessService.changeUserStatus(adminId, new AccessModels.ChangeUserStatus("DISABLED", 0)))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.assignUserRoles(adminId,
+                        new AccessModels.AssignUserRoles(Set.of(Long.toString(tenantId + 11)))))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.changeUserStatus(foreignTenantId + 1,
+                        new AccessModels.ChangeUserStatus("DISABLED", 0))).isInstanceOf(ApiException.class);
+                var disabled = accessService.changeUserStatus(memberId, new AccessModels.ChangeUserStatus("DISABLED", 0));
+                assertThat(disabled.status()).isEqualTo("DISABLED");
+                assertThatThrownBy(() -> accessService.changeUserStatus(memberId, new AccessModels.ChangeUserStatus("ACTIVE", 0)))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.requireActiveUser(memberId, 0)).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.refresh(new AuthModels.RefreshCommand(
+                        memberToken.refreshToken(), "lifecycle-device"), "127.0.0.1")).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1"))
+                        .isInstanceOf(ApiException.class);
+                assertThat(accessService.changeUserStatus(memberId, new AccessModels.ChangeUserStatus("ACTIVE", 1)).status())
+                        .isEqualTo("ACTIVE");
+                assertThat(authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1").accessToken())
+                        .isNotBlank();
+            }
+            try (var context = TenantContext.open(tenantId, memberId)) {
+                assertThatThrownBy(() -> accessService.changeUserStatus(adminId,
+                        new AccessModels.ChangeUserStatus("DISABLED", 0))).isInstanceOf(ApiException.class);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_user_role WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_role WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_user WHERE tenant_id IN (?,?)", tenantId, foreignTenantId);
+            jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantId, foreignTenantId);
+        }
+    }
+
+    @Test
     void shouldProtectLoginRotateRefreshTokenAndInvalidateTokensAfterPasswordChange() {
         long tenantId = 100L;
         long userId = 101L;

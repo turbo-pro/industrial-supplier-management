@@ -701,6 +701,21 @@ paths:
       responses:
         '200': { description: Roles assigned and existing sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/{id}/status:
+    put:
+      operationId: changeUserStatus
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeAccessUserStatus' } } } }
+      responses:
+        '200': { description: Tenant user status updated; active sessions invalidated on disable, content: { application/json: { schema: { $ref: '#/components/schemas/AccessUserResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /configuration/dictionaries:
     get:
       operationId: listDictionaries
@@ -3234,6 +3249,12 @@ components:
       type: object
       required: [roleIds]
       properties: { roleIds: { type: array, minItems: 1, uniqueItems: true, items: { type: string } } }
+    ChangeAccessUserStatus:
+      type: object
+      required: [status, version]
+      properties:
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer, minimum: 0 }
     AccessUser:
       type: object
       required: [id, username, displayName, status, passwordChangeRequired, version]
