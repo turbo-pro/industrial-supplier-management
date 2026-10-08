@@ -48,7 +48,7 @@ public class AuthService {
             passwordEncoder.matches(command.password(), dummyHash);
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
-        if (user.lockedUntil() != null && user.lockedUntil().isAfter(now)) {
+        if (user.manualLocked() || user.lockedUntil() != null && user.lockedUntil().isAfter(now)) {
             throw new ApiException(IamErrorCode.ACCOUNT_LOCKED);
         }
         if (!"ACTIVE".equals(user.status()) || !passwordEncoder.matches(command.password(), user.passwordHash())) {
@@ -66,8 +66,11 @@ public class AuthService {
     public AuthModels.TokenPair refresh(AuthModels.RefreshCommand command, String ip) {
         LocalDateTime now = LocalDateTime.now();
         String oldHash = hash(command.refreshToken());
+        Long userId = mapper.refreshTokenUserId(oldHash);
+        if (userId == null) throw new ApiException(IamErrorCode.TOKEN_INVALID);
+        AuthModels.AuthUser user = mapper.findByIdForUpdate(userId);
         AuthModels.RefreshTokenRecord current = mapper.lockRefreshToken(oldHash);
-        if (current == null) {
+        if (current == null || current.userId()!=userId) {
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
         if (current.revokedAt() != null) {
@@ -81,8 +84,7 @@ public class AuthService {
             mapper.revokeFamily(current.familyId(), now, "EXPIRED_OR_DEVICE_MISMATCH");
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
-        AuthModels.AuthUser user = mapper.findById(current.userId());
-        if (user == null || !"ACTIVE".equals(user.status())) {
+        if (user == null || !"ACTIVE".equals(user.status()) || user.manualLocked()) {
             mapper.revokeFamily(current.familyId(), now, "USER_INACTIVE");
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
@@ -119,7 +121,8 @@ public class AuthService {
 
     public AuthModels.AuthUser requireActiveUser(long userId, int tokenVersion) {
         AuthModels.AuthUser user = mapper.findById(userId);
-        if (user == null || !"ACTIVE".equals(user.status()) || user.tokenVersion() != tokenVersion) {
+        if (user == null || !"ACTIVE".equals(user.status()) || user.manualLocked()
+                || user.tokenVersion() != tokenVersion) {
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
         return user;

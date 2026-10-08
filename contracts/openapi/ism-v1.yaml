@@ -735,6 +735,20 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/{id}/login-lock:
+    put:
+      operationId: changeAccessUserLoginLock
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeAccessUserLoginLock' } } } }
+      responses:
+        '200': { description: Login lock changed without changing account status; existing sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/AccessUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /configuration/dictionaries:
     get:
       operationId: listDictionaries
@@ -3282,15 +3296,25 @@ components:
       properties:
         temporaryPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128, description: 'Requires uppercase, lowercase, digit, and non-alphanumeric character.' }
         version: { type: integer, minimum: 0 }
+    ChangeAccessUserLoginLock:
+      type: object
+      required: [locked, reason, version]
+      properties:
+        locked: { type: boolean }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        version: { type: integer, minimum: 0 }
     AccessUser:
       type: object
-      required: [id, username, displayName, status, passwordChangeRequired, version, roleIds]
+      required: [id, username, displayName, status, passwordChangeRequired, manualLocked, version, roleIds]
       properties:
         id: { type: string }
         username: { type: string }
         displayName: { type: string }
         status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] }
         passwordChangeRequired: { type: boolean }
+        manualLocked: { type: boolean }
+        manualLockReason: { type: string, nullable: true }
+        automaticLockedUntil: { type: string, format: date-time, nullable: true }
         version: { type: integer }
         roleIds: { type: array, uniqueItems: true, items: { type: string } }
     AccessUserListResponse:

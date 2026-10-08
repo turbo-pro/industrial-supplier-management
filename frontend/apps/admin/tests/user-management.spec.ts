@@ -4,8 +4,8 @@ const response = (data: unknown) => ({ status: 200, contentType: 'application/js
 
 test('tenant user page creates and disables a member with versioned request', async ({ page }) => {
   let members = [
-    { id: '1', username: 'admin', displayName: '管理员', status: 'ACTIVE', passwordChangeRequired: false, version: 0, roleIds: ['10'] },
-    { id: '2', username: 'member', displayName: '成员', status: 'ACTIVE', passwordChangeRequired: false, version: 0, roleIds: ['11'] },
+    { id: '1', username: 'admin', displayName: '管理员', status: 'ACTIVE', passwordChangeRequired: false, manualLocked: false, manualLockReason: null, automaticLockedUntil: null, version: 0, roleIds: ['10'] },
+    { id: '2', username: 'member', displayName: '成员', status: 'ACTIVE', passwordChangeRequired: false, manualLocked: false, manualLockReason: null, automaticLockedUntil: null, version: 0, roleIds: ['11'] },
   ];
   let createdBody: Record<string, unknown> | undefined;
   await page.route('**/api/auth/login', route => route.fulfill(response({ accessToken: 'user-token', refreshToken: 'refresh', expiresIn: 900,
@@ -23,7 +23,7 @@ test('tenant user page creates and disables a member with versioned request', as
       const body = route.request().postDataJSON();
       createdBody = body;
       expect(route.request().headers()['idempotency-key']).toBeTruthy();
-      members.push({ id: '3', username: 'newmember', displayName: '新成员', status: 'ACTIVE', passwordChangeRequired: true, version: 0, roleIds: ['11'] });
+      members.push({ id: '3', username: 'newmember', displayName: '新成员', status: 'ACTIVE', passwordChangeRequired: true, manualLocked: false, manualLockReason: null, automaticLockedUntil: null, version: 0, roleIds: ['11'] });
       await route.fulfill(response(members[2]));
     } else await route.fulfill(response(members));
   });
@@ -43,6 +43,19 @@ test('tenant user page creates and disables a member with versioned request', as
     expect(route.request().postDataJSON()).toEqual({ temporaryPassword: 'Temporary#Pass123', version: 2 });
     expect(route.request().headers()['idempotency-key']).toBeTruthy();
     members = members.map(member => member.id === '2' ? { ...member, passwordChangeRequired: true, version: 3 } : member);
+    await route.fulfill(response(members[1]));
+  });
+  let lockRequests = 0;
+  await page.route('**/api/access/users/2/login-lock', async route => {
+    const body = route.request().postDataJSON();
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    if (lockRequests++ === 0) {
+      expect(body).toEqual({ locked: true, reason: '安全调查', version: 3 });
+      members = members.map(member => member.id === '2' ? { ...member, manualLocked: true, manualLockReason: '安全调查', version: 4 } : member);
+    } else {
+      expect(body).toEqual({ locked: false, reason: '调查结束', version: 4 });
+      members = members.map(member => member.id === '2' ? { ...member, manualLocked: false, manualLockReason: null, version: 5 } : member);
+    }
     await route.fulfill(response(members[1]));
   });
   await page.goto('/');
@@ -65,6 +78,16 @@ test('tenant user page creates and disables a member with versioned request', as
   await page.getByRole('dialog').getByRole('textbox', { name: '临时密码' }).fill('Temporary#Pass123');
   await page.getByRole('dialog').getByRole('button', { name: '确认重置' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('待完成');
+  await expect(adminRow.getByRole('button', { name: '锁定登录' })).toBeDisabled();
+  await page.getByRole('row').filter({ hasText: 'member' }).getByRole('button', { name: '锁定登录' }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: '操作原因' }).fill('安全调查');
+  await page.getByRole('dialog').getByRole('button', { name: '确认锁定' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('手工锁定');
+  await page.getByRole('row').filter({ hasText: 'member' }).getByRole('button', { name: '解锁登录' }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: '操作原因' }).fill('调查结束');
+  await page.getByRole('dialog').getByRole('button', { name: '确认解锁' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('停用');
+  await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('未锁定');
   await page.getByRole('button', { name: '新建用户' }).click();
   await page.getByRole('textbox', { name: '用户名' }).fill('newmember');
   await page.getByRole('textbox', { name: '姓名' }).fill('新成员');

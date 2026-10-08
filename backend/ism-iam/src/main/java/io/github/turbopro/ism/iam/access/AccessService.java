@@ -165,6 +165,34 @@ public class AccessService {
         return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
     }
 
+    @Transactional
+    public AccessModels.UserView changeLoginLock(long userId,AccessModels.ChangeLoginLock command) {
+        long tenantId=tenantId(), actorId=TenantContext.require().actorId();
+        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        AccessModels.UserRow target=mapper.userForStatusUpdate(tenantId,userId);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(actorId==userId) throw new ApiException(AccessErrorCode.SELF_LOGIN_LOCK);
+        if(mapper.tenantAdministratorRole(tenantId,actorId)==0)
+            throw new ApiException(AccessErrorCode.LOGIN_LOCK_REQUIRES_ADMIN);
+        LocalDateTime now=LocalDateTime.now();
+        int changed;
+        if(command.locked()) {
+            if(target.manualLocked()) throw new ApiException(CommonErrorCode.CONFLICT);
+            if("ACTIVE".equals(target.status())&&mapper.tenantAdministratorRole(tenantId,userId)>0
+                    &&mapper.activeTenantAdministrators(tenantId)<=1)
+                throw new ApiException(AccessErrorCode.LAST_ADMIN);
+            changed=mapper.lockLogin(tenantId,userId,command.reason().trim(),now,actorId,command.version());
+        } else {
+            if(!target.manualLocked()&&(target.lockedUntil()==null||!target.lockedUntil().isAfter(now)))
+                throw new ApiException(CommonErrorCode.CONFLICT);
+            changed=mapper.unlockLogin(tenantId,userId,command.version());
+        }
+        if(changed!=1) throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.revokeRefreshTokens(tenantId,userId,now,command.locked()?"MANUAL_LOCK":"LOGIN_UNLOCK");
+        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
+    }
+
     private void assignRoles(long tenantId,long userId,Set<String> values){
         Set<Long> ids=parseIds(values); mapper.clearUserRoles(tenantId,userId);
         if(!ids.isEmpty()&&mapper.assignUserRoles(tenantId,userId,ids)!=ids.size()) throw new ApiException(AccessErrorCode.INVALID_GRANT,"角色不存在或已停用");
@@ -177,7 +205,10 @@ public class AccessService {
     }
     private AccessModels.RoleRow requireRole(long id){var row=mapper.role(tenantId(),id);if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);return row;}
     private AccessModels.RoleView roleView(AccessModels.RoleRow r){return new AccessModels.RoleView(Long.toString(r.id()),r.roleCode(),r.roleName(),r.builtIn(),r.status(),r.version());}
-    private AccessModels.UserView userView(AccessModels.UserRow r,Set<String> roleIds){return new AccessModels.UserView(Long.toString(r.id()),r.username(),r.displayName(),r.status(),r.forcePasswordChange(),r.version(),Set.copyOf(roleIds));}
+    private AccessModels.UserView userView(AccessModels.UserRow r,Set<String> roleIds){return new AccessModels.UserView(
+            Long.toString(r.id()),r.username(),r.displayName(),r.status(),r.forcePasswordChange(),r.manualLocked(),
+            r.manualLockReason(),r.lockedUntil()!=null&&r.lockedUntil().isAfter(LocalDateTime.now())?r.lockedUntil():null,
+            r.version(),Set.copyOf(roleIds));}
     private Set<Long> parseIds(Set<String> values){Set<Long> ids=new HashSet<>();for(String value:values)ids.add(parseId(value));return ids;}
     private long parseId(String value){try{long v=Long.parseLong(value);if(v<=0)throw new NumberFormatException();return v;}catch(NumberFormatException e){throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"ID 必须是正整数");}}
     private long tenantId(){return TenantContext.require().tenantId();}

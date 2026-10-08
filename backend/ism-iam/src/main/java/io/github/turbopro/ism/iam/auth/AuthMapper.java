@@ -8,20 +8,29 @@ import java.time.LocalDateTime;
 public interface AuthMapper {
     @Select("""
         SELECT u.id,u.tenant_id,u.username,u.display_name,u.password_hash,u.status,
-               u.force_password_change,u.locked_until,u.failed_count,u.token_version,u.last_login_at
+               u.force_password_change,u.locked_until,u.manual_locked,u.failed_count,u.token_version,u.last_login_at
         FROM iam_user u JOIN iam_tenant t ON t.id=u.tenant_id
         WHERE t.tenant_code=#{tenantCode} AND t.status='ACTIVE'
-          AND u.username=#{username} AND u.deleted=0
+          AND u.username=#{username} AND u.deleted=0 FOR UPDATE
         """)
     AuthModels.AuthUser findForLogin(String tenantCode, String username);
 
     @Select("""
         SELECT u.id,u.tenant_id,u.username,u.display_name,u.password_hash,u.status,u.force_password_change,
-               u.locked_until,u.failed_count,u.token_version,u.last_login_at
+               u.locked_until,u.manual_locked,u.failed_count,u.token_version,u.last_login_at
         FROM iam_user u JOIN iam_tenant t ON t.id=u.tenant_id
         WHERE u.id=#{id} AND u.deleted=0 AND t.status='ACTIVE'
         """)
     AuthModels.AuthUser findById(long id);
+    @Select("SELECT user_id FROM iam_refresh_token WHERE token_hash=#{hash}")
+    Long refreshTokenUserId(String hash);
+    @Select("""
+        SELECT u.id,u.tenant_id,u.username,u.display_name,u.password_hash,u.status,u.force_password_change,
+               u.locked_until,u.manual_locked,u.failed_count,u.token_version,u.last_login_at
+        FROM iam_user u JOIN iam_tenant t ON t.id=u.tenant_id
+        WHERE u.id=#{id} AND u.deleted=0 AND t.status='ACTIVE' FOR UPDATE
+        """)
+    AuthModels.AuthUser findByIdForUpdate(long id);
 
     @Select("""
         SELECT COALESCE((SELECT setting_value FROM cfg_tenant_setting

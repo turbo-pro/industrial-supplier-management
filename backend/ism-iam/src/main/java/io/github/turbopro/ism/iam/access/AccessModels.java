@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 public final class AccessModels {
     private AccessModels() {}
@@ -39,11 +40,15 @@ public final class AccessModels {
                                    @PositiveOrZero int version) {}
     public record ResetUserPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
                                     @PositiveOrZero int version) {}
+    public record ChangeLoginLock(boolean locked, @NotBlank @Size(max=500) String reason,
+                                  @PositiveOrZero int version) {}
     public record RoleRow(long id, String roleCode, String roleName, boolean builtIn, String status, int version) {}
     public record RoleView(String id, String code, String name, boolean builtIn, String status, int version) {}
     public record UserRow(long id, String username, String displayName, String status,
-                          boolean forcePasswordChange, int version) {}
+                          boolean forcePasswordChange, boolean manualLocked, String manualLockReason,
+                          LocalDateTime lockedUntil, int version) {}
     public record UserView(String id, String username, String displayName, String status,
-                           boolean passwordChangeRequired, int version, Set<String> roleIds) {}
+                           boolean passwordChangeRequired, boolean manualLocked, String manualLockReason,
+                           LocalDateTime automaticLockedUntil, int version, Set<String> roleIds) {}
     public record UserRoleRow(long userId, long roleId) {}
 }

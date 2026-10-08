@@ -12,8 +12,12 @@ const saving = ref(false);
 const showCreate = ref(false);
 const showRoles = ref(false);
 const showReset = ref(false);
+const showLock = ref(false);
 const selectedUser = ref<components['schemas']['AccessUser'] | null>(null);
 const resetTarget = ref<components['schemas']['AccessUser'] | null>(null);
+const lockTarget = ref<components['schemas']['AccessUser'] | null>(null);
+const nextLocked = ref(false);
+const lockReason = ref('');
 const temporaryPassword = ref('');
 const editRoleIds = ref<string[]>([]);
 const form = reactive({ username: '', displayName: '', initialPassword: '', primaryOrganizationId: '', roleIds: [] as string[] });
@@ -165,6 +169,41 @@ async function resetPassword() {
   }
 }
 
+function openLock(user: components['schemas']['AccessUser']) {
+  lockTarget.value = user;
+  nextLocked.value = !user.manualLocked && !user.automaticLockedUntil;
+  lockReason.value = '';
+  showLock.value = true;
+}
+
+async function changeLoginLock() {
+  const user = lockTarget.value;
+  if (!user || !lockReason.value.trim() || lockReason.value.trim().length > 500) {
+    ElMessage.warning('请填写 1–500 字的操作原因');
+    return;
+  }
+  saving.value = true;
+  try {
+    const { error, response } = await session.client.PUT('/access/users/{id}/login-lock', {
+      params: { path: { id: user.id }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+      body: { locked: nextLocked.value, reason: lockReason.value.trim(), version: user.version },
+    });
+    if (error) {
+      ElMessage.error(response.status === 409 ? '锁定状态或用户版本已变化，请刷新后重试' : error.error.message);
+      await load();
+      return;
+    }
+    showLock.value = false;
+    lockReason.value = '';
+    await load();
+    ElMessage.success(nextLocked.value ? '登录已锁定，旧会话已失效' : '登录锁定已解除，账号状态未改变');
+  } catch {
+    ElMessage.error('操作结果不确定，请刷新核对');
+  } finally {
+    saving.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -177,8 +216,9 @@ onMounted(load);
         <el-table-column prop="displayName" label="姓名" min-width="180"/>
         <el-table-column label="角色" min-width="220"><template #default="{row}">{{row.roleIds.map(roleName).join('、') || '未分配'}}</template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="row.status==='ACTIVE'?'success':'info'">{{row.status==='ACTIVE'?'启用':'停用'}}</el-tag></template></el-table-column>
+        <el-table-column label="登录锁" min-width="170"><template #default="{row}"><el-tag v-if="row.manualLocked" type="danger">手工锁定</el-tag><el-tag v-else-if="row.automaticLockedUntil" type="warning">临时锁定</el-tag><span v-else>未锁定</span><div v-if="row.manualLocked&&row.manualLockReason" class="muted">{{row.manualLockReason}}</div></template></el-table-column>
         <el-table-column label="首次改密" width="120"><template #default="{row}">{{row.passwordChangeRequired?'待完成':'已完成'}}</template></el-table-column>
-        <el-table-column label="操作" width="290"><template #default="{row}"><el-button link :disabled="saving||roles.length===0" @click="openRoles(row)">编辑角色</el-button><el-button link :disabled="saving||!canReset||row.id===session.actorId" @click="openReset(row)">重置密码</el-button><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
+        <el-table-column label="操作" width="370"><template #default="{row}"><el-button link :disabled="saving||roles.length===0" @click="openRoles(row)">编辑角色</el-button><el-button link :disabled="saving||!canReset||row.id===session.actorId" @click="openReset(row)">重置密码</el-button><el-button link :disabled="saving||!canReset||row.id===session.actorId" @click="openLock(row)">{{row.manualLocked||row.automaticLockedUntil?'解锁登录':'锁定登录'}}</el-button><el-button link :type="row.status==='ACTIVE'?'danger':'primary'" :disabled="saving||row.id===session.actorId" @click="changeStatus(row)">{{row.status==='ACTIVE'?'停用':'恢复'}}</el-button></template></el-table-column>
       </el-table>
     </el-card>
     <el-dialog v-model="showCreate" title="新建租户用户" width="560px" @closed="form.initialPassword=''">
@@ -201,6 +241,11 @@ onMounted(load);
       <el-alert title="重置后旧会话立即失效；账号下次登录须修改密码。临时密码仅通过安全渠道交付，不记录在审计或响应中。" type="warning" :closable="false"/>
       <el-form label-position="top" style="margin-top:16px"><el-form-item label="临时密码"><el-input v-model="temporaryPassword" type="password" show-password autocomplete="new-password" maxlength="128"/></el-form-item></el-form>
       <template #footer><el-button @click="showReset=false">取消</el-button><el-button type="primary" :loading="saving" @click="resetPassword">确认重置</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="showLock" :title="`${nextLocked?'锁定':'解锁'} ${lockTarget?.username ?? ''} 的登录`" width="560px" @closed="lockReason=''">
+      <el-alert :title="nextLocked?'锁定会立即撤销旧会话，但不会停用账号。':'解锁会清除手工及输错密码产生的临时锁定，但不会启用已停用账号。'" type="warning" :closable="false"/>
+      <el-form label-position="top" style="margin-top:16px"><el-form-item label="操作原因"><el-input v-model="lockReason" type="textarea" :rows="3" maxlength="500" show-word-limit/></el-form-item></el-form>
+      <template #footer><el-button @click="showLock=false">取消</el-button><el-button type="primary" :loading="saving" @click="changeLoginLock">确认{{nextLocked?'锁定':'解锁'}}</el-button></template>
     </el-dialog>
   </div>
 </template>

@@ -32,7 +32,7 @@ public final class AuthModels {
 
     public record AuthUser(long id, long tenantId, String username, String displayName,
                            String passwordHash, String status, boolean forcePasswordChange,
-                           LocalDateTime lockedUntil, int failedCount, int tokenVersion,
+                           LocalDateTime lockedUntil, boolean manualLocked, int failedCount, int tokenVersion,
                            LocalDateTime lastLoginAt) {}
 
     public record RefreshTokenRecord(long id, long tenantId, long userId, String tokenHash,

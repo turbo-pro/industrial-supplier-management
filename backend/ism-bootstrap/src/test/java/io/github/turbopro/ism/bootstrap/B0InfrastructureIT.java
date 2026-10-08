@@ -1486,6 +1486,10 @@ class B0InfrastructureIT {
                         new AccessModels.ResetUserPassword("Temporary#Pass123", 0)))
                         .isInstanceOfSatisfying(ApiException.class,
                                 error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.PASSWORD_RESET_REQUIRES_ADMIN));
+                assertThatThrownBy(() -> accessService.changeLoginLock(adminId,
+                        new AccessModels.ChangeLoginLock(true,"无权锁定管理员",0)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.LOGIN_LOCK_REQUIRES_ADMIN));
             }
             try (var context = TenantContext.open(tenantId, adminId)) {
                 AuthModels.TokenPair beforeReset = authService.login(new AuthModels.LoginCommand(
@@ -1524,6 +1528,59 @@ class B0InfrastructureIT {
                 assertThat(authService.login(new AuthModels.LoginCommand(
                         "ACCESS-LIFECYCLE", "lifecycle-member", "Changed#Pass456", "reset-device"), "127.0.0.1")
                         .user().passwordChangeRequired()).isFalse();
+                AuthModels.TokenPair beforeLock = authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE", "lifecycle-member", "Changed#Pass456", "lock-device"), "127.0.0.1");
+                assertThatThrownBy(() -> accessService.changeLoginLock(adminId,
+                        new AccessModels.ChangeLoginLock(true,"测试自锁",0)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(AccessErrorCode.SELF_LOGIN_LOCK));
+                assertThatThrownBy(() -> accessService.changeLoginLock(foreignTenantId+1,
+                        new AccessModels.ChangeLoginLock(true,"跨租户",0))).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(true,"陈旧版本",4))).isInstanceOf(ApiException.class);
+                var locked = accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(true,"安全调查",5));
+                assertThat(locked.manualLocked()).isTrue();
+                assertThat(locked.manualLockReason()).isEqualTo("安全调查");
+                assertThat(locked.status()).isEqualTo("ACTIVE");
+                assertThatThrownBy(() -> authService.requireActiveUser(memberId,6)).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.refresh(new AuthModels.RefreshCommand(
+                        beforeLock.refreshToken(),"lock-device"),"127.0.0.1")).isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","lock-device"),"127.0.0.1"))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(IamErrorCode.ACCOUNT_LOCKED));
+                assertThatThrownBy(() -> accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(true,"重复锁定",6))).isInstanceOf(ApiException.class);
+                var unlocked = accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(false,"调查结束",6));
+                assertThat(unlocked.manualLocked()).isFalse();
+                assertThat(unlocked.manualLockReason()).isNull();
+                assertThatThrownBy(() -> authService.refresh(new AuthModels.RefreshCommand(
+                        beforeLock.refreshToken(),"lock-device"),"127.0.0.1")).isInstanceOf(ApiException.class);
+                jdbcTemplate.update("UPDATE iam_user SET locked_until=?,failed_count=5 WHERE tenant_id=? AND id=?",
+                        LocalDateTime.now().plusMinutes(15),tenantId,memberId);
+                assertThat(accessService.users()).filteredOn(user -> user.id().equals(Long.toString(memberId)))
+                        .singleElement().satisfies(user -> assertThat(user.automaticLockedUntil()).isNotNull());
+                assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","lock-device"),"127.0.0.1"))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                error -> assertThat(error.errorCode()).isEqualTo(IamErrorCode.ACCOUNT_LOCKED));
+                var autoUnlocked = accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(false,"核实本人身份",7));
+                assertThat(autoUnlocked.automaticLockedUntil()).isNull();
+                assertThat(authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","lock-device"),"127.0.0.1")
+                        .accessToken()).isNotBlank();
+                assertThat(accessService.changeUserStatus(memberId,
+                        new AccessModels.ChangeUserStatus("DISABLED",8)).status()).isEqualTo("DISABLED");
+                assertThat(accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(true,"停用期间保留锁定",9)).manualLocked()).isTrue();
+                assertThat(accessService.changeLoginLock(memberId,
+                        new AccessModels.ChangeLoginLock(false,"解除独立锁定",10)).status()).isEqualTo("DISABLED");
+                assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","lock-device"),"127.0.0.1"))
+                        .isInstanceOf(ApiException.class);
             }
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);

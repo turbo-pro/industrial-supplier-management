@@ -38,19 +38,19 @@ public interface AccessMapper extends TenantScopedMapper {
     int grantScope(long tenantId,long roleId,String resource,String type);
     @Insert("<script>INSERT INTO iam_role_data_scope_organization(tenant_id,role_id,resource_code,organization_id) SELECT #{tenantId},#{roleId},#{resource},id FROM iam_organization WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND id IN <foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
     int grantScopeOrganizations(long tenantId,long roleId,String resource,Set<Long> ids);
-    @Select("SELECT id,username,display_name,status,force_password_change,version FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY created_at,id")
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY created_at,id")
     List<AccessModels.UserRow> users(long tenantId);
     @Select("SELECT ur.user_id,ur.role_id FROM iam_user_role ur JOIN iam_user u ON u.tenant_id=ur.tenant_id AND u.id=ur.user_id WHERE ur.tenant_id=#{tenantId} AND u.deleted=0 ORDER BY ur.user_id,ur.role_id")
     List<AccessModels.UserRoleRow> userRoles(long tenantId);
     @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY id LIMIT 1 FOR UPDATE")
     Long lockTenant(long tenantId);
-    @Select("SELECT id,username,display_name,status,force_password_change,version FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 FOR UPDATE")
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 FOR UPDATE")
     AccessModels.UserRow userForStatusUpdate(long tenantId,long userId);
     @Select("""
         SELECT COUNT(DISTINCT u.id) FROM iam_user u
         JOIN iam_user_role ur ON ur.tenant_id=u.tenant_id AND ur.user_id=u.id
         JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id
-        WHERE u.tenant_id=#{tenantId} AND u.status='ACTIVE' AND u.deleted=0
+        WHERE u.tenant_id=#{tenantId} AND u.status='ACTIVE' AND u.manual_locked=0 AND u.deleted=0
           AND r.role_code='TENANT_ADMIN' AND r.status='ACTIVE'
         """)
     int activeTenantAdministrators(long tenantId);
@@ -68,6 +68,10 @@ public interface AccessMapper extends TenantScopedMapper {
     String passwordHash(long tenantId,long userId);
     @Update("UPDATE iam_user SET password_hash=#{hash},force_password_change=1,password_changed_at=NULL,failed_count=0,locked_until=NULL,token_version=token_version+1,version=version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND version=#{version}")
     int resetUserPassword(long tenantId,long userId,String hash,int version);
+    @Update("UPDATE iam_user SET manual_locked=1,manual_lock_reason=#{reason},manual_locked_at=#{now},manual_locked_by=#{actorId},token_version=token_version+1,version=version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND manual_locked=0 AND version=#{version}")
+    int lockLogin(long tenantId,long userId,String reason,LocalDateTime now,long actorId,int version);
+    @Update("UPDATE iam_user SET manual_locked=0,manual_lock_reason=NULL,manual_locked_at=NULL,manual_locked_by=NULL,locked_until=NULL,failed_count=0,token_version=token_version+1,version=version+1 WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 AND version=#{version}")
+    int unlockLogin(long tenantId,long userId,int version);
     @Update("UPDATE iam_refresh_token SET revoked_at=#{now},revoke_reason=#{reason} WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND revoked_at IS NULL")
     int revokeRefreshTokens(long tenantId,long userId,LocalDateTime now,String reason);
     @Select("SELECT id FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND status='ACTIVE' AND deleted=0 FOR SHARE")
