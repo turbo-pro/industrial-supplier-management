@@ -48,6 +48,28 @@ public class ConsoleUserController {
         }));
     }
 
+    @PutMapping("/{id}/role") @RequiresPermission("platform:user:manage")
+    ApiResponse<ConsoleUserModels.View> changeRole(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,
+            @Valid @RequestBody ConsoleUserModels.ChangeRole command,@AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(once("PLATFORM_USER_ROLE:"+id,key,command,()->{
+            var result=service.changeRole(id,command,principal.userId());
+            audit.append(new AuditService.AuditCommand("PLATFORM_USER_ROLE","PLATFORM_USER",id,null,
+                    Map.of(),Map.of("roleCodes",result.roleCodes(),"version",result.version()),null,null));
+            return result;
+        }));
+    }
+
+    @PutMapping("/{id}/password-reset") @RequiresPermission("platform:user:manage")
+    ApiResponse<ConsoleUserModels.View> resetPassword(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,
+            @Valid @RequestBody ConsoleUserModels.ResetPassword command,@AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(once("PLATFORM_USER_PASSWORD_RESET:"+id,key,command,()->{
+            var result=service.resetPassword(id,command,principal.userId());
+            audit.append(new AuditService.AuditCommand("PLATFORM_USER_PASSWORD_RESET","PLATFORM_USER",id,null,
+                    Map.of(),Map.of("forcePasswordChange",result.passwordChangeRequired(),"version",result.version()),null,null));
+            return result;
+        }));
+    }
+
     private ConsoleUserModels.View once(String operation,String key,Object request,Supplier<ConsoleUserModels.View> action){
         String value=idempotency.execute(operation,key,write(request),Duration.ofHours(24),()->write(action.get()));
         try{return json.readValue(value,ConsoleUserModels.View.class);}catch(Exception e){throw new IllegalStateException("幂等响应无法解析",e);}

@@ -52,6 +52,40 @@ public class ConsoleUserService {
         return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
 
+    @Transactional
+    public ConsoleUserModels.View changeRole(long id,ConsoleUserModels.ChangeRole command,long actorId){
+        if(mapper.lockPlatform()==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        ConsoleUserModels.Row target=mapper.lockUser(id);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_ROLE_CHANGE);
+        boolean admin=mapper.isAdmin(id)>0;
+        if(admin=="PLATFORM_ADMIN".equals(command.roleCode())) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(admin&&"ACTIVE".equals(target.status())&&mapper.activeAdmins()<=1)
+            throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
+        mapper.clearRoles(id);
+        if(mapper.assignRole(id,command.roleCode())!=1) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        if(mapper.bumpSessionVersion(id,command.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.revokeTokens(id,LocalDateTime.now());
+        return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
+    }
+
+    @Transactional
+    public ConsoleUserModels.View resetPassword(long id,ConsoleUserModels.ResetPassword command,long actorId){
+        if(mapper.lockPlatform()==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        ConsoleUserModels.Row target=mapper.lockUser(id);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_PASSWORD_RESET);
+        if(!PasswordPolicy.isStrong(command.temporaryPassword()) ||
+                passwords.matches(command.temporaryPassword(),mapper.passwordHash(id)))
+            throw new ApiException(IamErrorCode.PASSWORD_POLICY);
+        if(mapper.resetPassword(id,passwords.encode(command.temporaryPassword()),command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.revokeTokens(id,LocalDateTime.now());
+        return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
+    }
+
     private ConsoleUserModels.View view(ConsoleUserModels.Row row,Set<String> roles){
         return new ConsoleUserModels.View(Long.toString(row.id()),row.username(),row.displayName(),row.status(),
                 row.forcePasswordChange(),row.version(),Set.copyOf(roles));

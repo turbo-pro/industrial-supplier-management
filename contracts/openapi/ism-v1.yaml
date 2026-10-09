@@ -419,6 +419,34 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/users/{id}/role:
+    put:
+      operationId: changeConsoleUserRole
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeConsoleUserRole' } } } }
+      responses:
+        '200': { description: Role replaced and old sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/users/{id}/password-reset:
+    put:
+      operationId: resetConsoleUserPassword
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ResetConsoleUserPassword' } } } }
+      responses:
+        '200': { description: Temporary password set; next login requires change and old sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /console/packages:
     get:
       operationId: listPackages
@@ -3366,6 +3394,18 @@ components:
       required: [status, version]
       properties:
         status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer, minimum: 0 }
+    ChangeConsoleUserRole:
+      type: object
+      required: [roleCode, version]
+      properties:
+        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+        version: { type: integer, minimum: 0 }
+    ResetConsoleUserPassword:
+      type: object
+      required: [temporaryPassword, version]
+      properties:
+        temporaryPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128 }
         version: { type: integer, minimum: 0 }
     ConsoleUser:
       type: object

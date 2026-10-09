@@ -104,8 +104,8 @@ public class ConsoleAuthService {
 
     @Transactional(noRollbackFor = ApiException.class)
     public void changePassword(long userId, ConsoleAuthModels.ChangePasswordCommand command) {
-        ConsoleAuthModels.PlatformUser user = mapper.findById(userId);
-        if (user == null || !passwords.matches(command.oldPassword(), user.passwordHash())) {
+        ConsoleAuthModels.PlatformUser user = mapper.findByIdForUpdate(userId);
+        if (user == null || !"ACTIVE".equals(user.status()) || !passwords.matches(command.oldPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
         if (!PasswordPolicy.isStrong(command.newPassword()) || passwords.matches(command.newPassword(), user.passwordHash())) {

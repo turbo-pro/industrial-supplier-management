@@ -542,6 +542,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeConsoleUserRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/users/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["resetConsoleUserPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/packages": {
         parameters: {
             query?: never;
@@ -5262,6 +5294,16 @@ export interface components {
             status: "ACTIVE" | "DISABLED";
             version: number;
         };
+        ChangeConsoleUserRole: {
+            /** @enum {string} */
+            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+            version: number;
+        };
+        ResetConsoleUserPassword: {
+            /** Format: password */
+            temporaryPassword: string;
+            version: number;
+        };
         ConsoleUser: {
             id: string;
             username: string;
@@ -6503,6 +6545,70 @@ export interface operations {
         };
         responses: {
             /** @description Status changed and prior sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeConsoleUserRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeConsoleUserRole"];
+            };
+        };
+        responses: {
+            /** @description Role replaced and old sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    resetConsoleUserPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetConsoleUserPassword"];
+            };
+        };
+        responses: {
+            /** @description Temporary password set; next login requires change and old sessions revoked */
             200: {
                 headers: {
                     [name: string]: unknown;

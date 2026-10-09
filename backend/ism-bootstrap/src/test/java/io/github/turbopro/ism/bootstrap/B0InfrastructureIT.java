@@ -1146,6 +1146,16 @@ class B0InfrastructureIT {
                             .contentType("application/json")
                             .content("{\"username\":\"forbidden-account\",\"displayName\":\"无权创建\",\"initialPassword\":\"Temporary#Pass123\",\"roleCode\":\"PLATFORM_ADMIN\"}"))
                     .andExpect(status().isForbidden());
+            mockMvc.perform(put("/api/console/users/"+adminId+"/role")
+                            .header("Authorization","Bearer "+supportToken.accessToken())
+                            .header("Idempotency-Key","support-must-not-role-001")
+                            .contentType("application/json").content("{\"roleCode\":\"PLATFORM_SUPPORT\",\"version\":0}"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(put("/api/console/users/"+adminId+"/password-reset")
+                            .header("Authorization","Bearer "+supportToken.accessToken())
+                            .header("Idempotency-Key","support-must-not-reset-001")
+                            .contentType("application/json").content("{\"temporaryPassword\":\"NewTemp#Pass123\",\"version\":0}"))
+                    .andExpect(status().isForbidden());
             assertThatThrownBy(()->consoleUserService.changeStatus(adminId,
                     new ConsoleUserModels.ChangeStatus("DISABLED",0),adminId))
                     .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
@@ -1164,6 +1174,49 @@ class B0InfrastructureIT {
             assertThatThrownBy(()->consoleAuthService.refresh(new ConsoleAuthModels.RefreshCommand(
                     supportToken.refreshToken(),"support-device"),"127.0.0.1"))
                     .isInstanceOf(ApiException.class);
+            assertThatThrownBy(()->consoleUserService.changeRole(adminId,
+                    new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",0),adminId))
+                    .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                            .isEqualTo(ConsoleUserErrorCode.SELF_ROLE_CHANGE));
+            var beforeRole=consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","Temporary#Pass123","role-device"),"127.0.0.1");
+            String roleBody="{\"roleCode\":\"PLATFORM_ADMIN\",\"version\":2}";
+            for(int retry=0;retry<2;retry++) mockMvc.perform(put("/api/console/users/"+supportId+"/role")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .header("Idempotency-Key","account-role-change-001")
+                            .contentType("application/json").content(roleBody))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.version").value(3));
+            mockMvc.perform(get("/api/console/auth/me").header("Authorization","Bearer "+beforeRole.accessToken()))
+                    .andExpect(status().isUnauthorized());
+            assertThatThrownBy(()->consoleAuthService.refresh(new ConsoleAuthModels.RefreshCommand(
+                    beforeRole.refreshToken(),"role-device"),"127.0.0.1"))
+                    .isInstanceOf(ApiException.class);
+            assertThatThrownBy(()->consoleUserService.changeRole(supportId,
+                    new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",2),adminId)).isInstanceOf(ApiException.class);
+            assertThat(consoleUserService.changeRole(supportId,
+                    new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",3),adminId).roleCodes())
+                    .containsExactly("PLATFORM_SUPPORT");
+            assertThatThrownBy(()->consoleUserService.resetPassword(adminId,
+                    new ConsoleUserModels.ResetPassword("NewTemp#Pass123",0),adminId))
+                    .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                            .isEqualTo(ConsoleUserErrorCode.SELF_PASSWORD_RESET));
+            assertThatThrownBy(()->consoleUserService.resetPassword(supportId,
+                    new ConsoleUserModels.ResetPassword("Temporary#Pass123",4),adminId)).isInstanceOf(ApiException.class);
+            mockMvc.perform(put("/api/console/users/"+supportId+"/password-reset")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .header("Idempotency-Key","account-password-reset-001")
+                            .contentType("application/json")
+                            .content("{\"temporaryPassword\":\"NewTemp#Pass123\",\"version\":4}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.passwordChangeRequired").value(true))
+                    .andExpect(jsonPath("$.data.temporaryPassword").doesNotExist());
+            assertThatThrownBy(()->consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","Temporary#Pass123","reset-device"),"127.0.0.1"))
+                    .isInstanceOf(ApiException.class);
+            assertThat(consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","NewTemp#Pass123","reset-device"),"127.0.0.1")
+                    .user().passwordChangeRequired()).isTrue();
             List<Long> otherAdmins=jdbcTemplate.queryForList("""
                     SELECT u.id FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id
                     JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE'
@@ -1173,6 +1226,10 @@ class B0InfrastructureIT {
                 for(long otherId:otherAdmins) jdbcTemplate.update("UPDATE plt_user SET status='DISABLED' WHERE id=?",otherId);
                 assertThatThrownBy(()->consoleUserService.changeStatus(adminId,
                         new ConsoleUserModels.ChangeStatus("DISABLED",0),supportId))
+                        .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                                .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
+                assertThatThrownBy(()->consoleUserService.changeRole(adminId,
+                        new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",0),supportId))
                         .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
                                 .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
             } finally {
@@ -1260,6 +1317,7 @@ class B0InfrastructureIT {
                     .andExpect(jsonPath("$.error.code").value("IAM_PASSWORD_CHANGE_REQUIRED"));
             consoleAuthService.changePassword(userId,
                     new ConsoleAuthModels.ChangePasswordCommand("Console#Pass123", "Changed#Pass456"));
+            assertThat(jdbcTemplate.queryForObject("SELECT version FROM plt_user WHERE id=?",Integer.class,userId)).isEqualTo(1);
             mockMvc.perform(get("/api/console/packages").header("Authorization", "Bearer " + forced.accessToken()))
                     .andExpect(status().isUnauthorized());
             ConsoleAuthModels.LoginCommand changed = new ConsoleAuthModels.LoginCommand(

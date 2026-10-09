@@ -80,7 +80,7 @@ public interface ConsoleAuthMapper {
 
     @Update("""
         UPDATE plt_user SET password_hash=#{hash},force_password_change=0,password_changed_at=#{now},
-            token_version=token_version+1,failed_count=0,locked_until=NULL WHERE id=#{id}
+            token_version=token_version+1,version=version+1,failed_count=0,locked_until=NULL WHERE id=#{id}
         """)
     int changePassword(long id, String hash, LocalDateTime now);
 

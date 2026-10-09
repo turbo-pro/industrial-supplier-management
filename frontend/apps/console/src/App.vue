@@ -19,6 +19,10 @@ const currentUser = ref<components['schemas']['ConsoleUserSummary'] | null>(null
 const users = ref<components['schemas']['ConsoleUser'][]>([]);
 const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' });
 const userBusy = ref(false);
+const roleDrafts = reactive<Record<string, 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT'>>({});
+const resetTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
+const temporaryPassword = ref('');
+const resetBusy = ref(false);
 const canManageUsers = () => currentUser.value?.permissions.includes('platform:user:manage') ?? false;
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
 
@@ -68,6 +72,7 @@ async function loadUsers() {
   const { data, error } = await client.GET('/console/users');
   if (error) { message.value = error.error.message; return; }
   users.value = data.data;
+  for (const user of users.value) roleDrafts[user.id] = user.roleCodes.includes('PLATFORM_ADMIN') ? 'PLATFORM_ADMIN' : 'PLATFORM_SUPPORT';
 }
 
 async function createUser() {
@@ -97,6 +102,38 @@ async function changeUserStatus(user: components['schemas']['ConsoleUser']) {
     message.value = next === 'ACTIVE' ? '账号已恢复' : '账号已停用';
     await loadUsers();
   } catch { message.value = '修改账号状态失败，请稍后重试'; }
+}
+
+async function changeUserRole(user: components['schemas']['ConsoleUser']) {
+  const roleCode = roleDrafts[user.id];
+  if (!roleCode || user.id === currentUser.value?.id || user.roleCodes.includes(roleCode)) return;
+  try {
+    const { error } = await client.PUT('/console/users/{id}/role', {
+      params: { path: { id: user.id }, header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } },
+      body: { roleCode, version: user.version },
+    });
+    if (error) { message.value = error.error.message; return; }
+    message.value = '平台角色已调整，目标账号需要重新登录';
+    await loadUsers();
+  } catch { message.value = '调整平台角色失败，请稍后重试'; }
+}
+
+async function resetUserPassword() {
+  const target = resetTarget.value;
+  if (!target || target.id === currentUser.value?.id) return;
+  resetBusy.value = true;
+  try {
+    const { error } = await client.PUT('/console/users/{id}/password-reset', {
+      params: { path: { id: target.id }, header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } },
+      body: { temporaryPassword: temporaryPassword.value, version: target.version },
+    });
+    if (error) { message.value = error.error.message; return; }
+    temporaryPassword.value = '';
+    resetTarget.value = null;
+    message.value = '临时密码已设置；请通过安全渠道交付，目标账号下次登录须改密';
+    await loadUsers();
+  } catch { message.value = '重置密码失败，请稍后重试'; }
+  finally { resetBusy.value = false; }
 }
 
 async function changePassword() {
@@ -138,6 +175,8 @@ function logout(reason = '') {
   packages.value = [];
   tenants.value = [];
   users.value = [];
+  resetTarget.value = null;
+  temporaryPassword.value = '';
   currentUser.value = null;
   message.value = reason;
 }
@@ -213,10 +252,19 @@ if (accessToken.value) {
         <button :disabled="userBusy" type="submit">创建平台账号</button>
       </form>
       <table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td><td>{{ user.roleCodes.join('、') }}</td><td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}</td>
-          <td><button v-if="canManageUsers()" type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button></td></tr>
+        <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td>
+          <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
+            <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="changeUserRole(user)">保存角色</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
+          <td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}</td>
+          <td><div v-if="canManageUsers()" class="account-actions"><button type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button>
+            <button type="button" :disabled="user.id === currentUser?.id" @click="resetTarget=user;temporaryPassword=''">重置密码</button></div></td></tr>
         <tr v-if="users.length === 0"><td colspan="5" class="empty">尚无平台账号</td></tr></tbody>
       </table>
+      <form v-if="resetTarget" class="password-reset-form" @submit.prevent="resetUserPassword">
+        <h3>重置 {{ resetTarget.username }} 的密码</h3><p>至少 12 位，包含大小写字母、数字和特殊字符。页面不会回显保存，须通过安全渠道交付本人。</p>
+        <label>临时密码<input v-model="temporaryPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label>
+        <button :disabled="resetBusy" type="submit">确认重置</button><button type="button" class="secondary-button" @click="resetTarget=null;temporaryPassword=''">取消</button>
+      </form>
     </section>
   </main>
 </template>

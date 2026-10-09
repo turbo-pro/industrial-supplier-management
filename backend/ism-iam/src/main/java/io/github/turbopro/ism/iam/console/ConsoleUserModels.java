@@ -13,6 +13,10 @@ public final class ConsoleUserModels {
                          @NotBlank @Pattern(regexp="PLATFORM_ADMIN|PLATFORM_SUPPORT") String roleCode) {}
     public record ChangeStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
                                @PositiveOrZero int version) {}
+    public record ChangeRole(@NotBlank @Pattern(regexp="PLATFORM_ADMIN|PLATFORM_SUPPORT") String roleCode,
+                             @PositiveOrZero int version) {}
+    public record ResetPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
+                                @PositiveOrZero int version) {}
     public record Row(long id,String username,String displayName,String status,boolean forcePasswordChange,int version) {}
     public record View(String id,String username,String displayName,String status,boolean passwordChangeRequired,
                        int version,Set<String> roleCodes) {}
