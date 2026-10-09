@@ -15,6 +15,11 @@ const showPasswordForm = ref(false);
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
+const currentUser = ref<components['schemas']['ConsoleUserSummary'] | null>(null);
+const users = ref<components['schemas']['ConsoleUser'][]>([]);
+const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' });
+const userBusy = ref(false);
+const canManageUsers = () => currentUser.value?.permissions.includes('platform:user:manage') ?? false;
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
 
 async function login() {
@@ -30,6 +35,7 @@ async function login() {
       accessToken.value = data.data.accessToken;
       passwordChangeRequired.value = data.data.user.passwordChangeRequired;
       passwordChangeRecommended.value = data.data.user.passwordChangeRecommended;
+      currentUser.value = data.data.user;
       showPasswordForm.value = passwordChangeRequired.value;
       sessionStorage.setItem(TOKEN_KEY, data.data.accessToken);
       sessionStorage.setItem(REQUIRED_KEY, String(passwordChangeRequired.value));
@@ -45,15 +51,52 @@ async function login() {
 
 async function loadWorkspace() {
   if (!accessToken.value || passwordChangeRequired.value) return;
-  const [packageResult, tenantResult] = await Promise.all([
-    client.GET('/console/packages'), client.GET('/console/tenants'),
+  const [meResult, packageResult, tenantResult] = await Promise.all([
+    client.GET('/console/auth/me'), client.GET('/console/packages'), client.GET('/console/tenants'),
   ]);
-  if (packageResult.error || tenantResult.error) {
+  if (meResult.error || packageResult.error || tenantResult.error) {
     logout('登录状态已失效，请重新登录');
     return;
   }
   packages.value = packageResult.data?.data ?? [];
   tenants.value = tenantResult.data?.data ?? [];
+  currentUser.value = meResult.data?.data ?? null;
+  if (currentUser.value?.permissions.includes('platform:user:view')) await loadUsers();
+}
+
+async function loadUsers() {
+  const { data, error } = await client.GET('/console/users');
+  if (error) { message.value = error.error.message; return; }
+  users.value = data.data;
+}
+
+async function createUser() {
+  userBusy.value = true;
+  try {
+    const { error } = await client.POST('/console/users', {
+      params: { header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } }, body: { ...userForm },
+    });
+    if (error) { message.value = error.error.message; return; }
+    userForm.username = ''; userForm.displayName = ''; userForm.initialPassword = '';
+    message.value = '平台账号已创建，首次登录须修改密码';
+    await loadUsers();
+  } catch {
+    message.value = '创建平台账号失败，请稍后重试';
+  } finally { userBusy.value = false; }
+}
+
+async function changeUserStatus(user: components['schemas']['ConsoleUser']) {
+  const next = user.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+  if (next === 'DISABLED' && user.id === currentUser.value?.id) return;
+  try {
+    const { error } = await client.PUT('/console/users/{id}/status', {
+      params: { path: { id: user.id }, header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } },
+      body: { status: next, version: user.version },
+    });
+    if (error) { message.value = error.error.message; return; }
+    message.value = next === 'ACTIVE' ? '账号已恢复' : '账号已停用';
+    await loadUsers();
+  } catch { message.value = '修改账号状态失败，请稍后重试'; }
 }
 
 async function changePassword() {
@@ -94,6 +137,8 @@ function logout(reason = '') {
   passwordForm.confirmPassword = '';
   packages.value = [];
   tenants.value = [];
+  users.value = [];
+  currentUser.value = null;
   message.value = reason;
 }
 
@@ -156,6 +201,21 @@ if (accessToken.value) {
       <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th></tr></thead>
         <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td></tr>
         <tr v-if="tenants.length === 0"><td colspan="4" class="empty">尚未创建租户</td></tr></tbody>
+      </table>
+    </section>
+    <section v-if="currentUser?.permissions.includes('platform:user:view')" class="panel">
+      <div class="panel-title"><div><h2>平台账号</h2><p>平台账号与租户用户完全隔离；停用会使既有会话失效。</p></div></div>
+      <form v-if="canManageUsers()" class="console-user-form" @submit.prevent="createUser">
+        <label>平台用户名<input v-model="userForm.username" required pattern="[a-zA-Z][a-zA-Z0-9._-]{2,99}" /></label>
+        <label>显示名称<input v-model="userForm.displayName" required maxlength="100" /></label>
+        <label>初始密码<input v-model="userForm.initialPassword" required type="password" minlength="12" autocomplete="new-password" /></label>
+        <label>平台角色<select v-model="userForm.roleCode"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select></label>
+        <button :disabled="userBusy" type="submit">创建平台账号</button>
+      </form>
+      <table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td><td>{{ user.roleCodes.join('、') }}</td><td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}</td>
+          <td><button v-if="canManageUsers()" type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button></td></tr>
+        <tr v-if="users.length === 0"><td colspan="5" class="empty">尚无平台账号</td></tr></tbody>
       </table>
     </section>
   </main>

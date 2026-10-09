@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test('platform operator logs in through the isolated Console endpoint', async ({ page }) => {
+  await page.route('**/api/console/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: {
+    id: '1', username: 'platform-admin', displayName: '平台管理员', passwordChangeRequired: false,
+    passwordChangeRecommended: false, permissions: ['platform:tenant:view'],
+  } }) }));
   await page.route('**/api/console/auth/login', async route => {
     expect(route.request().postDataJSON()).toMatchObject({ username: 'platform-admin' });
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
@@ -63,6 +67,10 @@ test('forced Console password change blocks workspace until new login', async ({
 });
 
 test('inactive Console password suggestion can be postponed', async ({ page }) => {
+  await page.route('**/api/console/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: {
+    id: '1', username: 'platform-admin', displayName: '平台管理员', passwordChangeRequired: false,
+    passwordChangeRecommended: false, permissions: [],
+  } }) }));
   await page.route('**/api/console/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
     success: true, data: { accessToken: 'inactive-token', refreshToken: 'refresh', expiresIn: 900,
       user: { id: '1', username: 'platform-admin', displayName: '平台管理员',
@@ -78,4 +86,48 @@ test('inactive Console password suggestion can be postponed', async ({ page }) =
   await expect(page.getByRole('heading', { name: '套餐与模块' })).toBeVisible();
   await page.getByRole('button', { name: '稍后再说' }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('platform administrator creates and disables a Console account', async ({ page }) => {
+  const permissions = ['platform:tenant:view', 'platform:user:view', 'platform:user:manage'];
+  const admin = { id: '1', username: 'platform-admin', displayName: '平台管理员',
+    passwordChangeRequired: false, passwordChangeRecommended: false, permissions };
+  let accounts = [{ id: '1', username: 'platform-admin', displayName: '平台管理员', status: 'ACTIVE',
+    passwordChangeRequired: false, version: 0, roleCodes: ['PLATFORM_ADMIN'] }];
+  const ok = (data: unknown) => ({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, data }) });
+  await page.route('**/api/console/auth/login', route => route.fulfill(ok({
+    accessToken: 'console-access', refreshToken: 'console-refresh', expiresIn: 900, user: admin,
+  })));
+  await page.route('**/api/console/auth/me', route => route.fulfill(ok(admin)));
+  await page.route('**/api/console/packages', route => route.fulfill(ok([])));
+  await page.route('**/api/console/tenants', route => route.fulfill(ok([])));
+  await page.route('**/api/console/users', async route => {
+    if (route.request().method() === 'GET') return route.fulfill(ok(accounts));
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    expect(route.request().postDataJSON()).toEqual({ username: 'platform-support', displayName: '支持人员',
+      initialPassword: 'Temporary#Pass123', roleCode: 'PLATFORM_SUPPORT' });
+    accounts = [...accounts, { id: '2', username: 'platform-support', displayName: '支持人员', status: 'ACTIVE',
+      passwordChangeRequired: true, version: 0, roleCodes: ['PLATFORM_SUPPORT'] }];
+    return route.fulfill(ok(accounts[1]));
+  });
+  await page.route('**/api/console/users/2/status', async route => {
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    expect(route.request().postDataJSON()).toEqual({ status: 'DISABLED', version: 0 });
+    accounts[1] = { ...accounts[1], status: 'DISABLED', version: 1 };
+    await route.fulfill(ok(accounts[1]));
+  });
+  await page.goto('/');
+  await page.getByLabel('平台用户名').fill('platform-admin');
+  await page.getByLabel('密码', { exact: true }).fill('Console#Pass123');
+  await page.getByRole('button', { name: '进入 Console' }).click();
+  await expect(page.getByRole('heading', { name: '平台账号' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'platform-admin' }).getByRole('button', { name: '停用' })).toBeDisabled();
+  await page.getByLabel('平台用户名').last().fill('platform-support');
+  await page.getByLabel('显示名称').fill('支持人员');
+  await page.getByLabel('初始密码').fill('Temporary#Pass123');
+  await page.getByRole('button', { name: '创建平台账号' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'platform-support' })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '停用' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'platform-support' })).toContainText('停用');
 });

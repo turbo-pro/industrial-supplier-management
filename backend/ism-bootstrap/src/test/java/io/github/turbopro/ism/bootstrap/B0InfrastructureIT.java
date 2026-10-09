@@ -19,6 +19,9 @@ import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.JwtTokenService;
 import io.github.turbopro.ism.iam.console.ConsoleAuthModels;
 import io.github.turbopro.ism.iam.console.ConsoleAuthService;
+import io.github.turbopro.ism.iam.console.ConsoleUserModels;
+import io.github.turbopro.ism.iam.console.ConsoleUserService;
+import io.github.turbopro.ism.iam.console.ConsoleUserErrorCode;
 import io.github.turbopro.ism.iam.organization.OrganizationModels;
 import io.github.turbopro.ism.iam.organization.OrganizationService;
 import io.github.turbopro.ism.iam.authorization.DatabaseAuthorizationGrantLoader;
@@ -180,6 +183,9 @@ class B0InfrastructureIT {
 
     @Autowired
     private ConsoleAuthService consoleAuthService;
+
+    @Autowired
+    private ConsoleUserService consoleUserService;
 
     @Autowired
     private PackagePlanService packagePlanService;
@@ -1110,6 +1116,74 @@ class B0InfrastructureIT {
                     .count()).isZero();
         } finally {
             repositoryService.deleteDeployment(deployment.getId(), true);
+        }
+    }
+
+    @Test
+    void shouldManageConsoleAccountsWithoutTenantPermissionsOrLastAdminLoss() throws Exception {
+        long adminId=9401L;
+        jdbcTemplate.update("INSERT INTO plt_user(id,username,display_name,password_hash,status) VALUES(?,?,?,?,?)",
+                adminId,"platform-account-admin","账号管理员",passwordEncoder.encode("Console#Pass123"),"ACTIVE");
+        jdbcTemplate.update("INSERT INTO plt_user_role(user_id,role_id) VALUES(?,1001)",adminId);
+        try {
+            var adminToken=consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-admin","Console#Pass123","account-device"),"127.0.0.1");
+            mockMvc.perform(get("/api/console/users").header("Authorization","Bearer "+adminToken.accessToken()))
+                    .andExpect(status().isOk());
+            var support=consoleUserService.create(new ConsoleUserModels.Create(
+                    "platform-account-support","支持人员","Temporary#Pass123","PLATFORM_SUPPORT"));
+            long supportId=Long.parseLong(support.id());
+            assertThat(support.passwordChangeRequired()).isTrue();
+            // Simulate completion of the required first-login password change before testing role permissions.
+            jdbcTemplate.update("UPDATE plt_user SET force_password_change=0 WHERE id=?",supportId);
+            var supportToken=consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","Temporary#Pass123","support-device"),"127.0.0.1");
+            mockMvc.perform(get("/api/console/users").header("Authorization","Bearer "+supportToken.accessToken()))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/console/users")
+                            .header("Authorization","Bearer "+supportToken.accessToken())
+                            .header("Idempotency-Key","support-must-not-create-001")
+                            .contentType("application/json")
+                            .content("{\"username\":\"forbidden-account\",\"displayName\":\"无权创建\",\"initialPassword\":\"Temporary#Pass123\",\"roleCode\":\"PLATFORM_ADMIN\"}"))
+                    .andExpect(status().isForbidden());
+            assertThatThrownBy(()->consoleUserService.changeStatus(adminId,
+                    new ConsoleUserModels.ChangeStatus("DISABLED",0),adminId))
+                    .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                            .isEqualTo(ConsoleUserErrorCode.SELF_DISABLE));
+            assertThat(consoleUserService.changeStatus(supportId,
+                    new ConsoleUserModels.ChangeStatus("DISABLED",0),adminId).status()).isEqualTo("DISABLED");
+            mockMvc.perform(get("/api/console/auth/me").header("Authorization","Bearer "+supportToken.accessToken()))
+                    .andExpect(status().isUnauthorized());
+            assertThatThrownBy(()->consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","Temporary#Pass123","support-device"),"127.0.0.1"))
+                    .isInstanceOf(ApiException.class);
+            assertThatThrownBy(()->consoleUserService.changeStatus(supportId,
+                    new ConsoleUserModels.ChangeStatus("ACTIVE",0),adminId)).isInstanceOf(ApiException.class);
+            assertThat(consoleUserService.changeStatus(supportId,
+                    new ConsoleUserModels.ChangeStatus("ACTIVE",1),adminId).status()).isEqualTo("ACTIVE");
+            assertThatThrownBy(()->consoleAuthService.refresh(new ConsoleAuthModels.RefreshCommand(
+                    supportToken.refreshToken(),"support-device"),"127.0.0.1"))
+                    .isInstanceOf(ApiException.class);
+            List<Long> otherAdmins=jdbcTemplate.queryForList("""
+                    SELECT u.id FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id
+                    JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE'
+                    AND r.role_code='PLATFORM_ADMIN' AND u.id<>?
+                    """,Long.class,adminId);
+            try {
+                for(long otherId:otherAdmins) jdbcTemplate.update("UPDATE plt_user SET status='DISABLED' WHERE id=?",otherId);
+                assertThatThrownBy(()->consoleUserService.changeStatus(adminId,
+                        new ConsoleUserModels.ChangeStatus("DISABLED",0),supportId))
+                        .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                                .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
+            } finally {
+                for(long otherId:otherAdmins) jdbcTemplate.update("UPDATE plt_user SET status='ACTIVE' WHERE id=?",otherId);
+            }
+        } finally {
+            jdbcTemplate.update("DELETE FROM plt_refresh_token WHERE user_id IN (SELECT id FROM plt_user WHERE username IN (?,?))",
+                    "platform-account-admin","platform-account-support");
+            jdbcTemplate.update("DELETE FROM plt_user_role WHERE user_id IN (SELECT id FROM plt_user WHERE username IN (?,?))",
+                    "platform-account-admin","platform-account-support");
+            jdbcTemplate.update("DELETE FROM plt_user WHERE username IN (?,?)","platform-account-admin","platform-account-support");
         }
     }
 

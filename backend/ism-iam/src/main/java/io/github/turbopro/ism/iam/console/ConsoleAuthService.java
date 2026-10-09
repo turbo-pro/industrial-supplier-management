@@ -67,8 +67,12 @@ public class ConsoleAuthService {
     @Transactional(noRollbackFor = ApiException.class)
     public ConsoleAuthModels.TokenPair refresh(ConsoleAuthModels.RefreshCommand command, String ip) {
         LocalDateTime now = LocalDateTime.now();
-        ConsoleAuthModels.RefreshToken current = mapper.lockRefreshToken(hash(command.refreshToken()));
-        if (current == null) throw new ApiException(IamErrorCode.TOKEN_INVALID);
+        String oldHash=hash(command.refreshToken());
+        Long userId=mapper.refreshTokenUserId(oldHash);
+        if(userId==null) throw new ApiException(IamErrorCode.TOKEN_INVALID);
+        ConsoleAuthModels.PlatformUser user=mapper.findByIdForUpdate(userId);
+        ConsoleAuthModels.RefreshToken current = mapper.lockRefreshToken(oldHash);
+        if (current == null || current.userId()!=userId) throw new ApiException(IamErrorCode.TOKEN_INVALID);
         if (current.revokedAt() != null) {
             if (current.replacedByHash() != null) {
                 mapper.revokeFamily(current.familyId(), now, "TOKEN_REUSE");
@@ -80,7 +84,10 @@ public class ConsoleAuthService {
             mapper.revokeFamily(current.familyId(), now, "EXPIRED_OR_DEVICE_MISMATCH");
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
-        ConsoleAuthModels.PlatformUser user = requireActiveUser(current.userId(), -1);
+        if(user==null||!"ACTIVE".equals(user.status())) {
+            mapper.revokeFamily(current.familyId(),now,"USER_INACTIVE");
+            throw new ApiException(IamErrorCode.TOKEN_INVALID);
+        }
         String refreshToken = randomToken();
         String replacementHash = hash(refreshToken);
         mapper.insertRefreshToken(randomId(), user.id(), replacementHash, current.familyId(), now,

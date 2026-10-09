@@ -10,7 +10,7 @@ public interface ConsoleAuthMapper {
     @Select("""
         SELECT id,username,display_name,password_hash,status,force_password_change,
                locked_until,failed_count,token_version,last_login_at
-        FROM plt_user WHERE username=#{username}
+        FROM plt_user WHERE username=#{username} FOR UPDATE
         """)
     ConsoleAuthModels.PlatformUser findForLogin(String username);
 
@@ -20,6 +20,16 @@ public interface ConsoleAuthMapper {
         FROM plt_user WHERE id=#{id}
         """)
     ConsoleAuthModels.PlatformUser findById(long id);
+
+    @Select("SELECT user_id FROM plt_refresh_token WHERE token_hash=#{hash}")
+    Long refreshTokenUserId(String hash);
+
+    @Select("""
+        SELECT id,username,display_name,password_hash,status,force_password_change,
+               locked_until,failed_count,token_version,last_login_at
+        FROM plt_user WHERE id=#{id} FOR UPDATE
+        """)
+    ConsoleAuthModels.PlatformUser findByIdForUpdate(long id);
 
     @Select("""
         SELECT DISTINCT p.permission_code

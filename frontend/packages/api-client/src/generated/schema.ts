@@ -510,6 +510,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listConsoleUsers"];
+        put?: never;
+        post: operations["createConsoleUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeConsoleUserStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/packages": {
         parameters: {
             query?: never;
@@ -5217,6 +5249,35 @@ export interface components {
         AccessUserResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["AccessUser"];
         };
+        CreateConsoleUser: {
+            username: string;
+            displayName: string;
+            /** Format: password */
+            initialPassword: string;
+            /** @enum {string} */
+            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+        };
+        ChangeConsoleUserStatus: {
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+        };
+        ConsoleUser: {
+            id: string;
+            username: string;
+            displayName: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            passwordChangeRequired: boolean;
+            version: number;
+            roleCodes: string[];
+        };
+        ConsoleUserListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ConsoleUser"][];
+        };
+        ConsoleUserResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ConsoleUser"];
+        };
         ConsoleLoginCommand: {
             username: string;
             /** Format: password */
@@ -6371,6 +6432,88 @@ export interface operations {
             };
             400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
+        };
+    };
+    listConsoleUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Platform account inventory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserListResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    createConsoleUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConsoleUser"];
+            };
+        };
+        responses: {
+            /** @description Account created; first login requires password change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeConsoleUserStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeConsoleUserStatus"];
+            };
+        };
+        responses: {
+            /** @description Status changed and prior sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     listPackages: {

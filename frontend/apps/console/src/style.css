@@ -25,3 +25,11 @@ th,td { padding:14px 12px; border-bottom:1px solid #e7ebef; text-align:left; } t
 .password-notice { display:flex; align-items:center; gap:16px; padding:14px 18px; margin-bottom:20px; border:1px solid #d7b45d; border-radius:8px; color:#5c430c; background:#fff8e6; }
 .password-notice button { width:auto; height:32px; margin:0; padding:0 12px; }
 .password-form { max-width:520px; margin-bottom:24px; }
+.workspace .panel + .panel { margin-top:20px; }
+.console-user-form { display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)) auto; align-items:end; gap:12px; }
+.console-user-form label { margin:0; }
+.console-user-form select { height:44px; border:1px solid #c8d2da; border-radius:5px; padding:0 10px; font:inherit; }
+.console-user-form button { width:auto; min-width:145px; margin:0; }
+.panel td button { width:auto; height:34px; margin:0; padding:0 14px; }
+@media (max-width:1100px) { .console-user-form { grid-template-columns:repeat(2,minmax(160px,1fr)); } }
+@media (max-width:600px) { .console-user-form { grid-template-columns:1fr; } .workspace { padding:24px 16px; } .panel { overflow-x:auto; } }

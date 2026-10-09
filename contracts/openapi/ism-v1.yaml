@@ -387,6 +387,38 @@ paths:
               schema: { $ref: '#/components/schemas/EmptyResponse' }
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
+  /console/users:
+    get:
+      operationId: listConsoleUsers
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Platform account inventory, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleUserListResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: createConsoleUser
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateConsoleUser' } } } }
+      responses:
+        '200': { description: Account created; first login requires password change, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/users/{id}/status:
+    put:
+      operationId: changeConsoleUserStatus
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeConsoleUserStatus' } } } }
+      responses:
+        '200': { description: Status changed and prior sessions revoked, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleUserResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /console/packages:
     get:
       operationId: listPackages
@@ -3321,6 +3353,35 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/AccessUser' } } } }]
     AccessUserResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AccessUser' } } }]
+    CreateConsoleUser:
+      type: object
+      required: [username, displayName, initialPassword, roleCode]
+      properties:
+        username: { type: string, pattern: '^[a-zA-Z][a-zA-Z0-9._-]{2,99}$' }
+        displayName: { type: string, maxLength: 100 }
+        initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128 }
+        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+    ChangeConsoleUserStatus:
+      type: object
+      required: [status, version]
+      properties:
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer, minimum: 0 }
+    ConsoleUser:
+      type: object
+      required: [id, username, displayName, status, passwordChangeRequired, version, roleCodes]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        passwordChangeRequired: { type: boolean }
+        version: { type: integer }
+        roleCodes: { type: array, uniqueItems: true, items: { type: string } }
+    ConsoleUserListResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/ConsoleUser' } } } }]
+    ConsoleUserResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ConsoleUser' } } }]
     ConsoleLoginCommand:
       type: object
       required: [username, password, deviceId]
