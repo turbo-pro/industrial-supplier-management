@@ -20,6 +20,7 @@ const users = ref<components['schemas']['ConsoleUser'][]>([]);
 const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' });
 const userBusy = ref(false);
 const roleDrafts = reactive<Record<string, 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT'>>({});
+const rolePreview = ref<components['schemas']['ConsoleRoleImpactPreview'] | null>(null);
 const resetTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
 const lockTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
 const lockReason = ref('');
@@ -74,6 +75,7 @@ async function loadUsers() {
   const { data, error } = await client.GET('/console/users');
   if (error) { message.value = error.error.message; return; }
   users.value = data.data;
+  rolePreview.value = null;
   for (const user of users.value) roleDrafts[user.id] = user.roleCodes.includes('PLATFORM_ADMIN') ? 'PLATFORM_ADMIN' : 'PLATFORM_SUPPORT';
 }
 
@@ -109,15 +111,35 @@ async function changeUserStatus(user: components['schemas']['ConsoleUser']) {
 async function changeUserRole(user: components['schemas']['ConsoleUser']) {
   const roleCode = roleDrafts[user.id];
   if (!roleCode || user.id === currentUser.value?.id || user.roleCodes.includes(roleCode)) return;
+  if (!rolePreview.value || rolePreview.value.userId !== user.id || rolePreview.value.version !== user.version
+      || rolePreview.value.proposedRoleCode !== roleCode || !rolePreview.value.canApply) return;
   try {
     const { error } = await client.PUT('/console/users/{id}/role', {
       params: { path: { id: user.id }, header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } },
       body: { roleCode, version: user.version },
     });
-    if (error) { message.value = error.error.message; return; }
+    if (error) { message.value = error.error.message; await loadUsers(); return; }
     message.value = '平台角色已调整，目标账号需要重新登录';
     await loadUsers();
   } catch { message.value = '调整平台角色失败，请稍后重试'; }
+}
+
+async function confirmUserRole() {
+  const user = users.value.find(item => item.id === rolePreview.value?.userId);
+  if (user) await changeUserRole(user);
+}
+
+async function previewUserRole(user: components['schemas']['ConsoleUser']) {
+  const roleCode = roleDrafts[user.id];
+  rolePreview.value = null;
+  if (!roleCode) return;
+  try {
+    const { data, error } = await client.GET('/console/users/{id}/role-impact', {
+      params: { path: { id: user.id }, query: { roleCode, version: user.version } },
+    });
+    if (error) { message.value = error.error.message; await loadUsers(); return; }
+    if (roleDrafts[user.id] === roleCode) rolePreview.value = data.data;
+  } catch { message.value = '获取角色影响预览失败，请稍后重试'; }
 }
 
 async function resetUserPassword() {
@@ -270,14 +292,23 @@ if (accessToken.value) {
       </form>
       <table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
         <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td>
-          <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
-            <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="changeUserRole(user)">保存角色</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
+          <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id" @change="rolePreview=null"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
+            <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="previewUserRole(user)">预览影响</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
           <td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}<span v-if="user.manualLocked"> · 人工锁定</span><span v-else-if="user.automaticLockedUntil"> · 登录失败暂锁</span></td>
           <td><div v-if="canManageUsers()" class="account-actions"><button type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button>
             <button type="button" :disabled="user.id === currentUser?.id" @click="resetTarget=user;temporaryPassword=''">重置密码</button>
             <button type="button" :disabled="user.id === currentUser?.id" @click="lockTarget=user;lockReason=''">{{ user.manualLocked || user.automaticLockedUntil ? '解除锁定' : '锁定登录' }}</button></div></td></tr>
         <tr v-if="users.length === 0"><td colspan="5" class="empty">尚无平台账号</td></tr></tbody>
       </table>
+      <section v-if="rolePreview" class="role-preview" aria-label="角色影响预览">
+        <h3>{{ rolePreview.username }} 的角色影响预览</h3>
+        <p>当前角色：{{ rolePreview.currentRoleCodes.join('、') || '无' }}；拟调整为：{{ rolePreview.proposedRoleCode }}。保存后旧会话会失效。</p>
+        <p>新增权限：{{ rolePreview.addedPermissions.join('、') || '无' }}</p>
+        <p>移除权限：{{ rolePreview.removedPermissions.join('、') || '无' }}</p>
+        <p v-if="!rolePreview.canApply" role="alert">当前不可保存：{{ rolePreview.blockers.join('、') }}</p>
+        <button type="button" :disabled="!rolePreview.canApply" @click="confirmUserRole">确认保存角色</button>
+        <button type="button" class="secondary-button" @click="rolePreview=null">取消</button>
+      </section>
       <form v-if="resetTarget" class="password-reset-form" @submit.prevent="resetUserPassword">
         <h3>重置 {{ resetTarget.username }} 的密码</h3><p>至少 12 位，包含大小写字母、数字和特殊字符。页面不会回显保存，须通过安全渠道交付本人。</p>
         <label>临时密码<input v-model="temporaryPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label>

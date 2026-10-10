@@ -39,3 +39,6 @@ th,td { padding:14px 12px; border-bottom:1px solid #e7ebef; text-align:left; } t
 .password-reset-form { max-width:460px; padding:20px; margin-top:18px; border:1px solid #dbe2e8; border-radius:8px; background:#f8fafb; }
 .password-reset-form h3 { margin:0 0 6px; }.password-reset-form p { color:#667788; font-size:13px; }
 .password-reset-form button { width:auto; padding:0 16px; margin-right:10px; }
+.role-preview { margin-top:18px; padding:20px; border:1px solid #9ccac6; border-radius:8px; background:#f3faf9; }
+.role-preview h3 { margin:0 0 8px; }.role-preview p { color:#40545d; line-height:1.5; overflow-wrap:anywhere; }
+.role-preview button { width:auto; padding:0 16px; margin-right:10px; }

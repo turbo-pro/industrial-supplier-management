@@ -558,6 +558,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/users/{id}/role-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["previewConsoleUserRoleImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/users/{id}/password-reset": {
         parameters: {
             query?: never;
@@ -5315,6 +5331,21 @@ export interface components {
             roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
             version: number;
         };
+        ConsoleRoleImpactPreview: {
+            userId: string;
+            username: string;
+            version: number;
+            currentRoleCodes: string[];
+            /** @enum {string} */
+            proposedRoleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+            addedPermissions: string[];
+            removedPermissions: string[];
+            canApply: boolean;
+            blockers: ("SELF_ROLE_CHANGE" | "NO_CHANGE" | "LAST_ADMIN")[];
+        };
+        ConsoleRoleImpactPreviewResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ConsoleRoleImpactPreview"];
+        };
         ResetConsoleUserPassword: {
             /** Format: password */
             temporaryPassword: string;
@@ -6608,6 +6639,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    previewConsoleUserRoleImpact: {
+        parameters: {
+            query: {
+                roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only permission delta and current role-change blockers; not authorization to write */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleRoleImpactPreviewResponse"];
                 };
             };
             403: components["responses"]["ApiFailure"];

@@ -16,6 +16,9 @@ public final class ConsoleUserModels {
                                @PositiveOrZero int version) {}
     public record ChangeRole(@NotBlank @Pattern(regexp="PLATFORM_ADMIN|PLATFORM_SUPPORT") String roleCode,
                              @PositiveOrZero int version) {}
+    public record RoleImpactPreview(String userId,String username,int version,Set<String> currentRoleCodes,
+                                    String proposedRoleCode,Set<String> addedPermissions,Set<String> removedPermissions,
+                                    boolean canApply,Set<String> blockers) {}
     public record ResetPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
                                 @PositiveOrZero int version) {}
     public record ChangeLoginLock(boolean locked,@NotBlank @Size(max=500) String reason,@PositiveOrZero int version) {}

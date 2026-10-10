@@ -125,6 +125,14 @@ test('platform administrator creates and disables a Console account', async ({ p
     accounts[1] = { ...accounts[1], roleCodes: ['PLATFORM_ADMIN'], version: 2 };
     await route.fulfill(ok(accounts[1]));
   });
+  await page.route('**/api/console/users/2/role-impact?**', async route => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('roleCode')).toBe('PLATFORM_ADMIN');
+    expect(url.searchParams.get('version')).toBe('1');
+    await route.fulfill(ok({ userId: '2', username: 'platform-support', version: 1,
+      currentRoleCodes: ['PLATFORM_SUPPORT'], proposedRoleCode: 'PLATFORM_ADMIN',
+      addedPermissions: ['platform:user:manage'], removedPermissions: [], canApply: true, blockers: [] }));
+  });
   await page.route('**/api/console/users/2/password-reset', async route => {
     expect(route.request().headers()['idempotency-key']).toBeTruthy();
     expect(route.request().postDataJSON()).toEqual({ temporaryPassword: 'NewTemp#Pass123', version: 2 });
@@ -154,7 +162,9 @@ test('platform administrator creates and disables a Console account', async ({ p
   await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '停用' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '恢复' })).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('combobox', { name: 'platform-support 平台角色' }).selectOption('PLATFORM_ADMIN');
-  await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '保存角色' }).click();
+  await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '预览影响' }).click();
+  await expect(page.getByRole('region', { name: '角色影响预览' })).toContainText('platform:user:manage');
+  await page.getByRole('button', { name: '确认保存角色' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'platform-support' })).toContainText('运营管理员');
   await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '重置密码' }).click();
   await page.getByLabel('临时密码').fill('NewTemp#Pass123');

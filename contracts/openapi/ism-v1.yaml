@@ -433,6 +433,20 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/users/{id}/role-impact:
+    get:
+      operationId: previewConsoleUserRoleImpact
+      tags: [Console Users]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: roleCode, in: query, required: true, schema: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Read-only permission delta and current role-change blockers; not authorization to write, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleRoleImpactPreviewResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /console/users/{id}/password-reset:
     put:
       operationId: resetConsoleUserPassword
@@ -3415,6 +3429,21 @@ components:
       properties:
         roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
         version: { type: integer, minimum: 0 }
+    ConsoleRoleImpactPreview:
+      type: object
+      required: [userId, username, version, currentRoleCodes, proposedRoleCode, addedPermissions, removedPermissions, canApply, blockers]
+      properties:
+        userId: { type: string }
+        username: { type: string }
+        version: { type: integer }
+        currentRoleCodes: { type: array, uniqueItems: true, items: { type: string } }
+        proposedRoleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+        addedPermissions: { type: array, uniqueItems: true, items: { type: string } }
+        removedPermissions: { type: array, uniqueItems: true, items: { type: string } }
+        canApply: { type: boolean }
+        blockers: { type: array, uniqueItems: true, items: { type: string, enum: [SELF_ROLE_CHANGE, NO_CHANGE, LAST_ADMIN] } }
+    ConsoleRoleImpactPreviewResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ConsoleRoleImpactPreview' } } }]
     ResetConsoleUserPassword:
       type: object
       required: [temporaryPassword, version]

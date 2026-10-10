@@ -1151,6 +1151,10 @@ class B0InfrastructureIT {
                             .header("Idempotency-Key","support-must-not-role-001")
                             .contentType("application/json").content("{\"roleCode\":\"PLATFORM_SUPPORT\",\"version\":0}"))
                     .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/console/users/"+adminId+"/role-impact")
+                            .header("Authorization","Bearer "+supportToken.accessToken())
+                            .param("roleCode","PLATFORM_SUPPORT").param("version","0"))
+                    .andExpect(status().isForbidden());
             mockMvc.perform(put("/api/console/users/"+adminId+"/password-reset")
                             .header("Authorization","Bearer "+supportToken.accessToken())
                             .header("Idempotency-Key","support-must-not-reset-001")
@@ -1186,6 +1190,17 @@ class B0InfrastructureIT {
                             .isEqualTo(ConsoleUserErrorCode.SELF_ROLE_CHANGE));
             var beforeRole=consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
                     "platform-account-support","Temporary#Pass123","role-device"),"127.0.0.1");
+            mockMvc.perform(get("/api/console/users/"+supportId+"/role-impact")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .param("roleCode","PLATFORM_ADMIN").param("version","2"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.canApply").value(true))
+                    .andExpect(jsonPath("$.data.addedPermissions").isArray())
+                    .andExpect(jsonPath("$.data.addedPermissions",org.hamcrest.Matchers.hasItem("platform:user:manage")))
+                    .andExpect(jsonPath("$.data.removedPermissions").isEmpty());
+            mockMvc.perform(get("/api/console/users/"+supportId+"/role-impact")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .param("roleCode","PLATFORM_ADMIN").param("version","1"))
+                    .andExpect(status().isConflict());
             String roleBody="{\"roleCode\":\"PLATFORM_ADMIN\",\"version\":2}";
             for(int retry=0;retry<2;retry++) mockMvc.perform(put("/api/console/users/"+supportId+"/role")
                             .header("Authorization","Bearer "+adminToken.accessToken())
@@ -1200,6 +1215,11 @@ class B0InfrastructureIT {
                     .isInstanceOf(ApiException.class);
             assertThatThrownBy(()->consoleUserService.changeRole(supportId,
                     new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",2),adminId)).isInstanceOf(ApiException.class);
+            mockMvc.perform(get("/api/console/users/"+supportId+"/role-impact")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .param("roleCode","PLATFORM_SUPPORT").param("version","3"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.canApply").value(true))
+                    .andExpect(jsonPath("$.data.removedPermissions",org.hamcrest.Matchers.hasItem("platform:user:manage")));
             assertThat(consoleUserService.changeRole(supportId,
                     new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",3),adminId).roleCodes())
                     .containsExactly("PLATFORM_SUPPORT");
@@ -1273,6 +1293,11 @@ class B0InfrastructureIT {
                         new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",0),supportId))
                         .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
                                 .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
+                mockMvc.perform(get("/api/console/users/"+adminId+"/role-impact")
+                                .header("Authorization","Bearer "+adminToken.accessToken())
+                                .param("roleCode","PLATFORM_SUPPORT").param("version","0"))
+                        .andExpect(status().isOk()).andExpect(jsonPath("$.data.canApply").value(false))
+                        .andExpect(jsonPath("$.data.blockers",org.hamcrest.Matchers.hasItem("LAST_ADMIN")));
                 assertThatThrownBy(()->consoleUserService.changeLoginLock(adminId,
                         new ConsoleUserModels.ChangeLoginLock(true,"security",0),supportId))
                         .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())

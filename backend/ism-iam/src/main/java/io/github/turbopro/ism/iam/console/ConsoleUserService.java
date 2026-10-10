@@ -37,6 +37,29 @@ public class ConsoleUserService {
         return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
 
+    @Transactional(readOnly=true)
+    public ConsoleUserModels.RoleImpactPreview previewRoleChange(long id,String roleCode,int version,long actorId){
+        if(version<0||!Set.of("PLATFORM_ADMIN","PLATFORM_SUPPORT").contains(roleCode))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        ConsoleUserModels.Row target=mapper.findUser(id);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=version) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(mapper.activeRole(roleCode)!=1) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        Set<String> currentRoles=new TreeSet<>(mapper.userRoleCodes(id));
+        Set<String> before=new TreeSet<>(mapper.userPermissionCodes(id));
+        Set<String> after=new TreeSet<>(mapper.rolePermissionCodes(roleCode));
+        Set<String> added=new TreeSet<>(after);added.removeAll(before);
+        Set<String> removed=new TreeSet<>(before);removed.removeAll(after);
+        Set<String> blockers=new TreeSet<>();
+        if(id==actorId) blockers.add("SELF_ROLE_CHANGE");
+        if(currentRoles.contains("PLATFORM_ADMIN")=="PLATFORM_ADMIN".equals(roleCode)) blockers.add("NO_CHANGE");
+        if(currentRoles.contains("PLATFORM_ADMIN")&&!"PLATFORM_ADMIN".equals(roleCode)
+                &&"ACTIVE".equals(target.status())&&!target.manualLocked()&&mapper.activeAdmins()<=1)
+            blockers.add("LAST_ADMIN");
+        return new ConsoleUserModels.RoleImpactPreview(Long.toString(id),target.username(),version,
+                currentRoles,roleCode,added,removed,blockers.isEmpty(),blockers);
+    }
+
     @Transactional
     public ConsoleUserModels.View changeStatus(long id,ConsoleUserModels.ChangeStatus command,long actorId){
         if(mapper.lockPlatform()==null) throw new ApiException(CommonErrorCode.NOT_FOUND);

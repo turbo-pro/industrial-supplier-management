@@ -26,6 +26,12 @@ public class ConsoleUserController {
     @GetMapping @RequiresPermission("platform:user:view")
     ApiResponse<List<ConsoleUserModels.View>> users(){return responses.success(service.users());}
 
+    @GetMapping("/{id}/role-impact") @RequiresPermission("platform:user:manage")
+    ApiResponse<ConsoleUserModels.RoleImpactPreview> previewRoleChange(@PathVariable long id,
+            @RequestParam String roleCode,@RequestParam int version,@AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(service.previewRoleChange(id,roleCode,version,principal.userId()));
+    }
+
     @PostMapping @RequiresPermission("platform:user:manage")
     ApiResponse<ConsoleUserModels.View> create(@RequestHeader("Idempotency-Key") String key,
                                                 @Valid @RequestBody ConsoleUserModels.Create command){

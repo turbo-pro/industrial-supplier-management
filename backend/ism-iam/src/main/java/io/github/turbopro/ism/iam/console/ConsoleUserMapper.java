@@ -15,6 +15,16 @@ public interface ConsoleUserMapper {
     Long lockPlatform();
     @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM plt_user WHERE id=#{id} FOR UPDATE")
     ConsoleUserModels.Row lockUser(long id);
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM plt_user WHERE id=#{id}")
+    ConsoleUserModels.Row findUser(long id);
+    @Select("SELECT r.role_code FROM plt_user_role ur JOIN plt_role r ON r.id=ur.role_id WHERE ur.user_id=#{id} AND r.status='ACTIVE' ORDER BY r.role_code")
+    List<String> userRoleCodes(long id);
+    @Select("SELECT DISTINCT p.permission_code FROM plt_user_role ur JOIN plt_role r ON r.id=ur.role_id AND r.status='ACTIVE' JOIN plt_role_permission rp ON rp.role_id=r.id JOIN plt_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' WHERE ur.user_id=#{id} ORDER BY p.permission_code")
+    List<String> userPermissionCodes(long id);
+    @Select("SELECT p.permission_code FROM plt_role r JOIN plt_role_permission rp ON rp.role_id=r.id JOIN plt_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' WHERE r.role_code=#{roleCode} AND r.status='ACTIVE' ORDER BY p.permission_code")
+    List<String> rolePermissionCodes(String roleCode);
+    @Select("SELECT COUNT(*) FROM plt_role WHERE role_code=#{roleCode} AND status='ACTIVE'")
+    int activeRole(String roleCode);
     @Select("SELECT COUNT(*) FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND u.manual_locked=0 AND r.role_code='PLATFORM_ADMIN' AND r.status='ACTIVE'")
     int activeAdmins();
     @Select("SELECT COUNT(*) FROM plt_user_role ur JOIN plt_role r ON r.id=ur.role_id WHERE ur.user_id=#{id} AND r.role_code='PLATFORM_ADMIN' AND r.status='ACTIVE'")
