@@ -70,6 +70,17 @@ public class ConsoleUserController {
         }));
     }
 
+    @PutMapping("/{id}/login-lock") @RequiresPermission("platform:user:manage")
+    ApiResponse<ConsoleUserModels.View> changeLoginLock(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,
+            @Valid @RequestBody ConsoleUserModels.ChangeLoginLock command,@AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(once("PLATFORM_USER_LOGIN_LOCK:"+id,key,command,()->{
+            var result=service.changeLoginLock(id,command,principal.userId());
+            audit.append(new AuditService.AuditCommand("PLATFORM_USER_LOGIN_LOCK","PLATFORM_USER",id,null,
+                    Map.of(),Map.of("locked",result.manualLocked(),"reason",command.reason().trim(),"version",result.version()),null,null));
+            return result;
+        }));
+    }
+
     private ConsoleUserModels.View once(String operation,String key,Object request,Supplier<ConsoleUserModels.View> action){
         String value=idempotency.execute(operation,key,write(request),Duration.ofHours(24),()->write(action.get()));
         try{return json.readValue(value,ConsoleUserModels.View.class);}catch(Exception e){throw new IllegalStateException("幂等响应无法解析",e);}

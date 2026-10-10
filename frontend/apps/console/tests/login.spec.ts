@@ -93,7 +93,8 @@ test('platform administrator creates and disables a Console account', async ({ p
   const admin = { id: '1', username: 'platform-admin', displayName: '平台管理员',
     passwordChangeRequired: false, passwordChangeRecommended: false, permissions };
   let accounts = [{ id: '1', username: 'platform-admin', displayName: '平台管理员', status: 'ACTIVE',
-    passwordChangeRequired: false, version: 0, roleCodes: ['PLATFORM_ADMIN'] }];
+    passwordChangeRequired: false, manualLocked: false, manualLockReason: null as string | null,
+    automaticLockedUntil: null as string | null, version: 0, roleCodes: ['PLATFORM_ADMIN'] }];
   const ok = (data: unknown) => ({ status: 200, contentType: 'application/json',
     body: JSON.stringify({ success: true, data }) });
   await page.route('**/api/console/auth/login', route => route.fulfill(ok({
@@ -108,7 +109,8 @@ test('platform administrator creates and disables a Console account', async ({ p
     expect(route.request().postDataJSON()).toEqual({ username: 'platform-support', displayName: '支持人员',
       initialPassword: 'Temporary#Pass123', roleCode: 'PLATFORM_SUPPORT' });
     accounts = [...accounts, { id: '2', username: 'platform-support', displayName: '支持人员', status: 'ACTIVE',
-      passwordChangeRequired: true, version: 0, roleCodes: ['PLATFORM_SUPPORT'] }];
+      passwordChangeRequired: true, manualLocked: false, manualLockReason: null,
+      automaticLockedUntil: null, version: 0, roleCodes: ['PLATFORM_SUPPORT'] }];
     return route.fulfill(ok(accounts[1]));
   });
   await page.route('**/api/console/users/2/status', async route => {
@@ -127,6 +129,15 @@ test('platform administrator creates and disables a Console account', async ({ p
     expect(route.request().headers()['idempotency-key']).toBeTruthy();
     expect(route.request().postDataJSON()).toEqual({ temporaryPassword: 'NewTemp#Pass123', version: 2 });
     accounts[1] = { ...accounts[1], passwordChangeRequired: true, version: 3 };
+    await route.fulfill(ok(accounts[1]));
+  });
+  await page.route('**/api/console/users/2/login-lock', async route => {
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    const body = route.request().postDataJSON();
+    expect(body).toMatchObject({ locked: !accounts[1].manualLocked, version: accounts[1].version });
+    expect(body.reason).toBeTruthy();
+    accounts[1] = { ...accounts[1], manualLocked: body.locked, manualLockReason: body.locked ? body.reason : null,
+      version: accounts[1].version + 1 };
     await route.fulfill(ok(accounts[1]));
   });
   await page.goto('/');
@@ -149,4 +160,13 @@ test('platform administrator creates and disables a Console account', async ({ p
   await page.getByLabel('临时密码').fill('NewTemp#Pass123');
   await page.getByRole('button', { name: '确认重置' }).click();
   await expect(page.getByRole('status')).toContainText('临时密码已设置');
+  await expect(page.getByRole('row').filter({ hasText: 'platform-admin' }).getByRole('button', { name: '锁定登录' })).toBeDisabled();
+  await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '锁定登录' }).click();
+  await page.getByLabel('操作原因').fill('安全调查');
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'platform-support' })).toContainText('人工锁定');
+  await page.getByRole('row').filter({ hasText: 'platform-support' }).getByRole('button', { name: '解除锁定' }).click();
+  await page.getByLabel('操作原因').fill('调查结束');
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'platform-support' })).not.toContainText('人工锁定');
 });

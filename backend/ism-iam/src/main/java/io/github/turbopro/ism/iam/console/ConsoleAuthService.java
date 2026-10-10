@@ -48,7 +48,7 @@ public class ConsoleAuthService {
             passwords.matches(command.password(), dummyHash);
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
-        if (user.lockedUntil() != null && user.lockedUntil().isAfter(now)) {
+        if (user.manualLocked() || (user.lockedUntil() != null && user.lockedUntil().isAfter(now))) {
             throw new ApiException(IamErrorCode.ACCOUNT_LOCKED);
         }
         if (!"ACTIVE".equals(user.status()) || !passwords.matches(command.password(), user.passwordHash())) {
@@ -84,7 +84,7 @@ public class ConsoleAuthService {
             mapper.revokeFamily(current.familyId(), now, "EXPIRED_OR_DEVICE_MISMATCH");
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
-        if(user==null||!"ACTIVE".equals(user.status())) {
+        if(user==null||!"ACTIVE".equals(user.status())||user.manualLocked()) {
             mapper.revokeFamily(current.familyId(),now,"USER_INACTIVE");
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
@@ -105,7 +105,7 @@ public class ConsoleAuthService {
     @Transactional(noRollbackFor = ApiException.class)
     public void changePassword(long userId, ConsoleAuthModels.ChangePasswordCommand command) {
         ConsoleAuthModels.PlatformUser user = mapper.findByIdForUpdate(userId);
-        if (user == null || !"ACTIVE".equals(user.status()) || !passwords.matches(command.oldPassword(), user.passwordHash())) {
+        if (user == null || !"ACTIVE".equals(user.status()) || user.manualLocked() || !passwords.matches(command.oldPassword(), user.passwordHash())) {
             throw new ApiException(IamErrorCode.INVALID_CREDENTIALS);
         }
         if (!PasswordPolicy.isStrong(command.newPassword()) || passwords.matches(command.newPassword(), user.passwordHash())) {
@@ -126,7 +126,7 @@ public class ConsoleAuthService {
 
     ConsoleAuthModels.PlatformUser requireActiveUser(long userId, int version) {
         ConsoleAuthModels.PlatformUser user = mapper.findById(userId);
-        if (user == null || !"ACTIVE".equals(user.status()) || (version >= 0 && user.tokenVersion() != version)) {
+        if (user == null || !"ACTIVE".equals(user.status()) || user.manualLocked() || (version >= 0 && user.tokenVersion() != version)) {
             throw new ApiException(IamErrorCode.TOKEN_INVALID);
         }
         return user;

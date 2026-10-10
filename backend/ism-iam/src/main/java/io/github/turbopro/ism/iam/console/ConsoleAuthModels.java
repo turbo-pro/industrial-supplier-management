@@ -17,7 +17,7 @@ public final class ConsoleAuthModels {
     public record ChangePasswordCommand(@NotBlank String oldPassword,
                                         @NotBlank @Size(min = 12, max = 128) String newPassword) {}
     public record PlatformUser(long id, String username, String displayName, String passwordHash,
-                               String status, boolean forcePasswordChange, LocalDateTime lockedUntil,
+                               String status, boolean forcePasswordChange, LocalDateTime lockedUntil, boolean manualLocked,
                                int failedCount, int tokenVersion, LocalDateTime lastLoginAt) {}
     public record RefreshToken(long id, long userId, String tokenHash, String familyId,
                                LocalDateTime expiresAt, LocalDateTime revokedAt,

@@ -21,6 +21,8 @@ const userForm = reactive({ username: '', displayName: '', initialPassword: '', 
 const userBusy = ref(false);
 const roleDrafts = reactive<Record<string, 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT'>>({});
 const resetTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
+const lockTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
+const lockReason = ref('');
 const temporaryPassword = ref('');
 const resetBusy = ref(false);
 const canManageUsers = () => currentUser.value?.permissions.includes('platform:user:manage') ?? false;
@@ -134,6 +136,21 @@ async function resetUserPassword() {
     await loadUsers();
   } catch { message.value = '重置密码失败，请稍后重试'; }
   finally { resetBusy.value = false; }
+}
+
+async function changeUserLoginLock() {
+  const target = lockTarget.value;
+  if (!target || target.id === currentUser.value?.id || !lockReason.value.trim()) return;
+  try {
+    const { error } = await client.PUT('/console/users/{id}/login-lock', {
+      params: { path: { id: target.id }, header: { 'Idempotency-Key': globalThis.crypto.randomUUID() } },
+      body: { locked: !target.manualLocked && !target.automaticLockedUntil, reason: lockReason.value.trim(), version: target.version },
+    });
+    if (error) { message.value = error.error.message; return; }
+    message.value = target.manualLocked || target.automaticLockedUntil ? '登录锁定已解除' : '账号登录已锁定，既有会话失效';
+    lockTarget.value = null; lockReason.value = '';
+    await loadUsers();
+  } catch { message.value = '调整登录锁定失败，请稍后重试'; }
 }
 
 async function changePassword() {
@@ -255,15 +272,22 @@ if (accessToken.value) {
         <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td>
           <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
             <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="changeUserRole(user)">保存角色</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
-          <td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}</td>
+          <td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}<span v-if="user.manualLocked"> · 人工锁定</span><span v-else-if="user.automaticLockedUntil"> · 登录失败暂锁</span></td>
           <td><div v-if="canManageUsers()" class="account-actions"><button type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button>
-            <button type="button" :disabled="user.id === currentUser?.id" @click="resetTarget=user;temporaryPassword=''">重置密码</button></div></td></tr>
+            <button type="button" :disabled="user.id === currentUser?.id" @click="resetTarget=user;temporaryPassword=''">重置密码</button>
+            <button type="button" :disabled="user.id === currentUser?.id" @click="lockTarget=user;lockReason=''">{{ user.manualLocked || user.automaticLockedUntil ? '解除锁定' : '锁定登录' }}</button></div></td></tr>
         <tr v-if="users.length === 0"><td colspan="5" class="empty">尚无平台账号</td></tr></tbody>
       </table>
       <form v-if="resetTarget" class="password-reset-form" @submit.prevent="resetUserPassword">
         <h3>重置 {{ resetTarget.username }} 的密码</h3><p>至少 12 位，包含大小写字母、数字和特殊字符。页面不会回显保存，须通过安全渠道交付本人。</p>
         <label>临时密码<input v-model="temporaryPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label>
         <button :disabled="resetBusy" type="submit">确认重置</button><button type="button" class="secondary-button" @click="resetTarget=null;temporaryPassword=''">取消</button>
+      </form>
+      <form v-if="lockTarget" class="password-reset-form" @submit.prevent="changeUserLoginLock">
+        <h3>{{ lockTarget.manualLocked || lockTarget.automaticLockedUntil ? '解除' : '锁定' }} {{ lockTarget.username }} 的登录</h3>
+        <p v-if="lockTarget.manualLockReason">现有原因：{{ lockTarget.manualLockReason }}</p>
+        <label>操作原因<input v-model="lockReason" required maxlength="500" /></label>
+        <button type="submit">确认</button><button type="button" class="secondary-button" @click="lockTarget=null;lockReason=''">取消</button>
       </form>
     </section>
   </main>

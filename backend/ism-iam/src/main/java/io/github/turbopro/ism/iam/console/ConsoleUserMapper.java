@@ -7,15 +7,15 @@ import java.util.List;
 
 @Mapper
 public interface ConsoleUserMapper {
-    @Select("SELECT id,username,display_name,status,force_password_change,version FROM plt_user ORDER BY created_at,id")
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM plt_user ORDER BY created_at,id")
     List<ConsoleUserModels.Row> users();
     @Select("SELECT ur.user_id,r.role_code FROM plt_user_role ur JOIN plt_role r ON r.id=ur.role_id ORDER BY ur.user_id,r.role_code")
     List<ConsoleUserModels.UserRole> roles();
     @Select("SELECT id FROM plt_user ORDER BY id LIMIT 1 FOR UPDATE")
     Long lockPlatform();
-    @Select("SELECT id,username,display_name,status,force_password_change,version FROM plt_user WHERE id=#{id} FOR UPDATE")
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM plt_user WHERE id=#{id} FOR UPDATE")
     ConsoleUserModels.Row lockUser(long id);
-    @Select("SELECT COUNT(*) FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND r.role_code='PLATFORM_ADMIN' AND r.status='ACTIVE'")
+    @Select("SELECT COUNT(*) FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND u.manual_locked=0 AND r.role_code='PLATFORM_ADMIN' AND r.status='ACTIVE'")
     int activeAdmins();
     @Select("SELECT COUNT(*) FROM plt_user_role ur JOIN plt_role r ON r.id=ur.role_id WHERE ur.user_id=#{id} AND r.role_code='PLATFORM_ADMIN' AND r.status='ACTIVE'")
     int isAdmin(long id);
@@ -33,6 +33,10 @@ public interface ConsoleUserMapper {
     int resetPassword(long id,String hash,int version);
     @Update("UPDATE plt_user SET status=#{status},token_version=token_version+1,version=version+1 WHERE id=#{id} AND version=#{version}")
     int changeStatus(long id,String status,int version);
-    @Update("UPDATE plt_refresh_token SET revoked_at=#{now},revoke_reason='PLATFORM_USER_STATUS' WHERE user_id=#{id} AND revoked_at IS NULL")
-    int revokeTokens(long id,LocalDateTime now);
+    @Update("UPDATE plt_user SET manual_locked=1,manual_lock_reason=#{reason},manual_locked_at=#{now},manual_locked_by=#{actorId},token_version=token_version+1,version=version+1 WHERE id=#{id} AND version=#{version}")
+    int lockLogin(long id,String reason,LocalDateTime now,long actorId,int version);
+    @Update("UPDATE plt_user SET manual_locked=0,manual_lock_reason=NULL,manual_locked_at=NULL,manual_locked_by=NULL,failed_count=0,locked_until=NULL,token_version=token_version+1,version=version+1 WHERE id=#{id} AND version=#{version}")
+    int unlockLogin(long id,int version);
+    @Update("UPDATE plt_refresh_token SET revoked_at=#{now},revoke_reason=#{reason} WHERE user_id=#{id} AND revoked_at IS NULL")
+    int revokeTokens(long id,LocalDateTime now,String reason);
 }

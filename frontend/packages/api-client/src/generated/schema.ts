@@ -574,6 +574,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/users/{id}/login-lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeConsoleUserLoginLock"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/packages": {
         parameters: {
             query?: never;
@@ -5304,6 +5320,11 @@ export interface components {
             temporaryPassword: string;
             version: number;
         };
+        ChangeConsoleUserLoginLock: {
+            locked: boolean;
+            reason: string;
+            version: number;
+        };
         ConsoleUser: {
             id: string;
             username: string;
@@ -5311,6 +5332,10 @@ export interface components {
             /** @enum {string} */
             status: "ACTIVE" | "DISABLED";
             passwordChangeRequired: boolean;
+            manualLocked: boolean;
+            manualLockReason?: string | null;
+            /** Format: date-time */
+            automaticLockedUntil?: string | null;
             version: number;
             roleCodes: string[];
         };
@@ -6609,6 +6634,38 @@ export interface operations {
         };
         responses: {
             /** @description Temporary password set; next login requires change and old sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    changeConsoleUserLoginLock: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeConsoleUserLoginLock"];
+            };
+        };
+        responses: {
+            /** @description Manual login lock changed and sessions revoked */
             200: {
                 headers: {
                     [name: string]: unknown;

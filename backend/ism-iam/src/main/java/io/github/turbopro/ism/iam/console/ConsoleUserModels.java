@@ -3,6 +3,7 @@ package io.github.turbopro.ism.iam.console;
 import jakarta.validation.constraints.*;
 
 import java.util.Set;
+import java.time.LocalDateTime;
 
 public final class ConsoleUserModels {
     private ConsoleUserModels() {}
@@ -17,8 +18,11 @@ public final class ConsoleUserModels {
                              @PositiveOrZero int version) {}
     public record ResetPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
                                 @PositiveOrZero int version) {}
-    public record Row(long id,String username,String displayName,String status,boolean forcePasswordChange,int version) {}
+    public record ChangeLoginLock(boolean locked,@NotBlank @Size(max=500) String reason,@PositiveOrZero int version) {}
+    public record Row(long id,String username,String displayName,String status,boolean forcePasswordChange,
+                      boolean manualLocked,String manualLockReason,LocalDateTime lockedUntil,int version) {}
     public record View(String id,String username,String displayName,String status,boolean passwordChangeRequired,
+                       boolean manualLocked,String manualLockReason,LocalDateTime automaticLockedUntil,
                        int version,Set<String> roleCodes) {}
     public record UserRole(long userId,String roleCode) {}
 }

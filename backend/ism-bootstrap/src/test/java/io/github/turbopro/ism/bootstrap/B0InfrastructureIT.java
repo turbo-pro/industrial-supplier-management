@@ -1156,6 +1156,12 @@ class B0InfrastructureIT {
                             .header("Idempotency-Key","support-must-not-reset-001")
                             .contentType("application/json").content("{\"temporaryPassword\":\"NewTemp#Pass123\",\"version\":0}"))
                     .andExpect(status().isForbidden());
+            mockMvc.perform(put("/api/console/users/"+adminId+"/login-lock")
+                            .header("Authorization","Bearer "+supportToken.accessToken())
+                            .header("Idempotency-Key","support-must-not-lock-001")
+                            .contentType("application/json")
+                            .content("{\"locked\":true,\"reason\":\"调查中\",\"version\":0}"))
+                    .andExpect(status().isForbidden());
             assertThatThrownBy(()->consoleUserService.changeStatus(adminId,
                     new ConsoleUserModels.ChangeStatus("DISABLED",0),adminId))
                     .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
@@ -1217,6 +1223,41 @@ class B0InfrastructureIT {
             assertThat(consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
                     "platform-account-support","NewTemp#Pass123","reset-device"),"127.0.0.1")
                     .user().passwordChangeRequired()).isTrue();
+            var beforeLock=consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","NewTemp#Pass123","lock-device"),"127.0.0.1");
+            assertThatThrownBy(()->consoleUserService.changeLoginLock(adminId,
+                    new ConsoleUserModels.ChangeLoginLock(true,"self",0),adminId))
+                    .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                            .isEqualTo(ConsoleUserErrorCode.SELF_LOGIN_LOCK));
+            String lockBody="{\"locked\":true,\"reason\":\"安全调查\",\"version\":5}";
+            for(int retry=0;retry<2;retry++) mockMvc.perform(put("/api/console/users/"+supportId+"/login-lock")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .header("Idempotency-Key","account-lock-001")
+                            .contentType("application/json").content(lockBody))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.manualLocked").value(true))
+                    .andExpect(jsonPath("$.data.version").value(6));
+            mockMvc.perform(get("/api/console/auth/me").header("Authorization","Bearer "+beforeLock.accessToken()))
+                    .andExpect(status().isUnauthorized());
+            assertThatThrownBy(()->consoleAuthService.refresh(new ConsoleAuthModels.RefreshCommand(
+                    beforeLock.refreshToken(),"lock-device"),"127.0.0.1")).isInstanceOf(ApiException.class);
+            assertThatThrownBy(()->consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                    "platform-account-support","NewTemp#Pass123","lock-device"),"127.0.0.1"))
+                    .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                            .isEqualTo(IamErrorCode.ACCOUNT_LOCKED));
+            assertThatThrownBy(()->consoleUserService.changeLoginLock(supportId,
+                    new ConsoleUserModels.ChangeLoginLock(false,"解锁",5),adminId)).isInstanceOf(ApiException.class);
+            assertThat(consoleUserService.resetPassword(supportId,
+                    new ConsoleUserModels.ResetPassword("Latest#Pass123",6),adminId).manualLocked()).isTrue();
+            mockMvc.perform(put("/api/console/users/"+supportId+"/login-lock")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .header("Idempotency-Key","account-unlock-001")
+                            .contentType("application/json")
+                            .content("{\"locked\":false,\"reason\":\"调查结束\",\"version\":7}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.manualLocked").value(false))
+                    .andExpect(jsonPath("$.data.version").value(8));
+            jdbcTemplate.update("UPDATE plt_user SET locked_until=? WHERE id=?",java.time.LocalDateTime.now().plusDays(1),supportId);
+            assertThat(consoleUserService.changeLoginLock(supportId,
+                    new ConsoleUserModels.ChangeLoginLock(false,"误输密码核实",8),adminId).automaticLockedUntil()).isNull();
             List<Long> otherAdmins=jdbcTemplate.queryForList("""
                     SELECT u.id FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id
                     JOIN plt_role r ON r.id=ur.role_id WHERE u.status='ACTIVE'
@@ -1230,6 +1271,10 @@ class B0InfrastructureIT {
                                 .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
                 assertThatThrownBy(()->consoleUserService.changeRole(adminId,
                         new ConsoleUserModels.ChangeRole("PLATFORM_SUPPORT",0),supportId))
+                        .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
+                                .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
+                assertThatThrownBy(()->consoleUserService.changeLoginLock(adminId,
+                        new ConsoleUserModels.ChangeLoginLock(true,"security",0),supportId))
                         .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode())
                                 .isEqualTo(ConsoleUserErrorCode.LAST_ADMIN));
             } finally {

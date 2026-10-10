@@ -45,10 +45,10 @@ public class ConsoleUserService {
         if(target.version()!=command.version()||target.status().equals(command.status())) throw new ApiException(CommonErrorCode.CONFLICT);
         if("DISABLED".equals(command.status())){
             if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_DISABLE);
-            if(mapper.isAdmin(id)>0&&mapper.activeAdmins()<=1) throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
+            if(!target.manualLocked()&&mapper.isAdmin(id)>0&&mapper.activeAdmins()<=1) throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
         }
         if(mapper.changeStatus(id,command.status(),command.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
-        mapper.revokeTokens(id,LocalDateTime.now());
+        mapper.revokeTokens(id,LocalDateTime.now(),"PLATFORM_USER_STATUS");
         return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
 
@@ -61,12 +61,12 @@ public class ConsoleUserService {
         if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_ROLE_CHANGE);
         boolean admin=mapper.isAdmin(id)>0;
         if(admin=="PLATFORM_ADMIN".equals(command.roleCode())) throw new ApiException(CommonErrorCode.CONFLICT);
-        if(admin&&"ACTIVE".equals(target.status())&&mapper.activeAdmins()<=1)
+        if(admin&&"ACTIVE".equals(target.status())&&!target.manualLocked()&&mapper.activeAdmins()<=1)
             throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
         mapper.clearRoles(id);
         if(mapper.assignRole(id,command.roleCode())!=1) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
         if(mapper.bumpSessionVersion(id,command.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
-        mapper.revokeTokens(id,LocalDateTime.now());
+        mapper.revokeTokens(id,LocalDateTime.now(),"PLATFORM_USER_ROLE");
         return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
 
@@ -82,12 +82,37 @@ public class ConsoleUserService {
             throw new ApiException(IamErrorCode.PASSWORD_POLICY);
         if(mapper.resetPassword(id,passwords.encode(command.temporaryPassword()),command.version())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
-        mapper.revokeTokens(id,LocalDateTime.now());
+        mapper.revokeTokens(id,LocalDateTime.now(),"PLATFORM_USER_PASSWORD_RESET");
+        return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
+    }
+
+    @Transactional
+    public ConsoleUserModels.View changeLoginLock(long id,ConsoleUserModels.ChangeLoginLock command,long actorId){
+        if(mapper.lockPlatform()==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        ConsoleUserModels.Row target=mapper.lockUser(id);
+        if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
+        LocalDateTime now=LocalDateTime.now();
+        boolean automaticLocked=target.lockedUntil()!=null&&target.lockedUntil().isAfter(now);
+        if(command.locked()){
+            if(target.manualLocked()) throw new ApiException(CommonErrorCode.CONFLICT);
+            if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_LOGIN_LOCK);
+            if("ACTIVE".equals(target.status())&&mapper.isAdmin(id)>0&&mapper.activeAdmins()<=1)
+                throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
+            if(mapper.lockLogin(id,command.reason().trim(),now,actorId,command.version())!=1)
+                throw new ApiException(CommonErrorCode.CONFLICT);
+        } else {
+            if(!target.manualLocked()&&!automaticLocked) throw new ApiException(CommonErrorCode.CONFLICT);
+            if(mapper.unlockLogin(id,command.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
+        }
+        mapper.revokeTokens(id,now,"PLATFORM_USER_LOGIN_LOCK");
         return users().stream().filter(user->user.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
 
     private ConsoleUserModels.View view(ConsoleUserModels.Row row,Set<String> roles){
         return new ConsoleUserModels.View(Long.toString(row.id()),row.username(),row.displayName(),row.status(),
-                row.forcePasswordChange(),row.version(),Set.copyOf(roles));
+                row.forcePasswordChange(),row.manualLocked(),row.manualLockReason(),
+                row.lockedUntil()!=null&&row.lockedUntil().isAfter(LocalDateTime.now())?row.lockedUntil():null,
+                row.version(),Set.copyOf(roles));
     }
 }
