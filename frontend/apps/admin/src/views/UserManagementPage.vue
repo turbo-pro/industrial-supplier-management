@@ -113,7 +113,7 @@ async function batchStatus(status: 'ACTIVE' | 'DISABLED') {
   if (!targets.length || targets.length > 100) { ElMessage.warning('请勾选 1–100 个需要变更状态的账号'); return; }
   const action = status === 'DISABLED' ? '停用' : '恢复';
   try {
-    await ElMessageBox.confirm(`确认批量${action} ${targets.length} 个账号？${targets.map(user => user.username).join('、')}。整批成功或整批回滚；停用将使旧会话失效。`, `批量${action}账号`, { type: 'warning' });
+    await ElMessageBox.confirm(`确认批量${action} ${targets.length} 个账号？${targets.map(user => user.username).join('、')}。整批成功或整批回滚；${status === 'DISABLED' ? '停用将使旧会话失效。' : '恢复不会使已失效的旧会话重新有效。'}`, `批量${action}账号`, { type: 'warning' });
   } catch { return; }
   saving.value = true;
   try {
