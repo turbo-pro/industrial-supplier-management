@@ -33,6 +33,15 @@ public class AccessController {
     ApiResponse<List<AccessModels.UserView>> users(){return responses.success(service.users());}
     @PostMapping("/users") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.UserView> createUser(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateUser command){return responses.success(once("USER_CREATE",key,command,AccessModels.UserView.class,()->{var r=service.createUser(command);append("USER_CREATE","USER",r.id(),Map.of(),Map.of("username",r.username()));return r;}));}
+    @PutMapping("/users/batch-status") @RequiresPermission("iam:user:manage")
+    ApiResponse<List<AccessModels.UserView>> batchStatus(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.BatchChangeUserStatus command){
+        var rows=once("USER_BATCH_STATUS",key,command,AccessModels.UserView[].class,()->{
+            var changed=service.batchChangeUserStatus(command);
+            changed.forEach(row->append("USER_STATUS_CHANGE","USER",row.id(),Map.of(),Map.of("status",row.status(),"version",row.version(),"batch",true)));
+            return changed.toArray(AccessModels.UserView[]::new);
+        });
+        return responses.success(List.of(rows));
+    }
     @GetMapping("/users/{id}/role-impact") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.RoleImpactPreview> previewUserRoles(@PathVariable long id,@RequestParam List<String> roleIds,@RequestParam int version){
         return responses.success(service.previewUserRoles(id,Set.copyOf(roleIds),version));

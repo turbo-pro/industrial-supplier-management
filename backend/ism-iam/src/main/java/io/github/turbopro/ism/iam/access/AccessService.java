@@ -183,6 +183,11 @@ public class AccessService {
 
     @Transactional
     public AccessModels.UserView changeUserStatus(long userId,AccessModels.ChangeUserStatus command) {
+        updateUserStatus(userId,command);
+        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
+    }
+
+    private void updateUserStatus(long userId,AccessModels.ChangeUserStatus command) {
         long tenantId=tenantId();
         if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
         AccessModels.UserRow current=mapper.userForStatusUpdate(tenantId,userId);
@@ -200,7 +205,25 @@ public class AccessService {
         if(mapper.updateUserStatus(tenantId,userId,command.status(),command.version())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
         if("DISABLED".equals(command.status())) mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"ACCOUNT_DISABLED");
-        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
+    }
+
+    @Transactional
+    public List<AccessModels.UserView> batchChangeUserStatus(AccessModels.BatchChangeUserStatus command) {
+        if(command==null||command.targets()==null||command.targets().isEmpty()||command.targets().size()>100
+                ||(!"ACTIVE".equals(command.status())&&!"DISABLED".equals(command.status())))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        Map<Long,Integer> versions=new java.util.TreeMap<>();
+        for(var target:command.targets()) {
+            if(target==null||target.version()<0) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+            long targetId=parseId(target.id());
+            if(versions.putIfAbsent(targetId,target.version())!=null)
+                throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"账号不能重复提交");
+        }
+        for(var entry:versions.entrySet())
+            updateUserStatus(entry.getKey(),new AccessModels.ChangeUserStatus(command.status(),entry.getValue()));
+        Map<String,AccessModels.UserView> changed=users().stream().filter(row->versions.containsKey(Long.parseLong(row.id())))
+                .collect(Collectors.toMap(AccessModels.UserView::id,row->row));
+        return versions.keySet().stream().map(id->changed.get(Long.toString(id))).toList();
     }
 
     @Transactional

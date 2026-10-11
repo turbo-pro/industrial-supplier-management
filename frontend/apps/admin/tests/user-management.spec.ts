@@ -57,6 +57,20 @@ test('tenant user page creates and disables a member with versioned request', as
     await route.fulfill(response(members[1]));
   });
   let lockRequests = 0;
+  let batchRequests = 0;
+  await page.route('**/api/access/users/batch-status', async route => {
+    expect(route.request().headers()['idempotency-key']).toBeTruthy();
+    const body = route.request().postDataJSON();
+    if (batchRequests++ === 0) {
+      expect(body).toEqual({ status: 'ACTIVE', targets: [{ id: '2', version: 5 }] });
+      members = members.map(member => member.id === '2' ? { ...member, status: 'ACTIVE', version: 6 } : member);
+      await route.fulfill(response([members.find(member => member.id === '2')]));
+    } else {
+      expect(body).toEqual({ status: 'DISABLED', targets: [{ id: '2', version: 6 }, { id: '3', version: 0 }] });
+      members = members.map(member => member.id === '2' || member.id === '3' ? { ...member, status: 'DISABLED', version: member.version + 1 } : member);
+      await route.fulfill(response(members.filter(member => member.id === '2' || member.id === '3')));
+    }
+  });
   await page.route('**/api/access/users/2/login-lock', async route => {
     const body = route.request().postDataJSON();
     expect(route.request().headers()['idempotency-key']).toBeTruthy();
@@ -115,4 +129,14 @@ test('tenant user page creates and disables a member with versioned request', as
   await page.getByRole('dialog').getByRole('button', { name: '创建' }).click();
   await expect.poll(() => createdBody).toMatchObject({ username: 'newmember', primaryOrganizationId: '100', roleIds: ['11'] });
   await expect(page.getByRole('row').filter({ hasText: 'newmember' })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'member' }).first().locator('.el-checkbox').click();
+  await page.getByRole('button', { name: '批量恢复' }).click();
+  await page.getByRole('button', { name: '确定' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'member' }).first()).toContainText('启用');
+  await page.getByRole('row').filter({ hasText: 'member' }).first().locator('.el-checkbox').click();
+  await page.getByRole('row').filter({ hasText: 'newmember' }).locator('.el-checkbox').click();
+  await page.getByRole('button', { name: '批量停用' }).click();
+  await page.getByRole('button', { name: '确定' }).click();
+  await expect.poll(() => batchRequests).toBe(2);
+  await expect(page.getByRole('row').filter({ hasText: 'newmember' })).toContainText('停用');
 });

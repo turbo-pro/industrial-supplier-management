@@ -6,6 +6,7 @@ import { useSessionStore } from '../stores/session';
 
 const session = useSessionStore();
 const users = ref<components['schemas']['AccessUser'][]>([]);
+const selectedRows = ref<components['schemas']['AccessUser'][]>([]);
 const roles = ref<components['schemas']['Role'][]>([]);
 const loading = ref(false);
 const saving = ref(false);
@@ -46,6 +47,7 @@ async function load() {
     ]);
     if (userResult.error) throw new Error('用户列表加载失败');
     users.value = userResult.data.data;
+    selectedRows.value = [];
     if (roleResult.error) { roles.value = []; ElMessage.warning('角色列表无权限或加载失败，暂不能创建或编辑用户角色'); }
     else roles.value = roleResult.data.data;
   } catch (error) {
@@ -104,6 +106,29 @@ async function changeStatus(user: components['schemas']['AccessUser']) {
   } finally {
     saving.value = false;
   }
+}
+
+async function batchStatus(status: 'ACTIVE' | 'DISABLED') {
+  const targets = selectedRows.value.filter(user => user.status !== status && user.id !== session.actorId);
+  if (!targets.length || targets.length > 100) { ElMessage.warning('请勾选 1–100 个需要变更状态的账号'); return; }
+  const action = status === 'DISABLED' ? '停用' : '恢复';
+  try {
+    await ElMessageBox.confirm(`确认批量${action} ${targets.length} 个账号？${targets.map(user => user.username).join('、')}。整批成功或整批回滚；停用将使旧会话失效。`, `批量${action}账号`, { type: 'warning' });
+  } catch { return; }
+  saving.value = true;
+  try {
+    const { error, response } = await session.client.PUT('/access/users/batch-status', {
+      params: { header: { 'Idempotency-Key': crypto.randomUUID() } },
+      body: { status, targets: targets.map(user => ({ id: user.id, version: user.version })) },
+    });
+    if (error) {
+      ElMessage.error(response.status === 409 ? '有账号版本或状态已变化，整批未执行；请刷新后重试' : error.error.message);
+      await load(); return;
+    }
+    ElMessage.success(`已${action} ${targets.length} 个账号`);
+    await load();
+  } catch { ElMessage.error('操作结果不确定，请刷新核对，避免直接重复提交'); }
+  finally { saving.value = false; }
 }
 
 function openRoles(user: components['schemas']['AccessUser']) {
@@ -242,8 +267,10 @@ onMounted(load);
 <template>
   <div class="page">
     <div class="page-heading"><div><h1>用户管理</h1><p>账号状态由后端按租户、权限和版本校验；不能停用自己或最后一名有效租户管理员。</p></div><div><el-button :loading="loading" @click="load">刷新</el-button><el-button type="primary" @click="showCreate=true">新建用户</el-button></div></div>
+    <div class="batch-actions"><span>已选择 {{selectedRows.length}} 个账号（单次最多 100 个）</span><el-button :disabled="saving||!selectedRows.some(user=>user.status==='ACTIVE')" @click="batchStatus('DISABLED')">批量停用</el-button><el-button :disabled="saving||!selectedRows.some(user=>user.status==='DISABLED')" @click="batchStatus('ACTIVE')">批量恢复</el-button></div>
     <el-card shadow="never" v-loading="loading">
-      <el-table :data="users" row-key="id">
+      <el-table :data="users" row-key="id" @selection-change="(rows: components['schemas']['AccessUser'][]) => selectedRows=rows">
+        <el-table-column type="selection" width="48" :selectable="(row: components['schemas']['AccessUser']) => row.id!==session.actorId"/>
         <el-table-column prop="username" label="用户名" min-width="180"/>
         <el-table-column prop="displayName" label="姓名" min-width="180"/>
         <el-table-column label="角色" min-width="220"><template #default="{row}">{{row.roleIds.map(roleName).join('、') || '未分配'}}</template></el-table-column>
@@ -293,6 +320,7 @@ onMounted(load);
 </template>
 
 <style scoped>
+.batch-actions { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
 .role-impact-preview { margin: 16px 0; padding: 16px; border: 1px solid #d3e1e4; border-radius: 8px; background: #f7fafb; }
 .role-impact-preview p { margin: 8px 0; line-height: 1.5; overflow-wrap: anywhere; }
 .role-impact-preview .muted { color: #697a83; font-size: 12px; }

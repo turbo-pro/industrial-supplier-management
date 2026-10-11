@@ -1012,6 +1012,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/users/batch-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["batchChangeAccessUserStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/users/{id}/role-impact": {
         parameters: {
             query?: never;
@@ -5320,6 +5336,15 @@ export interface components {
             status: "ACTIVE" | "DISABLED";
             version: number;
         };
+        AccessUserStatusTarget: {
+            id: string;
+            version: number;
+        };
+        BatchChangeAccessUserStatus: {
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            targets: components["schemas"]["AccessUserStatusTarget"][];
+        };
         ResetAccessUserPassword: {
             /**
              * Format: password
@@ -7611,6 +7636,38 @@ export interface operations {
                     "application/json": components["schemas"]["AccessUserResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    batchChangeAccessUserStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchChangeAccessUserStatus"];
+            };
+        };
+        responses: {
+            /** @description Atomic tenant user status change for at most 100 targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessUserListResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];

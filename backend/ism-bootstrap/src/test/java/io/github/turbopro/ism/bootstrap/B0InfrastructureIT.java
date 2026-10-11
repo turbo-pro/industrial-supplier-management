@@ -1824,6 +1824,58 @@ class B0InfrastructureIT {
                 assertThatThrownBy(() -> authService.login(new AuthModels.LoginCommand(
                         "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","lock-device"),"127.0.0.1"))
                         .isInstanceOf(ApiException.class);
+                long secondMemberId=tenantId+3;
+                jdbcTemplate.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,?,?,?,?,'DISABLED')",
+                        secondMemberId,tenantId,"lifecycle-second","第二成员",passwordEncoder.encode("Initial#Pass123"));
+                jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)",tenantId,secondMemberId,tenantId+11);
+                assertThatThrownBy(()->accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("ACTIVE",List.of(
+                        new AccessModels.StatusTarget(Long.toString(memberId),11),
+                        new AccessModels.StatusTarget(Long.toString(secondMemberId),1)))))
+                        .isInstanceOf(ApiException.class);
+                assertThat(accessService.users()).filteredOn(user->user.id().equals(Long.toString(memberId)))
+                        .singleElement().satisfies(user->{assertThat(user.status()).isEqualTo("DISABLED");assertThat(user.version()).isEqualTo(11);});
+                assertThatThrownBy(()->accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("ACTIVE",List.of(
+                        new AccessModels.StatusTarget(Long.toString(memberId),11),
+                        new AccessModels.StatusTarget(Long.toString(memberId),11)))))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("ACTIVE",List.of(
+                        new AccessModels.StatusTarget(Long.toString(memberId),11),
+                        new AccessModels.StatusTarget(Long.toString(foreignTenantId+1),0)))))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("DISABLED",List.of(
+                        new AccessModels.StatusTarget(Long.toString(adminId),0)))))
+                        .isInstanceOfSatisfying(ApiException.class,error->assertThat(error.errorCode()).isEqualTo(AccessErrorCode.SELF_DISABLE));
+                assertThatThrownBy(()->accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("ACTIVE",
+                        java.util.Collections.nCopies(101,new AccessModels.StatusTarget(Long.toString(memberId),11)))))
+                        .isInstanceOf(ApiException.class);
+                assertThat(accessService.batchChangeUserStatus(new AccessModels.BatchChangeUserStatus("ACTIVE",List.of(
+                        new AccessModels.StatusTarget(Long.toString(memberId),11),
+                        new AccessModels.StatusTarget(Long.toString(secondMemberId),0)))))
+                        .extracting(AccessModels.UserView::status).containsExactly("ACTIVE","ACTIVE");
+                var batchMemberToken=authService.login(new AuthModels.LoginCommand(
+                        "ACCESS-LIFECYCLE","lifecycle-member","Changed#Pass456","batch-device"),"127.0.0.1");
+                mockMvc.perform(put("/api/access/users/batch-status")
+                                .header("Authorization","Bearer "+batchMemberToken.accessToken())
+                                .header("Idempotency-Key","member-batch-denied")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\",\"targets\":[{\"id\":\""+secondMemberId+"\",\"version\":1}]}"))
+                        .andExpect(status().isForbidden());
+                mockMvc.perform(put("/api/access/users/batch-status")
+                                .header("Authorization","Bearer "+adminToken.accessToken())
+                                .header("Idempotency-Key","admin-batch-disable")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\",\"targets\":[{\"id\":\""+memberId+"\",\"version\":12},{\"id\":\""+secondMemberId+"\",\"version\":1}]}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.length()").value(2));
+                mockMvc.perform(put("/api/access/users/batch-status")
+                                .header("Authorization","Bearer "+adminToken.accessToken())
+                                .header("Idempotency-Key","admin-batch-disable")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\",\"targets\":[{\"id\":\""+memberId+"\",\"version\":12},{\"id\":\""+secondMemberId+"\",\"version\":1}]}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.length()").value(2));
+                assertThat(accessService.users()).filteredOn(user->user.id().equals(Long.toString(memberId)))
+                        .singleElement().satisfies(user->assertThat(user.version()).isEqualTo(13));
             }
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);

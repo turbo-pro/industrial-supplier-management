@@ -46,6 +46,9 @@ public final class AccessModels {
     public record RoleScopeOrganizationRow(long roleId,String resourceCode,long organizationId) {}
     public record ChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
                                    @PositiveOrZero int version) {}
+    public record StatusTarget(@NotBlank String id,@PositiveOrZero int version) {}
+    public record BatchChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
+                                        @NotEmpty @Size(max=100) List<@Valid StatusTarget> targets) {}
     public record ResetUserPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
                                     @PositiveOrZero int version) {}
     public record ChangeLoginLock(boolean locked, @NotBlank @Size(max=500) String reason,
