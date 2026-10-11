@@ -1012,6 +1012,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/users/{id}/role-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["previewAccessUserRoleImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/users/{id}/status": {
         parameters: {
             query?: never;
@@ -5275,6 +5291,30 @@ export interface components {
             roleIds: string[];
             version: number;
         };
+        AccessRoleScopeGrant: {
+            roleId: string;
+            resourceCode: string;
+            scopeType: string;
+            organizationIds: string[];
+        };
+        AccessRoleImpactPreview: {
+            userId: string;
+            username: string;
+            version: number;
+            currentRoleIds: string[];
+            proposedRoleIds: string[];
+            addedPermissions: string[];
+            removedPermissions: string[];
+            addedMenus: string[];
+            removedMenus: string[];
+            currentScopeGrants: components["schemas"]["AccessRoleScopeGrant"][];
+            proposedScopeGrants: components["schemas"]["AccessRoleScopeGrant"][];
+            canApply: boolean;
+            blockers: ("NO_CHANGE" | "ADMIN_GRANT_REQUIRES_ADMIN" | "LAST_ADMIN")[];
+        };
+        AccessRoleImpactPreviewResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AccessRoleImpactPreview"];
+        };
         ChangeAccessUserStatus: {
             /** @enum {string} */
             status: "ACTIVE" | "DISABLED";
@@ -7569,6 +7609,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessUserResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    previewAccessUserRoleImpact: {
+        parameters: {
+            query: {
+                roleIds: string[];
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only tenant role grant impact; data scopes are configured role grants */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRoleImpactPreviewResponse"];
                 };
             };
             403: components["responses"]["ApiFailure"];

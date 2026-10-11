@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
@@ -20,8 +20,17 @@ const nextLocked = ref(false);
 const lockReason = ref('');
 const temporaryPassword = ref('');
 const editRoleIds = ref<string[]>([]);
-const form = reactive({ username: '', displayName: '', initialPassword: '', primaryOrganizationId: '', roleIds: [] as string[] });
+const rolePreview = ref<components['schemas']['AccessRoleImpactPreview'] | null>(null);
+const previewing = ref(false);
+const previewMatches = computed(() => !!rolePreview.value && !!selectedUser.value
+  && rolePreview.value.userId === selectedUser.value.id && rolePreview.value.version === selectedUser.value.version
+  && rolePreview.value.proposedRoleIds.length === editRoleIds.value.length
+  && editRoleIds.value.every(id => rolePreview.value?.proposedRoleIds.includes(id)));
+watch(editRoleIds, () => { rolePreview.value = null; }, { deep: true });
 const roleName = (id: string) => roles.value.find(role => role.id === id)?.name ?? `未知角色 (${id})`;
+const scopeDescription = (grant: components['schemas']['AccessRoleScopeGrant']) =>
+  `${roleName(grant.roleId)} / ${grant.resourceCode} / ${grant.scopeType}${grant.organizationIds.length ? ` / 组织 ${grant.organizationIds.join('、')}` : ''}`;
+const form = reactive({ username: '', displayName: '', initialPassword: '', primaryOrganizationId: '', roleIds: [] as string[] });
 const canReset = computed(() => {
   const adminRole = roles.value.find(role => role.code === 'TENANT_ADMIN' && role.status === 'ACTIVE');
   return !!adminRole && !!users.value.find(user => user.id === session.actorId)?.roleIds.includes(adminRole.id);
@@ -100,12 +109,35 @@ async function changeStatus(user: components['schemas']['AccessUser']) {
 function openRoles(user: components['schemas']['AccessUser']) {
   selectedUser.value = user;
   editRoleIds.value = [...user.roleIds];
+  rolePreview.value = null;
   showRoles.value = true;
+}
+
+async function previewRoles() {
+  const user = selectedUser.value;
+  rolePreview.value = null;
+  if (!user || editRoleIds.value.length === 0) { ElMessage.warning('至少保留一个角色'); return; }
+  previewing.value = true;
+  try {
+    const { data, error, response } = await session.client.GET('/access/users/{id}/role-impact', {
+      params: { path: { id: user.id }, query: { roleIds: editRoleIds.value, version: user.version } },
+    });
+    if (error) {
+      ElMessage.error(response.status === 409 ? '用户版本已变化，请刷新后重试' : error.error.message);
+      if (response.status === 409) { showRoles.value = false; await load(); }
+      return;
+    }
+    if (selectedUser.value?.id === user.id && selectedUser.value.version === user.version
+        && editRoleIds.value.length === data.data.proposedRoleIds.length
+        && editRoleIds.value.every(id => data.data.proposedRoleIds.includes(id))) rolePreview.value = data.data;
+  } catch { ElMessage.error('获取角色影响预览失败，请稍后重试'); }
+  finally { previewing.value = false; }
 }
 
 async function saveRoles() {
   const user = selectedUser.value;
   if (!user || editRoleIds.value.length === 0) { ElMessage.warning('至少保留一个角色'); return; }
+  if (!previewMatches.value || !rolePreview.value?.canApply) { ElMessage.warning('请先查看可执行的角色影响预览'); return; }
   if (editRoleIds.value.some(id => roles.value.find(role => role.id === id)?.status !== 'ACTIVE')) {
     ElMessage.warning('请移除已停用或未知角色后再保存'); return;
   }
@@ -232,10 +264,20 @@ onMounted(load);
       </el-form>
       <template #footer><el-button @click="showCreate=false">取消</el-button><el-button type="primary" :loading="saving" :disabled="!roles.some(role=>role.status==='ACTIVE')" @click="createUser">创建</el-button></template>
     </el-dialog>
-    <el-dialog v-model="showRoles" :title="`编辑 ${selectedUser?.username ?? ''} 的角色`" width="560px">
+    <el-dialog v-model="showRoles" :title="`编辑 ${selectedUser?.username ?? ''} 的角色`" width="760px" @closed="rolePreview=null">
       <el-alert title="保存后该用户的旧登录会话立即失效；修改自己的角色后需重新登录。不能移除最后一名有效租户管理员的管理员角色。" type="warning" :closable="false"/>
       <el-form label-position="top" style="margin-top:16px"><el-form-item label="已分配角色"><el-select v-model="editRoleIds" multiple filterable style="width:100%"><el-option v-for="role in roles" :key="role.id" :label="`${role.name}${role.status==='ACTIVE'?'':'（已停用）'}`" :value="role.id" :disabled="role.status!=='ACTIVE'"/></el-select></el-form-item></el-form>
-      <template #footer><el-button @click="showRoles=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveRoles">保存角色</el-button></template>
+      <div v-if="rolePreview" class="role-impact-preview" aria-label="租户角色影响预览">
+        <p>新增权限：{{rolePreview.addedPermissions.join('、')||'无'}}</p>
+        <p>移除权限：{{rolePreview.removedPermissions.join('、')||'无'}}</p>
+        <p>新增菜单：{{rolePreview.addedMenus.join('、')||'无'}}</p>
+        <p>移除菜单：{{rolePreview.removedMenus.join('、')||'无'}}</p>
+        <p>当前数据范围配置：{{rolePreview.currentScopeGrants.map(scopeDescription).join('；')||'无'}}</p>
+        <p>拟定数据范围配置：{{rolePreview.proposedScopeGrants.map(scopeDescription).join('；')||'无'}}</p>
+        <p class="muted">数据范围显示角色原始配置，组织 ID 不展开下级；最终可见数据仍由后端运行时按多角色合并规则判定。</p>
+        <el-alert v-if="!rolePreview.canApply" :title="`当前不可保存：${rolePreview.blockers.join('、')}`" type="error" :closable="false"/>
+      </div>
+      <template #footer><el-button @click="showRoles=false">取消</el-button><el-button :loading="previewing" @click="previewRoles">预览影响</el-button><el-button type="primary" :loading="saving" :disabled="!previewMatches||!rolePreview?.canApply" @click="saveRoles">确认保存角色</el-button></template>
     </el-dialog>
     <el-dialog v-model="showReset" :title="`重置 ${resetTarget?.username ?? ''} 的密码`" width="560px" @closed="temporaryPassword=''">
       <el-alert title="重置后旧会话立即失效；账号下次登录须修改密码。临时密码仅通过安全渠道交付，不记录在审计或响应中。" type="warning" :closable="false"/>
@@ -249,3 +291,9 @@ onMounted(load);
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.role-impact-preview { margin: 16px 0; padding: 16px; border: 1px solid #d3e1e4; border-radius: 8px; background: #f7fafb; }
+.role-impact-preview p { margin: 8px 0; line-height: 1.5; overflow-wrap: anywhere; }
+.role-impact-preview .muted { color: #697a83; font-size: 12px; }
+</style>

@@ -16,6 +16,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
@@ -85,6 +88,60 @@ public class AccessService {
         Map<Long,Set<String>> roleIds=mapper.userRoles(tenantId).stream().collect(Collectors.groupingBy(
                 AccessModels.UserRoleRow::userId,Collectors.mapping(row->Long.toString(row.roleId()),Collectors.toSet())));
         return mapper.users(tenantId).stream().map(row->userView(row,roleIds.getOrDefault(row.id(),Set.of()))).toList();
+    }
+
+    @Transactional(readOnly=true)
+    public AccessModels.RoleImpactPreview previewUserRoles(long userId,Set<String> roleIds,int version) {
+        long tenantId=tenantId();
+        if(version<0||roleIds==null||roleIds.isEmpty()) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        AccessModels.UserRow user=mapper.findUser(tenantId,userId);
+        if(user==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(user.version()!=version) throw new ApiException(CommonErrorCode.CONFLICT);
+        Set<Long> proposedIds=parseIds(roleIds);
+        if(mapper.activeRoleCount(tenantId,proposedIds)!=proposedIds.size())
+            throw new ApiException(AccessErrorCode.INVALID_GRANT,"角色不存在、已停用或不属于当前租户");
+        Set<Long> currentIds=new HashSet<>(mapper.assignedUserRoleIds(tenantId,userId));
+        Set<String> blockers=new TreeSet<>();
+        if(currentIds.equals(proposedIds)) blockers.add("NO_CHANGE");
+        Long adminRoleId=mapper.tenantAdminRoleId(tenantId);
+        boolean currentlyAdmin=mapper.tenantAdministratorRole(tenantId,userId)>0;
+        if(adminRoleId!=null&&(currentlyAdmin||proposedIds.contains(adminRoleId))
+                &&mapper.tenantAdministratorRole(tenantId,TenantContext.require().actorId())==0)
+            blockers.add("ADMIN_GRANT_REQUIRES_ADMIN");
+        if(adminRoleId!=null&&"ACTIVE".equals(user.status())&&currentlyAdmin
+                &&mapper.activeTenantAdministrators(tenantId)<=1&&!proposedIds.contains(adminRoleId))
+            blockers.add("LAST_ADMIN");
+        Set<String> beforePermissions=permissionCodes(tenantId,currentIds);
+        Set<String> afterPermissions=permissionCodes(tenantId,proposedIds);
+        Set<String> beforeMenus=menuCodes(tenantId,currentIds);
+        Set<String> afterMenus=menuCodes(tenantId,proposedIds);
+        return new AccessModels.RoleImpactPreview(Long.toString(userId),user.username(),version,
+                stringIds(currentIds),stringIds(proposedIds),difference(afterPermissions,beforePermissions),
+                difference(beforePermissions,afterPermissions),difference(afterMenus,beforeMenus),
+                difference(beforeMenus,afterMenus),scopeGrants(tenantId,currentIds),scopeGrants(tenantId,proposedIds),
+                blockers.isEmpty(),blockers);
+    }
+
+    private Set<String> permissionCodes(long tenantId,Set<Long> ids){
+        return ids.isEmpty()?Set.of():new TreeSet<>(mapper.permissionCodesForRoles(tenantId,ids));
+    }
+    private Set<String> menuCodes(long tenantId,Set<Long> ids){
+        return ids.isEmpty()?Set.of():new TreeSet<>(mapper.menuCodesForRoles(tenantId,ids));
+    }
+    private Set<String> difference(Set<String> left,Set<String> right){Set<String> result=new TreeSet<>(left);result.removeAll(right);return result;}
+    private Set<String> stringIds(Set<Long> ids){Set<String> result=new TreeSet<>();ids.forEach(id->result.add(Long.toString(id)));return result;}
+    private List<AccessModels.RoleScopeGrant> scopeGrants(long tenantId,Set<Long> ids){
+        if(ids.isEmpty()) return List.of();
+        Map<String,Set<String>> organizations=new java.util.HashMap<>();
+        for(var row:mapper.scopeOrganizationsForRoles(tenantId,ids))
+            organizations.computeIfAbsent(row.roleId()+":"+row.resourceCode(),ignored->new TreeSet<>())
+                    .add(Long.toString(row.organizationId()));
+        List<AccessModels.RoleScopeGrant> grants=new ArrayList<>();
+        for(var row:mapper.scopeRowsForRoles(tenantId,ids))
+            grants.add(new AccessModels.RoleScopeGrant(Long.toString(row.roleId()),row.resourceCode(),row.scopeType(),
+                    organizations.getOrDefault(row.roleId()+":"+row.resourceCode(),Set.of())));
+        grants.sort(Comparator.comparing(AccessModels.RoleScopeGrant::roleId).thenComparing(AccessModels.RoleScopeGrant::resourceCode));
+        return grants;
     }
 
     @Transactional

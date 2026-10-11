@@ -1613,7 +1613,7 @@ class B0InfrastructureIT {
     }
 
     @Test
-    void shouldEnforceTenantUserStatusAndLastAdministratorSafety() {
+    void shouldEnforceTenantUserStatusAndLastAdministratorSafety() throws Exception {
         long tenantId = 198000L, adminId = 198001L, memberId = 198002L, foreignTenantId = 198100L;
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?, 'ACTIVE')", tenantId, "ACCESS-LIFECYCLE", "账号生命周期");
         jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?, 'ACTIVE')", foreignTenantId, "ACCESS-FOREIGN", "外部租户");
@@ -1626,11 +1626,50 @@ class B0InfrastructureIT {
                     foreignTenantId + 1, foreignTenantId, "foreign-member", "外部成员", passwordEncoder.encode("Initial#Pass123"));
             jdbcTemplate.update("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(?,?, 'TENANT_ADMIN','租户管理员',1,'ACTIVE')", tenantId + 10, tenantId);
             jdbcTemplate.update("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(?,?, 'MEMBER','普通成员',0,'ACTIVE')", tenantId + 11, tenantId);
+            jdbcTemplate.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) VALUES(?,?,3004)",tenantId,tenantId+10);
+            jdbcTemplate.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) VALUES(?,?,3102)",tenantId,tenantId+10);
+            jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'supplier:master','TENANT_ALL')",tenantId,tenantId+10);
+            jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'supplier:master','OWNED')",tenantId,tenantId+11);
             jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, adminId, tenantId + 10);
             jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, memberId, tenantId + 11);
             AuthModels.TokenPair memberToken = authService.login(new AuthModels.LoginCommand(
                     "ACCESS-LIFECYCLE", "lifecycle-member", "Initial#Pass123", "lifecycle-device"), "127.0.0.1");
+            AuthModels.TokenPair adminToken = authService.login(new AuthModels.LoginCommand(
+                    "ACCESS-LIFECYCLE", "lifecycle-admin", "Initial#Pass123", "preview-device"), "127.0.0.1");
             try (var context = TenantContext.open(tenantId, adminId)) {
+                var adminGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+                        .load(tenantId, adminId);
+                assertThat(adminGrants.actions()).contains("iam:user:manage");
+                when(grantLoader.load(tenantId, adminId)).thenReturn(adminGrants);
+            }
+            when(grantLoader.load(tenantId, memberId)).thenReturn(PermissionSnapshot.denyAll());
+            mockMvc.perform(get("/api/access/users/"+memberId+"/role-impact")
+                            .header("Authorization","Bearer "+memberToken.accessToken())
+                            .param("roleIds",Long.toString(tenantId+10),Long.toString(tenantId+11)).param("version","0"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/access/users/"+memberId+"/role-impact")
+                            .header("Authorization","Bearer "+adminToken.accessToken())
+                            .param("roleIds",Long.toString(tenantId+10),Long.toString(tenantId+11)).param("version","0"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.addedPermissions",org.hamcrest.Matchers.hasItem("iam:user:manage")))
+                    .andExpect(jsonPath("$.data.addedMenus",org.hamcrest.Matchers.hasItem("USER_MANAGEMENT")))
+                    .andExpect(jsonPath("$.data.proposedScopeGrants.length()").value(2));
+            try (var context = TenantContext.open(tenantId, adminId)) {
+                var impact=accessService.previewUserRoles(memberId,
+                        Set.of(Long.toString(tenantId+10),Long.toString(tenantId+11)),0);
+                assertThat(impact.canApply()).isTrue();
+                assertThat(impact.addedPermissions()).contains("iam:user:manage");
+                assertThat(impact.addedMenus()).contains("USER_MANAGEMENT");
+                assertThat(impact.currentScopeGrants()).extracting(AccessModels.RoleScopeGrant::scopeType).containsExactly("OWNED");
+                assertThat(impact.proposedScopeGrants()).extracting(AccessModels.RoleScopeGrant::scopeType).contains("TENANT_ALL","OWNED");
+                assertThat(accessService.previewUserRoles(adminId,Set.of(Long.toString(tenantId+11)),0).blockers())
+                        .contains("LAST_ADMIN");
+                assertThatThrownBy(()->accessService.previewUserRoles(memberId,Set.of(Long.toString(tenantId+10)),1))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->accessService.previewUserRoles(foreignTenantId+1,Set.of(Long.toString(tenantId+11)),0))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(()->accessService.previewUserRoles(memberId,Set.of(Long.toString(foreignTenantId+11)),0))
+                        .isInstanceOf(ApiException.class);
                 assertThat(accessService.users()).filteredOn(user -> user.id().equals(Long.toString(memberId)))
                         .singleElement().satisfies(user -> assertThat(user.roleIds()).containsExactly(Long.toString(tenantId + 11)));
                 assertThatThrownBy(() -> accessService.changeUserStatus(adminId, new AccessModels.ChangeUserStatus("DISABLED", 0)))
@@ -1673,6 +1712,8 @@ class B0InfrastructureIT {
                         .containsExactly(Long.toString(tenantId + 11));
             }
             try (var context = TenantContext.open(tenantId, memberId)) {
+                assertThat(accessService.previewUserRoles(memberId,Set.of(Long.toString(tenantId+10)),4).blockers())
+                        .contains("ADMIN_GRANT_REQUIRES_ADMIN");
                 assertThatThrownBy(() -> accessService.changeUserStatus(adminId,
                         new AccessModels.ChangeUserStatus("DISABLED", 0))).isInstanceOf(ApiException.class);
                 assertThatThrownBy(() -> accessService.assignUserRoles(memberId,
@@ -1787,6 +1828,9 @@ class B0InfrastructureIT {
         } finally {
             jdbcTemplate.update("DELETE FROM iam_refresh_token WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_user_role WHERE tenant_id=?", tenantId);
+            jdbcTemplate.update("DELETE FROM iam_role_data_scope WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM iam_role_menu WHERE tenant_id=?",tenantId);
+            jdbcTemplate.update("DELETE FROM iam_role_permission WHERE tenant_id=?",tenantId);
             jdbcTemplate.update("DELETE FROM iam_role WHERE tenant_id=?", tenantId);
             jdbcTemplate.update("DELETE FROM iam_user WHERE tenant_id IN (?,?)", tenantId, foreignTenantId);
             jdbcTemplate.update("DELETE FROM iam_tenant WHERE id IN (?,?)", tenantId, foreignTenantId);

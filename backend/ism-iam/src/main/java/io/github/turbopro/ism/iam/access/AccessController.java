@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 @RestController
@@ -32,6 +33,10 @@ public class AccessController {
     ApiResponse<List<AccessModels.UserView>> users(){return responses.success(service.users());}
     @PostMapping("/users") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.UserView> createUser(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateUser command){return responses.success(once("USER_CREATE",key,command,AccessModels.UserView.class,()->{var r=service.createUser(command);append("USER_CREATE","USER",r.id(),Map.of(),Map.of("username",r.username()));return r;}));}
+    @GetMapping("/users/{id}/role-impact") @RequiresPermission("iam:user:manage")
+    ApiResponse<AccessModels.RoleImpactPreview> previewUserRoles(@PathVariable long id,@RequestParam List<String> roleIds,@RequestParam int version){
+        return responses.success(service.previewUserRoles(id,Set.copyOf(roleIds),version));
+    }
     @PutMapping("/users/{id}/roles") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.UserView> assignRoles(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.AssignUserRoles command){return responses.success(once("USER_ROLE_ASSIGN:"+id,key,command,AccessModels.UserView.class,()->{var r=service.assignUserRoles(id,command);append("USER_ROLE_ASSIGN","USER",Long.toString(id),Map.of(),Map.of("roleIds",r.roleIds(),"version",r.version()));return r;}));}
     @PutMapping("/users/{id}/status") @RequiresPermission("iam:user:manage")

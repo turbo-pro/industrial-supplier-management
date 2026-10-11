@@ -46,6 +46,20 @@ public interface AccessMapper extends TenantScopedMapper {
     Long lockTenant(long tenantId);
     @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0 FOR UPDATE")
     AccessModels.UserRow userForStatusUpdate(long tenantId,long userId);
+    @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM iam_user WHERE tenant_id=#{tenantId} AND id=#{userId} AND deleted=0")
+    AccessModels.UserRow findUser(long tenantId,long userId);
+    @Select("SELECT role_id FROM iam_user_role WHERE tenant_id=#{tenantId} AND user_id=#{userId} ORDER BY role_id")
+    List<Long> assignedUserRoleIds(long tenantId,long userId);
+    @Select("<script>SELECT COUNT(*) FROM iam_role WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND id IN <foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
+    int activeRoleCount(long tenantId,Set<Long> roleIds);
+    @Select("<script>SELECT DISTINCT p.permission_code FROM iam_role r JOIN iam_role_permission rp ON rp.tenant_id=r.tenant_id AND rp.role_id=r.id JOIN sys_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' WHERE r.tenant_id=#{tenantId} AND r.status='ACTIVE' AND r.id IN <foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> ORDER BY p.permission_code</script>")
+    List<String> permissionCodesForRoles(long tenantId,Set<Long> roleIds);
+    @Select("<script>SELECT DISTINCT m.menu_code FROM iam_role r JOIN iam_role_menu rm ON rm.tenant_id=r.tenant_id AND rm.role_id=r.id JOIN sys_menu m ON m.id=rm.menu_id AND m.status='ACTIVE' WHERE r.tenant_id=#{tenantId} AND r.status='ACTIVE' AND r.id IN <foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> ORDER BY m.menu_code</script>")
+    List<String> menuCodesForRoles(long tenantId,Set<Long> roleIds);
+    @Select("<script>SELECT ds.role_id,ds.resource_code,ds.scope_type FROM iam_role r JOIN iam_role_data_scope ds ON ds.tenant_id=r.tenant_id AND ds.role_id=r.id WHERE r.tenant_id=#{tenantId} AND r.status='ACTIVE' AND r.id IN <foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> ORDER BY ds.role_id,ds.resource_code</script>")
+    List<AccessModels.RoleScopeRow> scopeRowsForRoles(long tenantId,Set<Long> roleIds);
+    @Select("<script>SELECT dso.role_id,dso.resource_code,dso.organization_id FROM iam_role r JOIN iam_role_data_scope_organization dso ON dso.tenant_id=r.tenant_id AND dso.role_id=r.id WHERE r.tenant_id=#{tenantId} AND r.status='ACTIVE' AND r.id IN <foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> ORDER BY dso.role_id,dso.resource_code,dso.organization_id</script>")
+    List<AccessModels.RoleScopeOrganizationRow> scopeOrganizationsForRoles(long tenantId,Set<Long> roleIds);
     @Select("""
         SELECT COUNT(DISTINCT u.id) FROM iam_user u
         JOIN iam_user_role ur ON ur.tenant_id=u.tenant_id AND ur.user_id=u.id

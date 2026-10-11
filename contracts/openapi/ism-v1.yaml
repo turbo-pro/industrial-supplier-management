@@ -793,6 +793,21 @@ paths:
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/{id}/role-impact:
+    get:
+      operationId: previewAccessUserRoleImpact
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: roleIds, in: query, required: true, style: form, explode: true, schema: { type: array, minItems: 1, uniqueItems: true, items: { type: string } } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Read-only tenant role grant impact; data scopes are configured role grants, not a final row-level access decision, content: { application/json: { schema: { $ref: '#/components/schemas/AccessRoleImpactPreviewResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /access/users/{id}/status:
     put:
       operationId: changeUserStatus
@@ -3372,6 +3387,33 @@ components:
       properties:
         roleIds: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
         version: { type: integer, minimum: 0 }
+    AccessRoleScopeGrant:
+      type: object
+      required: [roleId, resourceCode, scopeType, organizationIds]
+      properties:
+        roleId: { type: string }
+        resourceCode: { type: string }
+        scopeType: { type: string }
+        organizationIds: { type: array, uniqueItems: true, items: { type: string } }
+    AccessRoleImpactPreview:
+      type: object
+      required: [userId, username, version, currentRoleIds, proposedRoleIds, addedPermissions, removedPermissions, addedMenus, removedMenus, currentScopeGrants, proposedScopeGrants, canApply, blockers]
+      properties:
+        userId: { type: string }
+        username: { type: string }
+        version: { type: integer }
+        currentRoleIds: { type: array, uniqueItems: true, items: { type: string } }
+        proposedRoleIds: { type: array, uniqueItems: true, items: { type: string } }
+        addedPermissions: { type: array, uniqueItems: true, items: { type: string } }
+        removedPermissions: { type: array, uniqueItems: true, items: { type: string } }
+        addedMenus: { type: array, uniqueItems: true, items: { type: string } }
+        removedMenus: { type: array, uniqueItems: true, items: { type: string } }
+        currentScopeGrants: { type: array, items: { $ref: '#/components/schemas/AccessRoleScopeGrant' } }
+        proposedScopeGrants: { type: array, items: { $ref: '#/components/schemas/AccessRoleScopeGrant' } }
+        canApply: { type: boolean }
+        blockers: { type: array, uniqueItems: true, items: { type: string, enum: [NO_CHANGE, ADMIN_GRANT_REQUIRES_ADMIN, LAST_ADMIN] } }
+    AccessRoleImpactPreviewResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AccessRoleImpactPreview' } } }]
     ChangeAccessUserStatus:
       type: object
       required: [status, version]

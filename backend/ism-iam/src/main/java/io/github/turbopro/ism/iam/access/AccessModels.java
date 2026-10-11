@@ -36,6 +36,14 @@ public final class AccessModels {
         public CreateUser { roleIds = roleIds == null ? Set.of() : Set.copyOf(roleIds); }
     }
     public record AssignUserRoles(@NotEmpty Set<String> roleIds, @PositiveOrZero int version) {}
+    public record RoleScopeGrant(String roleId,String resourceCode,String scopeType,Set<String> organizationIds) {}
+    public record RoleImpactPreview(String userId,String username,int version,Set<String> currentRoleIds,
+                                    Set<String> proposedRoleIds,Set<String> addedPermissions,Set<String> removedPermissions,
+                                    Set<String> addedMenus,Set<String> removedMenus,
+                                    List<RoleScopeGrant> currentScopeGrants,List<RoleScopeGrant> proposedScopeGrants,
+                                    boolean canApply,Set<String> blockers) {}
+    public record RoleScopeRow(long roleId,String resourceCode,String scopeType) {}
+    public record RoleScopeOrganizationRow(long roleId,String resourceCode,long organizationId) {}
     public record ChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
                                    @PositiveOrZero int version) {}
     public record ResetUserPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,

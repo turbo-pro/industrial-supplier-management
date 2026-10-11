@@ -39,6 +39,17 @@ test('tenant user page creates and disables a member with versioned request', as
     members = members.map(member => member.id === '2' ? { ...member, roleIds: ['11', '10'], version: 2 } : member);
     await route.fulfill(response(members[1]));
   });
+  await page.route('**/api/access/users/2/role-impact?**', async route => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('version')).toBe('1');
+    await route.fulfill(response({ userId: '2', username: 'member', version: 1,
+      currentRoleIds: ['11'], proposedRoleIds: ['11', '10'],
+      addedPermissions: ['iam:user:manage'], removedPermissions: [],
+      addedMenus: ['USER_MANAGEMENT'], removedMenus: [],
+      currentScopeGrants: [{ roleId: '11', resourceCode: 'supplier:master', scopeType: 'OWNED', organizationIds: [] }],
+      proposedScopeGrants: [{ roleId: '10', resourceCode: 'supplier:master', scopeType: 'TENANT_ALL', organizationIds: [] }],
+      canApply: true, blockers: [] }));
+  });
   await page.route('**/api/access/users/2/password-reset', async route => {
     expect(route.request().postDataJSON()).toEqual({ temporaryPassword: 'Temporary#Pass123', version: 2 });
     expect(route.request().headers()['idempotency-key']).toBeTruthy();
@@ -71,7 +82,11 @@ test('tenant user page creates and disables a member with versioned request', as
   await page.getByRole('dialog').locator('.el-select').click();
   await page.getByRole('option', { name: '租户管理员' }).click();
   await page.keyboard.press('Escape');
-  await page.getByRole('dialog').getByRole('button', { name: '保存角色' }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: '确认保存角色' })).toBeDisabled();
+  await page.getByRole('dialog').getByRole('button', { name: '预览影响' }).click();
+  await expect(page.getByRole('dialog')).toContainText('iam:user:manage');
+  await expect(page.getByRole('dialog')).toContainText('TENANT_ALL');
+  await page.getByRole('dialog').getByRole('button', { name: '确认保存角色' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'member' })).toContainText('租户管理员');
   await expect(adminRow.getByRole('button', { name: '重置密码' })).toBeDisabled();
   await page.getByRole('row').filter({ hasText: 'member' }).getByRole('button', { name: '重置密码' }).click();

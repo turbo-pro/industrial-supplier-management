@@ -9,6 +9,7 @@
 - 即使持有 `iam:user:manage`，非租户管理员也不能创建带 `TENANT_ADMIN` 角色的用户、给用户授予该角色，或调整已有管理员账号；该约束在服务端执行。
 - `PUT /api/access/users/{id}/password-reset` 仅允许租户管理员重置他人密码，输入临时密码与预期版本；禁止跨租户、自重置、弱密码及复用当前密码。成功后强制下次改密、清除输错密码临时锁与失败次数（不清除独立手工锁）、提升版本和 token_version、撤销刷新令牌；旧密码失效。临时密码只经请求传入，不回传、不写审计；幂等只持久化请求哈希。页面不缓存临时密码，建议用安全渠道交付。
 - V60 只为 `iam_user` 增加手工登录锁标志、原因/时间/操作者，不改旧迁移。`PUT /api/access/users/{id}/login-lock` 由租户管理员锁定或解锁他人，要求原因和预期版本；锁定不修改账号状态，解锁同时清除手工锁及输错密码产生的有效到期锁、失败次数，但不启用 `DISABLED` 账号。锁定/解锁均撤销刷新令牌并提升 token_version；后端拒绝跨租户、自锁、非管理员、重复操作及将最后一名有效管理员手工锁定。认证登录、刷新和访问会话均复核手工锁；刷新先锁用户行再锁令牌，以与管理员锁定保持一致顺序。
+- `GET /api/access/users/{id}/role-impact?roleIds=&version=` 提供租户内只读角色影响预览，按有效角色配置列出操作/字段权限和菜单增减、变更前后每个角色的数据范围原始配置，以及重复角色、非管理员调整管理员账号、最后有效管理员等阻断原因。角色 ID 必须全部属于当前租户且有效，目标用户版本过期返回冲突；接口要求 `iam:user:manage`。管理端必须先预览再确认，但预览不是授权凭证，`PUT /roles` 仍独立锁定和复核。数据范围配置不等于最终行级可见范围，组织 ID 未在预览中展开子组织。本增量无迁移。
 - 仅新增 V60，未修改任何已发布迁移；旧库 V25 校验和不做 repair/clean/关闭验证。
 
 ## 自动化证据
@@ -16,10 +17,12 @@
 - `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test -Dit.test=B0InfrastructureIT -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false verify`：隔离 Testcontainers MySQL，60 条迁移成功，B0 集成测试 20/20 通过；覆盖租户隔离、最后管理员、版本冲突、角色读写、密码重置，以及手工/自动锁定、令牌失效、解锁后登录、停用状态不被解锁。
 - `corepack pnpm generate:api` 与 `corepack pnpm --filter @ism/admin build` 通过，生成契约客户端类型；当前 Node 20.12 低于 Vite 推荐 20.19，构建产生版本提醒但本轮成功。
 - `PLAYWRIGHT_CHANNEL=chrome corepack pnpm --filter @ism/admin test:e2e`：4/4 通过；管理端模拟接口用例覆盖角色编辑、密码重置、锁定/解锁请求的版本、幂等键、自操作按钮禁用和停用状态独立；不能据此声明真实服务端联调完成。
+- 租户角色影响预览定向验收：隔离 Testcontainers MySQL 应用现有 62 条迁移，`B0InfrastructureIT#shouldEnforceTenantUserStatusAndLastAdministratorSafety` 通过；覆盖租户管理员可预览、无权成员 403、权限/菜单差异、原始数据范围配置、最后管理员阻断、过期版本与跨租户拒绝。管理端 build 和 4/4 模拟接口浏览器用例通过；本增量没有新增迁移，也不代表真实后端浏览器 E2E 已验收。
+- 同命令以 `-Dit.test=B0InfrastructureIT` 执行全组回归：21/21 通过、0 失败、0 错误、0 跳过。测试中预期的通知模板不可用日志用于覆盖失败回滚，并非测试失败。
 
 ## 未完成边界
 
-- 角色调整当前是整组替换，不含角色授权影响预览或批量账号调整；修改自己角色后必须重新登录。
+- 角色调整仍是整组替换，不含批量账号调整；预览展示授权配置差异，但尚无最终数据范围仿真。修改自己角色后必须重新登录。
 - 页面获取角色名称及可选项依赖 `iam:role:view`；仅授予 `iam:user:manage` 而不授予角色查看的自定义角色，仍可调用受控后端写接口，但页面会禁用创建和角色编辑。
 - 自助找回密码、Console 平台账号管理、批量操作与身份联邦未在本轮验收。管理员重置要求管理员已经掌握目标用户身份，不等于自助恢复流程。
 - 页面 E2E 使用模拟接口；仍需真实服务+隔离数据库的浏览器回归与更完整并发验收。
