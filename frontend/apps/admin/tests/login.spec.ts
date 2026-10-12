@@ -36,7 +36,7 @@ test('tenant administrator can log in with the generated API client', async ({ p
   await expect(page.getByRole('dialog', { name: '修改登录密码' })).toContainText('长期未登录');
   await page.getByRole('button', { name: '稍后再说' }).click();
   await expect(page.getByRole('heading', { name: '供应商档案' })).toBeVisible();
-  await expect(page.locator('strong').filter({ hasText: '华东设备制造' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '华东设备制造', exact: true })).toBeVisible();
   await page.getByText('系统管理').click();
   await expect(page.getByRole('menuitem', { name: '组织管理' })).toBeVisible();
   await page.getByRole('menuitem', { name: '组织管理' }).click();
@@ -67,4 +67,23 @@ test('first login requires password change before loading the workspace', async 
   await page.getByLabel('确认新密码').fill('Changed#Pass456');
   await page.getByRole('button', { name: '确认修改' }).click();
   await expect(page.getByRole('button', { name: '登录系统' })).toBeVisible();
+});
+
+test('a permission-denied workspace keeps a valid login session', async ({ page }) => {
+  await page.route('**/api/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    success: true, data: { accessToken: 'limited-token', refreshToken: 'refresh', expiresIn: 900,
+      user: { id: '2', tenantId: '10', username: 'viewer', displayName: '只读用户',
+        passwordChangeRequired: false, passwordChangeRecommended: false } },
+  }) }));
+  await page.route('**/api/organizations/tree', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false, error: { message: '无权限' } }) }));
+  await page.route('**/api/navigation/menus', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false, error: { message: '无权限' } }) }));
+  await page.route('**/api/organizations/current', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { id: '100', code: 'HEADQUARTERS', name: '集团总部', type: 'HEADQUARTERS' } }) }));
+  await page.route('**/api/suppliers**', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false, error: { message: '无权限' } }) }));
+  await page.goto('/');
+  await page.getByLabel('用户名').fill('viewer');
+  await page.getByRole('button', { name: '登录系统' }).click();
+  await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('ism.admin.accessToken'))).toBe('limited-token');
+  await page.reload();
+  await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
 });

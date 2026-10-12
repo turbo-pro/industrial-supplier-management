@@ -62,6 +62,19 @@ export const useSessionStore = defineStore('session', () => {
     const [tree, current, navigation] = await Promise.all([
       client.GET('/organizations/tree'), client.GET('/organizations/current'), client.GET('/navigation/menus'),
     ]);
+    const workspaceResponses = [tree, current, navigation];
+    if (workspaceResponses.some(result => result.response.status === 401)) {
+      logout();
+      throw new Error('登录状态已失效');
+    }
+    if (workspaceResponses.some(result => result.response.status === 403)) {
+      // A valid but unprivileged account must not be mistaken for an expired session.
+      organizations.value = tree.error ? [] : tree.data.data;
+      currentOrganization.value = current.error ? undefined : current.data.data;
+      menus.value = navigation.error ? [] : navigation.data.data;
+      await loadBranding();
+      return;
+    }
     if (tree.error || current.error || navigation.error) {
       logout();
       throw new Error('登录状态已失效');
