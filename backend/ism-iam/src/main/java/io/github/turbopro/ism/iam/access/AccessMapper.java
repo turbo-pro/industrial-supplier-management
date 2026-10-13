@@ -13,10 +13,18 @@ public interface AccessMapper extends TenantScopedMapper {
     List<AccessModels.RoleRow> roles(long tenantId);
     @Select("SELECT id,role_code,role_name,built_in,status,version FROM iam_role WHERE tenant_id=#{tenantId} AND id=#{id}")
     AccessModels.RoleRow role(long tenantId,long id);
+    @Select("SELECT p.permission_code FROM sys_permission p WHERE p.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY p.permission_code")
+    List<String> activePermissionCodes(long tenantId);
+    @Select("SELECT m.menu_code FROM sys_menu m WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY m.menu_code")
+    List<String> activeMenuCodes(long tenantId);
+    @Select("SELECT DISTINCT resource_code FROM iam_role_data_scope WHERE tenant_id=#{tenantId} ORDER BY resource_code")
+    List<String> tenantScopeResourceCodes(long tenantId);
     @Insert("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(#{id},#{tenantId},#{code},#{name},0,'ACTIVE')")
     int insertRole(long tenantId,long id,String code,String name);
     @Update("UPDATE iam_role SET role_name=#{name},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE' AND version=#{version}")
     int updateRole(long tenantId,long id,String name,int version);
+    @Update("UPDATE iam_role SET version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE' AND built_in=0 AND version=#{version}")
+    int advanceRoleGrantVersion(long tenantId,long id,int version);
     @Delete("DELETE FROM iam_role_permission WHERE tenant_id=#{tenantId} AND role_id=#{roleId}") int clearPermissions(long tenantId,long roleId);
     @Delete("DELETE FROM iam_role_menu WHERE tenant_id=#{tenantId} AND role_id=#{roleId}") int clearMenus(long tenantId,long roleId);
     @Delete("DELETE FROM iam_role_data_scope_organization WHERE tenant_id=#{tenantId} AND role_id=#{roleId}") int clearScopeOrganizations(long tenantId,long roleId);

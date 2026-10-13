@@ -37,6 +37,24 @@ public class AccessService {
         return mapper.roles(tenantId()).stream().map(this::roleView).toList();
     }
 
+    @Transactional(readOnly=true)
+    public AccessModels.RoleGrantCatalog roleGrantCatalog() {
+        long tenantId=tenantId();
+        return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId),mapper.activeMenuCodes(tenantId),
+                mapper.tenantScopeResourceCodes(tenantId));
+    }
+
+    @Transactional(readOnly=true)
+    public AccessModels.RoleGrantsView roleGrants(long id) {
+        var role=requireRole(id);
+        long tenantId=tenantId();
+        Set<Long> ids=Set.of(id);
+        List<AccessModels.DataScopeGrant> scopes=scopeGrants(tenantId,ids).stream()
+                .map(row->new AccessModels.DataScopeGrant(row.resourceCode(),row.scopeType(),row.organizationIds()))
+                .toList();
+        return new AccessModels.RoleGrantsView(roleView(role),permissionCodes(tenantId,ids),menuCodes(tenantId,ids),scopes);
+    }
+
     @Transactional
     public AccessModels.RoleView createRole(AccessModels.CreateRole command) {
         long id = id();
@@ -57,6 +75,8 @@ public class AccessService {
         AccessModels.RoleRow role = requireRole(id);
         if (role.builtIn()) throw new ApiException(AccessErrorCode.BUILT_IN_ROLE);
         long tenantId = tenantId();
+        if (mapper.advanceRoleGrantVersion(tenantId,id,command.version())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT);
         mapper.clearPermissions(tenantId,id); mapper.clearMenus(tenantId,id);
         mapper.clearScopeOrganizations(tenantId,id); mapper.clearScopes(tenantId,id);
         if (!command.permissionCodes().isEmpty()

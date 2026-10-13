@@ -3,6 +3,7 @@ package io.github.turbopro.ism.iam.access;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -21,7 +22,7 @@ public final class AccessModels {
                                  Set<String> organizationIds) {
         public DataScopeGrant { organizationIds = organizationIds == null ? Set.of() : Set.copyOf(organizationIds); }
     }
-    public record GrantRole(Set<String> permissionCodes, Set<String> menuCodes,
+    public record GrantRole(@NotNull @PositiveOrZero Integer version, Set<String> permissionCodes, Set<String> menuCodes,
                             @NotEmpty List<@Valid DataScopeGrant> dataScopes) {
         public GrantRole {
             permissionCodes = permissionCodes == null ? Set.of() : Set.copyOf(permissionCodes);
@@ -55,6 +56,10 @@ public final class AccessModels {
                                   @PositiveOrZero int version) {}
     public record RoleRow(long id, String roleCode, String roleName, boolean builtIn, String status, int version) {}
     public record RoleView(String id, String code, String name, boolean builtIn, String status, int version) {}
+    public record RoleGrantsView(RoleView role, Set<String> permissionCodes, Set<String> menuCodes,
+                                 List<DataScopeGrant> dataScopes) {}
+    public record RoleGrantCatalog(List<String> permissionCodes, List<String> menuCodes,
+                                   List<String> resourceCodes) {}
     public record UserRow(long id, String username, String displayName, String status,
                           boolean forcePasswordChange, boolean manualLocked, String manualLockReason,
                           LocalDateTime lockedUntil, int version) {}

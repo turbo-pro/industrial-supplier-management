@@ -948,6 +948,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/role-grant-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRoleGrantCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/roles/{id}": {
         parameters: {
             query?: never;
@@ -971,7 +987,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getRoleGrants"];
         put: operations["grantRole"];
         post?: never;
         delete?: never;
@@ -5276,6 +5292,7 @@ export interface components {
             organizationIds: string[];
         };
         GrantRole: {
+            version: number;
             permissionCodes: string[];
             menuCodes: string[];
             dataScopes: components["schemas"]["DataScopeGrant"][];
@@ -5294,6 +5311,23 @@ export interface components {
         };
         RoleResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["Role"];
+        };
+        RoleGrants: {
+            role: components["schemas"]["Role"];
+            permissionCodes: string[];
+            menuCodes: string[];
+            dataScopes: components["schemas"]["DataScopeGrant"][];
+        };
+        RoleGrantsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["RoleGrants"];
+        };
+        RoleGrantCatalog: {
+            permissionCodes: string[];
+            menuCodes: string[];
+            resourceCodes: string[];
+        };
+        RoleGrantCatalogResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["RoleGrantCatalog"];
         };
         CreateAccessUser: {
             username: string;
@@ -7498,6 +7532,27 @@ export interface operations {
             409: components["responses"]["ApiFailure"];
         };
     };
+    getRoleGrantCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active grant code options and current tenant scope resource codes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleGrantCatalogResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
     updateRole: {
         parameters: {
             query?: never;
@@ -7526,6 +7581,30 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getRoleGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current tenant role grants and version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleGrantsResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     grantRole: {

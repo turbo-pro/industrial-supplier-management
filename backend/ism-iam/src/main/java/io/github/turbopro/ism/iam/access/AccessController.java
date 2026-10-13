@@ -23,6 +23,10 @@ public class AccessController {
     public AccessController(AccessService service,ApiResponseFactory responses,IdempotencyService idempotency,AuditService audit,ObjectMapper json){this.service=service;this.responses=responses;this.idempotency=idempotency;this.audit=audit;this.json=json;}
     @GetMapping("/roles") @RequiresPermission("iam:role:view")
     ApiResponse<List<AccessModels.RoleView>> roles(){return responses.success(service.roles());}
+    @GetMapping("/role-grant-catalog") @RequiresPermission("iam:role:view")
+    ApiResponse<AccessModels.RoleGrantCatalog> roleGrantCatalog(){return responses.success(service.roleGrantCatalog());}
+    @GetMapping("/roles/{id}/grants") @RequiresPermission("iam:role:view")
+    ApiResponse<AccessModels.RoleGrantsView> roleGrants(@PathVariable long id){return responses.success(service.roleGrants(id));}
     @PostMapping("/roles") @RequiresPermission("iam:role:manage")
     ApiResponse<AccessModels.RoleView> createRole(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateRole command){return responses.success(once("ROLE_CREATE",key,command,AccessModels.RoleView.class,()->{var r=service.createRole(command);append("ROLE_CREATE","ROLE",r.id(),Map.of(),Map.of("code",r.code()));return r;}));}
     @PutMapping("/roles/{id}") @RequiresPermission("iam:role:manage")

@@ -735,6 +735,14 @@ paths:
       responses:
         '200': { description: Role created, content: { application/json: { schema: { $ref: '#/components/schemas/RoleResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /access/role-grant-catalog:
+    get:
+      operationId: getRoleGrantCatalog
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Active grant code options and current tenant scope resource codes, content: { application/json: { schema: { $ref: '#/components/schemas/RoleGrantCatalogResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /access/roles/{id}:
     put:
       operationId: updateRole
@@ -748,6 +756,16 @@ paths:
         '200': { description: Role updated, content: { application/json: { schema: { $ref: '#/components/schemas/RoleResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
   /access/roles/{id}/grants:
+    get:
+      operationId: getRoleGrants
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Current tenant role grants and version, content: { application/json: { schema: { $ref: '#/components/schemas/RoleGrantsResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
     put:
       operationId: grantRole
       tags: [Tenant Access]
@@ -3367,8 +3385,9 @@ components:
         organizationIds: { type: array, uniqueItems: true, items: { type: string } }
     GrantRole:
       type: object
-      required: [permissionCodes, menuCodes, dataScopes]
+      required: [version, permissionCodes, menuCodes, dataScopes]
       properties:
+        version: { type: integer, minimum: 0 }
         permissionCodes: { type: array, uniqueItems: true, items: { type: string } }
         menuCodes: { type: array, uniqueItems: true, items: { type: string } }
         dataScopes: { type: array, minItems: 1, items: { $ref: '#/components/schemas/DataScopeGrant' } }
@@ -3386,6 +3405,25 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Role' } } } }]
     RoleResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Role' } } }]
+    RoleGrants:
+      type: object
+      required: [role, permissionCodes, menuCodes, dataScopes]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        permissionCodes: { type: array, uniqueItems: true, items: { type: string } }
+        menuCodes: { type: array, uniqueItems: true, items: { type: string } }
+        dataScopes: { type: array, items: { $ref: '#/components/schemas/DataScopeGrant' } }
+    RoleGrantsResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrants' } } }]
+    RoleGrantCatalog:
+      type: object
+      required: [permissionCodes, menuCodes, resourceCodes]
+      properties:
+        permissionCodes: { type: array, items: { type: string } }
+        menuCodes: { type: array, items: { type: string } }
+        resourceCodes: { type: array, items: { type: string } }
+    RoleGrantCatalogResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrantCatalog' } } }]
     CreateAccessUser:
       type: object
       required: [username, displayName, initialPassword, primaryOrganizationId, roleIds]

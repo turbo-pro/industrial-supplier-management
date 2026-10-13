@@ -1590,10 +1590,34 @@ class B0InfrastructureIT {
                     .isInstanceOf(ApiException.class);
 
             var siteManager = accessService.createRole(new AccessModels.CreateRole("SITE_MANAGER", "场站管理员"));
+            assertThat(accessService.roleGrantCatalog().permissionCodes()).contains("iam:organization:view");
+            assertThat(accessService.roleGrantCatalog().menuCodes()).contains("ORGANIZATION_MANAGEMENT");
             accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
-                    Set.of("iam:organization:view", "iam:menu:view"), Set.of("ORGANIZATION_MANAGEMENT"),
+                    siteManager.version(), Set.of("iam:organization:view", "iam:menu:view"), Set.of("ORGANIZATION_MANAGEMENT"),
                     List.of(new AccessModels.DataScopeGrant("iam:organization", "ORGANIZATION_SET",
                             Set.of(subsidiary.id())))));
+            var roleGrants = accessService.roleGrants(Long.parseLong(siteManager.id()));
+            assertThat(roleGrants.role().version()).isEqualTo(siteManager.version()+1);
+            assertThat(roleGrants.permissionCodes()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
+            assertThat(roleGrants.menuCodes()).contains("ORGANIZATION_MANAGEMENT");
+            assertThat(roleGrants.dataScopes()).singleElement().satisfies(scope -> {
+                assertThat(scope.scopeType()).isEqualTo("ORGANIZATION_SET");
+                assertThat(scope.organizationIds()).containsExactly(subsidiary.id());
+            });
+            assertThatThrownBy(() -> accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    siteManager.version(), Set.of(), Set.of(),
+                    List.of(new AccessModels.DataScopeGrant("iam:organization", "NONE", Set.of())))))
+                    .isInstanceOf(ApiException.class);
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).permissionCodes())
+                    .containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
+            assertThatThrownBy(() -> accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    roleGrants.role().version(), Set.of("missing:permission"), Set.of(),
+                    List.of(new AccessModels.DataScopeGrant("iam:organization", "NONE", Set.of())))))
+                    .isInstanceOf(ApiException.class);
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id()))).satisfies(unchanged -> {
+                assertThat(unchanged.role().version()).isEqualTo(roleGrants.role().version());
+                assertThat(unchanged.permissionCodes()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
+            });
             var siteUser = accessService.createUser(new AccessModels.CreateUser("site-manager", "场站管理员",
                     "Initial#Site123", site.id(), Set.of(siteManager.id())));
             var siteGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
