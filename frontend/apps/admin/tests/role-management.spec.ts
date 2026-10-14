@@ -21,7 +21,7 @@ test('tenant role page creates a role and replaces grants with the displayed ver
       children: [{ id: '2', code: 'ROLE_MANAGEMENT', name: '角色权限', route: '/system/roles', component: 'RolePage', children: [] }] }]));
     if (path === '/api/configuration/branding') return route.fulfill(ok({ systemName: '工业供应商管理系统', logoUrl: '', faviconUrl: '', footerText: '' }));
     if (path === '/api/access/role-grant-catalog') return route.fulfill(ok({ permissionCodes: ['iam:role:view', 'iam:role:manage'],
-      menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'] }));
+      menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'], canManage: true }));
     if (path === '/api/access/roles' && method === 'GET') return route.fulfill(ok(roles));
     if (path === '/api/access/roles' && method === 'POST') {
       expect(route.request().headers()['idempotency-key']).toBeTruthy();
@@ -61,4 +61,33 @@ test('tenant role page creates a role and replaces grants with the displayed ver
   expect(savedGrant).toMatchObject({ version: 0, permissionCodes: [], menuCodes: [],
     dataScopes: [{ resourceCode: 'supplier:master', scopeType: 'NONE', organizationIds: [] }] });
   await expect(page.getByText('场站审核').first()).toBeVisible();
+});
+
+test('view-only role account cannot open mutation controls', async ({ page }) => {
+  const ok = (data: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
+  await page.addInitScript(() => sessionStorage.setItem('ism.admin.accessToken', 'viewer-token'));
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/access/roles') return route.fulfill(ok([
+      { id: '42', code: 'AUDITOR', name: '只读审核', builtIn: false, status: 'ACTIVE', version: 1 },
+    ]));
+    if (path === '/api/access/role-grant-catalog') return route.fulfill(ok({
+      permissionCodes: ['iam:role:view'], menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'], canManage: false,
+    }));
+    if (path === '/api/access/roles/42/grants') return route.fulfill(ok({
+      role: { id: '42', code: 'AUDITOR', name: '只读审核', builtIn: false, status: 'ACTIVE', version: 1 },
+      permissionCodes: ['iam:role:view'], menuCodes: ['ROLE_MANAGEMENT'],
+      dataScopes: [{ resourceCode: 'supplier:master', scopeType: 'NONE', organizationIds: [] }],
+    }));
+    if (path === '/api/organizations/current') return route.fulfill(ok({ id: '100', code: 'HQ', name: '总部', type: 'HEADQUARTERS' }));
+    if (path === '/api/configuration/branding') return route.fulfill(ok({ systemName: '工业供应商管理系统', logoUrl: '', faviconUrl: '', footerText: '' }));
+    return route.fulfill(ok([]));
+  });
+  await page.goto('/system/roles');
+  await expect(page.getByText('当前账号仅可查看角色授权')).toBeVisible();
+  await expect(page.getByRole('button', { name: '新建角色' })).toBeDisabled();
+  await page.getByRole('cell', { name: '只读审核' }).click();
+  await expect(page.getByRole('button', { name: '保存名称' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '新增资源' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '保存授权' })).toBeDisabled();
 });

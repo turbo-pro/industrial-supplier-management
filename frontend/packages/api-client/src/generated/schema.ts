@@ -5325,6 +5325,8 @@ export interface components {
             permissionCodes: string[];
             menuCodes: string[];
             resourceCodes: string[];
+            /** @description 当前操作者是否具有角色管理权限；仅供界面呈现，写接口仍独立鉴权。 */
+            canManage: boolean;
         };
         RoleGrantCatalogResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["RoleGrantCatalog"];

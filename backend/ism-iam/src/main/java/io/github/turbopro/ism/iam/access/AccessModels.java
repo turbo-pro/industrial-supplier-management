@@ -59,7 +59,7 @@ public final class AccessModels {
     public record RoleGrantsView(RoleView role, Set<String> permissionCodes, Set<String> menuCodes,
                                  List<DataScopeGrant> dataScopes) {}
     public record RoleGrantCatalog(List<String> permissionCodes, List<String> menuCodes,
-                                   List<String> resourceCodes) {}
+                                   List<String> resourceCodes, boolean canManage) {}
     public record UserRow(long id, String username, String displayName, String status,
                           boolean forcePasswordChange, boolean manualLocked, String manualLockReason,
                           LocalDateTime lockedUntil, int version) {}

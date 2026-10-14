@@ -1592,6 +1592,10 @@ class B0InfrastructureIT {
             var siteManager = accessService.createRole(new AccessModels.CreateRole("SITE_MANAGER", "场站管理员"));
             assertThat(accessService.roleGrantCatalog().permissionCodes()).contains("iam:organization:view");
             assertThat(accessService.roleGrantCatalog().menuCodes()).contains("ORGANIZATION_MANAGEMENT");
+            assertThat(accessService.roleGrantCatalog().canManage()).isFalse();
+            try (var manage = AuthorizationContext.open(new PermissionSnapshot(Set.of("iam:role:manage"), Map.of(), Set.of()))) {
+                assertThat(accessService.roleGrantCatalog().canManage()).isTrue();
+            }
             accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
                     siteManager.version(), Set.of("iam:organization:view", "iam:menu:view"), Set.of("ORGANIZATION_MANAGEMENT"),
                     List.of(new AccessModels.DataScopeGrant("iam:organization", "ORGANIZATION_SET",

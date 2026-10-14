@@ -3,6 +3,7 @@ package io.github.turbopro.ism.iam.access;
 import io.github.turbopro.ism.common.api.error.ApiException;
 import io.github.turbopro.ism.common.api.error.CommonErrorCode;
 import io.github.turbopro.ism.common.infrastructure.authorization.DataScope;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.PasswordPolicy;
@@ -41,7 +42,7 @@ public class AccessService {
     public AccessModels.RoleGrantCatalog roleGrantCatalog() {
         long tenantId=tenantId();
         return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId),mapper.activeMenuCodes(tenantId),
-                mapper.tenantScopeResourceCodes(tenantId));
+                mapper.tenantScopeResourceCodes(tenantId), AuthorizationContext.require().hasAction("iam:role:manage"));
     }
 
     @Transactional(readOnly=true)

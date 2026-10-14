@@ -3417,11 +3417,12 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrants' } } }]
     RoleGrantCatalog:
       type: object
-      required: [permissionCodes, menuCodes, resourceCodes]
+      required: [permissionCodes, menuCodes, resourceCodes, canManage]
       properties:
         permissionCodes: { type: array, items: { type: string } }
         menuCodes: { type: array, items: { type: string } }
         resourceCodes: { type: array, items: { type: string } }
+        canManage: { type: boolean, description: 当前操作者是否具有角色管理权限；仅供界面呈现，写接口仍独立鉴权。 }
     RoleGrantCatalogResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrantCatalog' } } }]
     CreateAccessUser:

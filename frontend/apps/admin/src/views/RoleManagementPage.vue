@@ -22,7 +22,8 @@ const permissionCodes = ref<string[]>([]);
 const menuCodes = ref<string[]>([]);
 const scopes = ref<ScopeForm[]>([]);
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedId.value));
-const editable = computed(() => !!detail.value && detail.value.role.status === 'ACTIVE' && !detail.value.role.builtIn);
+const canManage = computed(() => catalog.value?.canManage === true);
+const editable = computed(() => canManage.value && !!detail.value && detail.value.role.status === 'ACTIVE' && !detail.value.role.builtIn);
 
 function resetForm(value: components['schemas']['RoleGrants']) {
   roleName.value = value.role.name;
@@ -60,6 +61,7 @@ async function selectRole(id: string) {
 }
 
 async function createRole() {
+  if (!canManage.value) return;
   createForm.code = createForm.code.trim().toUpperCase();
   createForm.name = createForm.name.trim();
   if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(createForm.code) || !createForm.name || createForm.name.length > 100) {
@@ -135,7 +137,7 @@ onMounted(() => { void loadRoles(); });
 <template>
   <div class="role-page">
     <div class="page-heading"><div><h1>角色权限</h1><p>按当前租户配置角色；内置角色只读，授权变更需按版本确认。</p></div>
-      <div><el-button :loading="loading" @click="loadRoles()">刷新</el-button><el-button type="primary" @click="showCreate=true">新建角色</el-button></div>
+      <div><el-button :loading="loading" @click="loadRoles()">刷新</el-button><el-button type="primary" :disabled="!canManage" @click="showCreate=true">新建角色</el-button></div>
     </div>
     <div class="role-layout">
       <el-card class="role-list" shadow="never"><template #header>租户角色</template>
@@ -146,6 +148,7 @@ onMounted(() => { void loadRoles(); });
       </el-card>
       <el-card class="role-detail" shadow="never" v-loading="loading"><template #header>{{selectedRole?.name || '选择角色'}}</template>
         <template v-if="detail">
+          <el-alert v-if="!canManage" type="info" :closable="false" title="当前账号仅可查看角色授权" />
           <el-alert v-if="detail.role.builtIn" type="info" :closable="false" title="内置角色不可修改授权" />
           <el-form label-position="top" class="role-form">
             <el-form-item label="角色编码"><el-input :model-value="detail.role.code" disabled /></el-form-item>
