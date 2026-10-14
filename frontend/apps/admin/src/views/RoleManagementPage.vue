@@ -24,6 +24,7 @@ const scopes = ref<ScopeForm[]>([]);
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedId.value));
 const canManage = computed(() => catalog.value?.canManage === true);
 const editable = computed(() => canManage.value && !!detail.value && detail.value.role.status === 'ACTIVE' && !detail.value.role.builtIn);
+const navigationPermissionMissing = computed(() => menuCodes.value.length > 0 && !permissionCodes.value.includes('iam:menu:view'));
 
 function resetForm(value: components['schemas']['RoleGrants']) {
   roleName.value = value.role.name;
@@ -115,7 +116,8 @@ async function saveGrants() {
   if (dataScopes.some(row => (row.scopeType === 'ORGANIZATION_SET') !== (row.organizationIds.length > 0))) {
     ElMessage.warning('仅组织集合范围需填写组织 ID，且至少填写一个'); return;
   }
-  try { await ElMessageBox.confirm('授权将整体替换。请核对权限、菜单和每个资源的数据范围；已登录用户的有效权限可能立即变化。', '确认替换角色授权', { type: 'warning' }); }
+  const navigationWarning = navigationPermissionMissing.value ? '当前未授予 iam:menu:view，用户登录后侧栏菜单接口会返回 403。' : '';
+  try { await ElMessageBox.confirm(`授权将整体替换。请核对权限、菜单和每个资源的数据范围；已登录用户的有效权限可能立即变化。${navigationWarning}`, '确认替换角色授权', { type: 'warning' }); }
   catch { return; }
   busy.value = true;
   try {
@@ -155,6 +157,7 @@ onMounted(() => { void loadRoles(); });
             <el-form-item label="角色名称"><div class="inline-field"><el-input v-model="roleName" :disabled="!editable||busy" maxlength="100" /><el-button :disabled="!editable||busy" @click="saveName">保存名称</el-button></div></el-form-item>
             <el-form-item label="操作权限"><el-select v-model="permissionCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="选择权限代码"><el-option v-for="code in catalog?.permissionCodes || []" :key="code" :label="code" :value="code" /></el-select></el-form-item>
             <el-form-item label="可见菜单"><el-select v-model="menuCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="选择菜单代码"><el-option v-for="code in catalog?.menuCodes || []" :key="code" :label="code" :value="code" /></el-select></el-form-item>
+            <el-alert v-if="navigationPermissionMissing" type="warning" :closable="false" title="当前角色缺少 iam:menu:view；即使配置了菜单代码，登录后的侧栏菜单接口仍会返回 403。" />
             <div class="section-title">数据范围 <el-button link type="primary" :disabled="!editable||busy" @click="scopes.push({resourceCode:'',scopeType:'NONE',organizationIds:''})">新增资源</el-button></div>
             <div v-for="(scope,index) in scopes" :key="index" class="scope-row">
               <el-select v-model="scope.resourceCode" filterable :disabled="!editable||busy" placeholder="资源代码"><el-option v-for="code in catalog?.resourceCodes || []" :key="code" :label="code" :value="code" /></el-select>

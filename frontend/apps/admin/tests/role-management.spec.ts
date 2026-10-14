@@ -47,6 +47,7 @@ test('tenant role page creates a role and replaces grants with the displayed ver
   await page.goto('/system/roles');
   await expect(page.getByRole('heading', { name: '角色权限' })).toBeVisible();
   await expect(page.getByText('质量审核').first()).toBeVisible();
+  await expect(page.getByText('当前角色缺少 iam:menu:view')).toBeVisible();
   await page.getByRole('button', { name: '新建角色' }).click();
   await page.getByRole('dialog', { name: '新建租户角色' }).getByPlaceholder('例如 QUALITY_REVIEWER').fill('SITE_AUDITOR');
   await page.getByRole('dialog', { name: '新建租户角色' }).getByRole('textbox', { name: '角色名称' }).fill('场站审核');
@@ -87,6 +88,7 @@ test('view-only role account cannot open mutation controls', async ({ page }) =>
   await expect(page.getByText('当前账号仅可查看角色授权')).toBeVisible();
   await expect(page.getByRole('button', { name: '新建角色' })).toBeDisabled();
   await page.getByRole('cell', { name: '只读审核' }).click();
+  await expect(page.getByText('当前角色缺少 iam:menu:view')).toBeVisible();
   await expect(page.getByRole('button', { name: '保存名称' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '新增资源' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '保存授权' })).toBeDisabled();
