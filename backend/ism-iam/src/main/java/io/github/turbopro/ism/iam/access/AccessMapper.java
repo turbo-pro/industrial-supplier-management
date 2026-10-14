@@ -19,6 +19,12 @@ public interface AccessMapper extends TenantScopedMapper {
     List<String> activeMenuCodes(long tenantId);
     @Select("SELECT DISTINCT resource_code FROM iam_role_data_scope WHERE tenant_id=#{tenantId} ORDER BY resource_code")
     List<String> tenantScopeResourceCodes(long tenantId);
+    @Select("SELECT p.permission_code AS code,p.permission_name AS name,p.permission_type AS type FROM sys_permission p WHERE p.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY p.permission_code")
+    List<AccessModels.PermissionOption> activePermissionOptions(long tenantId);
+    @Select("SELECT m.menu_code AS code,m.menu_name AS name,parent.menu_code AS parentCode,m.route_path AS routePath FROM sys_menu m LEFT JOIN sys_menu parent ON parent.id=m.parent_id WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY m.menu_code")
+    List<AccessModels.MenuOption> activeMenuOptions(long tenantId);
+    @Select("SELECT CAST(id AS CHAR) AS id,organization_code AS code,organization_name AS name,organization_type AS type FROM iam_organization WHERE tenant_id=#{tenantId} AND status='ACTIVE' ORDER BY organization_code,id")
+    List<AccessModels.OrganizationOption> activeOrganizationOptions(long tenantId);
     @Insert("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(#{id},#{tenantId},#{code},#{name},0,'ACTIVE')")
     int insertRole(long tenantId,long id,String code,String name);
     @Update("UPDATE iam_role SET role_name=#{name},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE' AND version=#{version}")

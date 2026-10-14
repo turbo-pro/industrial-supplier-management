@@ -3417,12 +3417,38 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrants' } } }]
     RoleGrantCatalog:
       type: object
-      required: [permissionCodes, menuCodes, resourceCodes, canManage]
+      required: [permissionCodes, menuCodes, resourceCodes, canManage, permissions, menus, organizations]
       properties:
         permissionCodes: { type: array, items: { type: string } }
         menuCodes: { type: array, items: { type: string } }
         resourceCodes: { type: array, items: { type: string } }
         canManage: { type: boolean, description: 当前操作者是否具有角色管理权限；仅供界面呈现，写接口仍独立鉴权。 }
+        permissions: { type: array, items: { $ref: '#/components/schemas/RolePermissionOption' } }
+        menus: { type: array, items: { $ref: '#/components/schemas/RoleMenuOption' } }
+        organizations: { type: array, items: { $ref: '#/components/schemas/RoleOrganizationOption' } }
+    RolePermissionOption:
+      type: object
+      required: [code, name, type]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        type: { type: string }
+    RoleMenuOption:
+      type: object
+      required: [code, name, routePath]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parentCode: { type: string, nullable: true }
+        routePath: { type: string }
+    RoleOrganizationOption:
+      type: object
+      required: [id, code, name, type]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        type: { type: string }
     RoleGrantCatalogResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/RoleGrantCatalog' } } }]
     CreateAccessUser:

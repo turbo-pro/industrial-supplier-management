@@ -21,7 +21,10 @@ test('tenant role page creates a role and replaces grants with the displayed ver
       children: [{ id: '2', code: 'ROLE_MANAGEMENT', name: '角色权限', route: '/system/roles', component: 'RolePage', children: [] }] }]));
     if (path === '/api/configuration/branding') return route.fulfill(ok({ systemName: '工业供应商管理系统', logoUrl: '', faviconUrl: '', footerText: '' }));
     if (path === '/api/access/role-grant-catalog') return route.fulfill(ok({ permissionCodes: ['iam:role:view', 'iam:role:manage'],
-      menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'], canManage: true }));
+      menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'], canManage: true,
+      permissions: [{ code: 'iam:role:view', name: '查看角色', type: 'ACTION' }, { code: 'iam:role:manage', name: '管理角色', type: 'ACTION' }],
+      menus: [{ code: 'ROLE_MANAGEMENT', name: '角色权限', parentCode: 'SYSTEM_MANAGEMENT', routePath: '/system/roles' }],
+      organizations: [{ id: '100', code: 'HQ', name: '总部', type: 'HEADQUARTERS' }], }));
     if (path === '/api/access/roles' && method === 'GET') return route.fulfill(ok(roles));
     if (path === '/api/access/roles' && method === 'POST') {
       expect(route.request().headers()['idempotency-key']).toBeTruthy();
@@ -48,6 +51,10 @@ test('tenant role page creates a role and replaces grants with the displayed ver
   await expect(page.getByRole('heading', { name: '角色权限' })).toBeVisible();
   await expect(page.getByText('质量审核').first()).toBeVisible();
   await expect(page.getByText('当前角色缺少 iam:menu:view')).toBeVisible();
+  await expect(page.locator('.role-detail .el-loading-mask')).toHaveCount(0);
+  await page.locator('.role-detail .el-form-item').filter({ hasText: '操作权限' }).locator('.el-select').click();
+  await expect(page.getByRole('option', { name: '查看角色（iam:role:view）' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '新建角色' }).click();
   await page.getByRole('dialog', { name: '新建租户角色' }).getByPlaceholder('例如 QUALITY_REVIEWER').fill('SITE_AUDITOR');
   await page.getByRole('dialog', { name: '新建租户角色' }).getByRole('textbox', { name: '角色名称' }).fill('场站审核');
@@ -56,11 +63,15 @@ test('tenant role page creates a role and replaces grants with the displayed ver
   await page.getByRole('button', { name: '新增资源' }).click();
   await page.locator('.scope-row').first().getByRole('combobox').first().click();
   await page.getByRole('option', { name: 'supplier:master' }).click();
+  await page.locator('.scope-row').first().locator('.el-select').nth(1).click();
+  await page.getByRole('option', { name: 'ORGANIZATION_SET' }).click();
+  await page.locator('.scope-row').first().locator('.el-select').nth(2).click();
+  await page.getByRole('option', { name: '总部（HQ）' }).click();
   await page.getByRole('button', { name: '保存授权' }).click();
   await page.getByRole('button', { name: '确定' }).click();
   await expect.poll(() => savedGrant?.dataScopes?.length).toBe(1);
   expect(savedGrant).toMatchObject({ version: 0, permissionCodes: [], menuCodes: [],
-    dataScopes: [{ resourceCode: 'supplier:master', scopeType: 'NONE', organizationIds: [] }] });
+    dataScopes: [{ resourceCode: 'supplier:master', scopeType: 'ORGANIZATION_SET', organizationIds: ['100'] }] });
   await expect(page.getByText('场站审核').first()).toBeVisible();
 });
 
@@ -74,6 +85,9 @@ test('view-only role account cannot open mutation controls', async ({ page }) =>
     ]));
     if (path === '/api/access/role-grant-catalog') return route.fulfill(ok({
       permissionCodes: ['iam:role:view'], menuCodes: ['ROLE_MANAGEMENT'], resourceCodes: ['supplier:master'], canManage: false,
+      permissions: [{ code: 'iam:role:view', name: '查看角色', type: 'ACTION' }],
+      menus: [{ code: 'ROLE_MANAGEMENT', name: '角色权限', parentCode: 'SYSTEM_MANAGEMENT', routePath: '/system/roles' }],
+      organizations: [{ id: '100', code: 'HQ', name: '总部', type: 'HEADQUARTERS' }],
     }));
     if (path === '/api/access/roles/42/grants') return route.fulfill(ok({
       role: { id: '42', code: 'AUDITOR', name: '只读审核', builtIn: false, status: 'ACTIVE', version: 1 },

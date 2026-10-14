@@ -5327,6 +5327,26 @@ export interface components {
             resourceCodes: string[];
             /** @description 当前操作者是否具有角色管理权限；仅供界面呈现，写接口仍独立鉴权。 */
             canManage: boolean;
+            permissions: components["schemas"]["RolePermissionOption"][];
+            menus: components["schemas"]["RoleMenuOption"][];
+            organizations: components["schemas"]["RoleOrganizationOption"][];
+        };
+        RolePermissionOption: {
+            code: string;
+            name: string;
+            type: string;
+        };
+        RoleMenuOption: {
+            code: string;
+            name: string;
+            parentCode?: string | null;
+            routePath: string;
+        };
+        RoleOrganizationOption: {
+            id: string;
+            code: string;
+            name: string;
+            type: string;
         };
         RoleGrantCatalogResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["RoleGrantCatalog"];

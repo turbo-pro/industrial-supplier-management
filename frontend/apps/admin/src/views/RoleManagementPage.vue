@@ -6,7 +6,7 @@ import { useSessionStore } from '../stores/session';
 
 type Role = components['schemas']['Role'];
 type ScopeType = components['schemas']['DataScopeGrant']['scopeType'];
-type ScopeForm = { resourceCode: string; scopeType: ScopeType; organizationIds: string };
+type ScopeForm = { resourceCode: string; scopeType: ScopeType; organizationIds: string[] };
 const scopeTypes: ScopeType[] = ['TENANT_ALL', 'ORGANIZATION_SET', 'PROJECT_SET', 'OWNED', 'CREATED', 'NONE'];
 const session = useSessionStore();
 const roles = ref<Role[]>([]);
@@ -25,13 +25,21 @@ const selectedRole = computed(() => roles.value.find(role => role.id === selecte
 const canManage = computed(() => catalog.value?.canManage === true);
 const editable = computed(() => canManage.value && !!detail.value && detail.value.role.status === 'ACTIVE' && !detail.value.role.builtIn);
 const navigationPermissionMissing = computed(() => menuCodes.value.length > 0 && !permissionCodes.value.includes('iam:menu:view'));
+const permissionLabel = (code: string) => {
+  const row = catalog.value?.permissions.find(item => item.code === code);
+  return row ? `${row.name}（${code}）` : code;
+};
+const menuLabel = (code: string) => {
+  const row = catalog.value?.menus.find(item => item.code === code);
+  return row ? `${row.name}（${code}）` : code;
+};
 
 function resetForm(value: components['schemas']['RoleGrants']) {
   roleName.value = value.role.name;
   permissionCodes.value = [...value.permissionCodes];
   menuCodes.value = [...value.menuCodes];
   scopes.value = value.dataScopes.map(row => ({
-    resourceCode: row.resourceCode, scopeType: row.scopeType, organizationIds: row.organizationIds.join(','),
+    resourceCode: row.resourceCode, scopeType: row.scopeType, organizationIds: [...row.organizationIds],
   }));
 }
 
@@ -111,7 +119,7 @@ async function saveGrants() {
   }
   const dataScopes = scopes.value.map(row => ({
     resourceCode: row.resourceCode, scopeType: row.scopeType,
-    organizationIds: row.organizationIds.split(/[,，\s]+/).filter(Boolean),
+    organizationIds: row.organizationIds,
   }));
   if (dataScopes.some(row => (row.scopeType === 'ORGANIZATION_SET') !== (row.organizationIds.length > 0))) {
     ElMessage.warning('仅组织集合范围需填写组织 ID，且至少填写一个'); return;
@@ -155,17 +163,17 @@ onMounted(() => { void loadRoles(); });
           <el-form label-position="top" class="role-form">
             <el-form-item label="角色编码"><el-input :model-value="detail.role.code" disabled /></el-form-item>
             <el-form-item label="角色名称"><div class="inline-field"><el-input v-model="roleName" :disabled="!editable||busy" maxlength="100" /><el-button :disabled="!editable||busy" @click="saveName">保存名称</el-button></div></el-form-item>
-            <el-form-item label="操作权限"><el-select v-model="permissionCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="选择权限代码"><el-option v-for="code in catalog?.permissionCodes || []" :key="code" :label="code" :value="code" /></el-select></el-form-item>
-            <el-form-item label="可见菜单"><el-select v-model="menuCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="选择菜单代码"><el-option v-for="code in catalog?.menuCodes || []" :key="code" :label="code" :value="code" /></el-select></el-form-item>
+            <el-form-item label="操作权限"><el-select v-model="permissionCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="搜索权限名称或代码"><el-option v-for="code in catalog?.permissionCodes || []" :key="code" :label="permissionLabel(code)" :value="code" /></el-select></el-form-item>
+            <el-form-item label="可见菜单"><el-select v-model="menuCodes" multiple filterable collapse-tags :disabled="!editable||busy" style="width:100%" placeholder="搜索菜单名称或代码"><el-option v-for="code in catalog?.menuCodes || []" :key="code" :label="menuLabel(code)" :value="code" /></el-select></el-form-item>
             <el-alert v-if="navigationPermissionMissing" type="warning" :closable="false" title="当前角色缺少 iam:menu:view；即使配置了菜单代码，登录后的侧栏菜单接口仍会返回 403。" />
-            <div class="section-title">数据范围 <el-button link type="primary" :disabled="!editable||busy" @click="scopes.push({resourceCode:'',scopeType:'NONE',organizationIds:''})">新增资源</el-button></div>
+            <div class="section-title">数据范围 <el-button link type="primary" :disabled="!editable||busy" @click="scopes.push({resourceCode:'',scopeType:'NONE',organizationIds:[]})">新增资源</el-button></div>
             <div v-for="(scope,index) in scopes" :key="index" class="scope-row">
               <el-select v-model="scope.resourceCode" filterable :disabled="!editable||busy" placeholder="资源代码"><el-option v-for="code in catalog?.resourceCodes || []" :key="code" :label="code" :value="code" /></el-select>
-              <el-select v-model="scope.scopeType" :disabled="!editable||busy" placeholder="范围类型"><el-option v-for="type in scopeTypes" :key="type" :label="type" :value="type" /></el-select>
-              <el-input v-model="scope.organizationIds" :disabled="!editable||busy||scope.scopeType!=='ORGANIZATION_SET'" placeholder="组织 ID，逗号分隔" />
+              <el-select v-model="scope.scopeType" :disabled="!editable||busy" placeholder="范围类型" @change="(type: ScopeType) => { if (type !== 'ORGANIZATION_SET') scope.organizationIds = []; }"><el-option v-for="type in scopeTypes" :key="type" :label="type" :value="type" /></el-select>
+              <el-select v-model="scope.organizationIds" multiple filterable collapse-tags :disabled="!editable||busy||scope.scopeType!=='ORGANIZATION_SET'" placeholder="选择有效组织"><el-option v-for="org in catalog?.organizations || []" :key="org.id" :label="`${org.name}（${org.code}）`" :value="org.id" /></el-select>
               <el-button :disabled="!editable||busy" @click="scopes.splice(index,1)">移除</el-button>
             </div>
-            <p class="help">数据范围为授权原始配置；实际可见数据仍由各业务接口复核。组织集合需要填写当前租户有效组织 ID。</p>
+            <p class="help">数据范围为授权原始配置；实际可见数据仍由各业务接口复核。组织集合仅可选择当前租户有效组织。</p>
             <el-button type="primary" :loading="busy" :disabled="!editable||scopes.length===0" @click="saveGrants">保存授权</el-button>
           </el-form>
         </template>

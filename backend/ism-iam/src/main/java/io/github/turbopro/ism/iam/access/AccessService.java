@@ -42,7 +42,9 @@ public class AccessService {
     public AccessModels.RoleGrantCatalog roleGrantCatalog() {
         long tenantId=tenantId();
         return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId),mapper.activeMenuCodes(tenantId),
-                mapper.tenantScopeResourceCodes(tenantId), AuthorizationContext.require().hasAction("iam:role:manage"));
+                mapper.tenantScopeResourceCodes(tenantId), AuthorizationContext.require().hasAction("iam:role:manage"),
+                mapper.activePermissionOptions(tenantId), mapper.activeMenuOptions(tenantId),
+                mapper.activeOrganizationOptions(tenantId));
     }
 
     @Transactional(readOnly=true)
