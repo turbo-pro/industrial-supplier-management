@@ -1641,6 +1641,50 @@ class B0InfrastructureIT {
             assertThat(siteGrants.actions()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
             assertThat(siteGrants.dataScope("iam:organization").organizationIds())
                     .contains(Long.parseLong(subsidiary.id()), Long.parseLong(site.id()));
+            try (var foreign = TenantContext.open(tenantId + 1, administratorId)) {
+                assertThatThrownBy(() -> accessService.roleGrants(Long.parseLong(siteManager.id())))
+                        .isInstanceOf(ApiException.class);
+                assertThatThrownBy(() -> accessService.grantRole(Long.parseLong(siteManager.id()),
+                        new AccessModels.GrantRole(roleGrants.role().version(), Set.of(), Set.of(), List.of())))
+                        .isInstanceOf(ApiException.class);
+            }
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).permissionCodes())
+                    .containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
+
+            int competingVersion = roleGrants.role().version();
+            var readyToWrite = new CountDownLatch(2);
+            var startWriting = new CountDownLatch(1);
+            ExecutorService writers = Executors.newFixedThreadPool(2);
+            try {
+                List<Future<Boolean>> results = List.of(Set.of("iam:role:view"), Set.of("iam:menu:view"))
+                        .stream().map(permissions -> writers.submit(() -> {
+                            try (var tenant = TenantContext.open(tenantId, administratorId)) {
+                                readyToWrite.countDown();
+                                startWriting.await();
+                                try {
+                                    accessService.grantRole(Long.parseLong(siteManager.id()),
+                                            new AccessModels.GrantRole(competingVersion, permissions, Set.of(), List.of()));
+                                    return true;
+                                } catch (ApiException conflict) {
+                                    return false;
+                                }
+                            }
+                        })).toList();
+                assertThat(readyToWrite.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                startWriting.countDown();
+                assertThat(results.get(0).get(10, java.util.concurrent.TimeUnit.SECONDS)
+                        == results.get(1).get(10, java.util.concurrent.TimeUnit.SECONDS)).isFalse();
+            } catch (Exception exception) {
+                throw new IllegalStateException(exception);
+            } finally {
+                startWriting.countDown();
+                writers.shutdownNow();
+            }
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id()))).satisfies(winner -> {
+                assertThat(winner.role().version()).isEqualTo(competingVersion + 1);
+                assertThat(winner.permissionCodes()).hasSize(1)
+                        .allMatch(code -> code.equals("iam:role:view") || code.equals("iam:menu:view"));
+            });
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");
