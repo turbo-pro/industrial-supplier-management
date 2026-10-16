@@ -1449,7 +1449,7 @@ class B0InfrastructureIT {
     }
 
     @Test
-    void shouldProvisionTenantHeadquartersAndFirstAdministrator() {
+    void shouldProvisionTenantHeadquartersAndFirstAdministrator() throws Exception {
         var plan = packagePlanService.create(new PackagePlanModels.CreatePackage(
                 "TENANT_BOOTSTRAP", "租户开通验收套餐"));
         var draft = packagePlanService.createVersion(Long.parseLong(plan.id()),
@@ -1685,6 +1685,67 @@ class B0InfrastructureIT {
                 assertThat(winner.permissionCodes()).hasSize(1)
                         .allMatch(code -> code.equals("iam:role:view") || code.equals("iam:menu:view"));
             });
+
+            long siteUserId = Long.parseLong(siteUser.id());
+            authService.changePassword(siteUserId,
+                    new AuthModels.ChangePasswordCommand("Initial#Site123", "Changed#Site123"));
+            var siteToken = authService.login(new AuthModels.LoginCommand(
+                    "BOOTSTRAP-TENANT", "site-manager", "Changed#Site123", "site-device"), "127.0.0.1");
+            when(grantLoader.load(tenantId, siteUserId)).thenAnswer(invocation ->
+                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper).load(tenantId, siteUserId));
+            String bearer = "Bearer " + siteToken.accessToken();
+            var currentRole = accessService.roleGrants(Long.parseLong(siteManager.id()));
+            accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    currentRole.role().version(), Set.of(), Set.of(), List.of()));
+            mockMvc.perform(get("/api/access/roles").header("Authorization", bearer))
+                    .andExpect(status().isForbidden());
+            currentRole = accessService.roleGrants(Long.parseLong(siteManager.id()));
+            accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    currentRole.role().version(), Set.of("iam:role:view"), Set.of(), List.of()));
+            mockMvc.perform(get("/api/access/roles").header("Authorization", bearer))
+                    .andExpect(status().isOk());
+            currentRole = accessService.roleGrants(Long.parseLong(siteManager.id()));
+            accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    currentRole.role().version(), Set.of(), Set.of(), List.of()));
+            mockMvc.perform(get("/api/access/roles").header("Authorization", bearer))
+                    .andExpect(status().isForbidden());
+
+            var foreignPending = platformTenantService.create(new TenantModels.CreateTenant(
+                    "BOOTSTRAP-FOREIGN", "跨租户角色验收", "Asia/Shanghai", "zh-CN", published.id()));
+            var foreignReady = platformTenantService.initialize(Long.parseLong(foreignPending.id()),
+                    new TenantModels.InitializeTenant("foreign-admin", "其他租户管理员",
+                            "Initial#Foreign123", "集团总部"));
+            long foreignTenantId = Long.parseLong(foreignReady.id());
+            long foreignAdminId = jdbcTemplate.queryForObject(
+                    "SELECT id FROM iam_user WHERE tenant_id=? AND username=?", Long.class,
+                    foreignTenantId, "foreign-admin");
+            String foreignRoleId;
+            try (var foreign = TenantContext.open(foreignTenantId, foreignAdminId)) {
+                foreignRoleId = accessService.createRole(new AccessModels.CreateRole(
+                        "FOREIGN_REVIEW", "其他租户角色")).id();
+            }
+            authService.changePassword(administratorId,
+                    new AuthModels.ChangePasswordCommand("Initial#Pass123", "Changed#Pass123"));
+            var adminToken = authService.login(new AuthModels.LoginCommand(
+                    "BOOTSTRAP-TENANT", "tenant-admin", "Changed#Pass123", "bootstrap-device"), "127.0.0.1");
+            when(grantLoader.load(tenantId, administratorId)).thenAnswer(invocation ->
+                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper).load(tenantId, administratorId));
+            String adminBearer = "Bearer " + adminToken.accessToken();
+            mockMvc.perform(get("/api/access/roles/" + siteManager.id() + "/grants")
+                            .header("Authorization", adminBearer))
+                    .andExpect(status().isOk());
+            mockMvc.perform(get("/api/access/roles/" + foreignRoleId + "/grants")
+                            .header("Authorization", adminBearer))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(put("/api/access/roles/" + foreignRoleId + "/grants")
+                            .header("Authorization", adminBearer)
+                            .header("Idempotency-Key", "foreign-role-denied")
+                            .contentType("application/json")
+                            .content("{\"version\":0,\"permissionCodes\":[],\"menuCodes\":[],\"dataScopes\":[{\"resourceCode\":\"iam:organization\",\"scopeType\":\"NONE\",\"organizationIds\":[]}]}"))
+                    .andExpect(status().isNotFound());
+            try (var foreign = TenantContext.open(foreignTenantId, foreignAdminId)) {
+                assertThat(accessService.roleGrants(Long.parseLong(foreignRoleId)).role().version()).isZero();
+            }
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");
