@@ -1758,6 +1758,12 @@ class B0InfrastructureIT {
                     .contains("iam:role:manage", "resource:file:download", "supplier:master:view")
                     .doesNotContain("resource:person:view", "resource:person:id:view", "supplier:admission:view",
                             "supplier:blacklist:view");
+            assertThat(accessService.roleGrantCatalog().resourceCodes())
+                    .contains("iam:organization", "resource:file", "supplier:master")
+                    .doesNotContain("resource:person", "supplier:qualification");
+            assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId).dataScope("resource:person").type())
+                    .isEqualTo(DataScope.Type.NONE);
             assertThat(accessService.roleGrantCatalog().permissions()).extracting(AccessModels.PermissionOption::code)
                     .doesNotContain("resource:person:view", "resource:person:id:view");
             mockMvc.perform(get("/api/resources/persons").header("Authorization", adminBearer))
@@ -1770,6 +1776,10 @@ class B0InfrastructureIT {
             packagePlanService.assign(tenantId, Long.parseLong(resourceVersion.id()),
                     new PackagePlanModels.AssignSubscription(resourceVersion.id(), LocalDateTime.now(), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_ASSET");
+            assertThat(accessService.roleGrantCatalog().resourceCodes()).contains("resource:person", "resource:asset");
+            assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId).dataScope("resource:person").type())
+                    .isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(accessService.roleGrantCatalog().permissionCodes())
                     .contains("resource:person:view", "resource:person:id:view");
             assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
@@ -1787,6 +1797,24 @@ class B0InfrastructureIT {
                     .contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
             packagePlanService.assign(tenantId, Long.parseLong(published.id()),
                     new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
+            assertThat(accessService.roleGrantCatalog().resourceCodes()).doesNotContain("resource:person");
+            assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId).dataScope("resource:person").type())
+                    .isEqualTo(DataScope.Type.NONE);
+            for (String deniedResource : List.of("resource:person", "extension:unmapped")) {
+                mockMvc.perform(put("/api/access/roles/" + siteManager.id() + "/grants")
+                                .header("Authorization", adminBearer)
+                                .header("Idempotency-Key", "scope-denied-" + deniedResource)
+                                .contentType("application/json")
+                                .content("{\"version\":" + resourceRole.version()
+                                        + ",\"permissionCodes\":[],\"menuCodes\":[],\"dataScopes\":[{\"resourceCode\":\""
+                                        + deniedResource + "\",\"scopeType\":\"TENANT_ALL\",\"organizationIds\":[]}]}"))
+                        .andExpect(status().isUnprocessableEntity());
+                assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).role().version())
+                        .isEqualTo(resourceRole.version());
+                assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).permissionCodes())
+                        .contains("resource:person:view");
+            }
             mockMvc.perform(get("/api/resources/persons").header("Authorization", adminBearer))
                     .andExpect(status().isForbidden());
             assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
@@ -1830,6 +1858,13 @@ class B0InfrastructureIT {
             try {
                 jdbcTemplate.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) VALUES(?,?,990101)",
                         tenantId, Long.parseLong(siteManager.id()));
+                jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'extension:unmapped','TENANT_ALL')",
+                        tenantId, Long.parseLong(siteManager.id()));
+                assertThat(accessService.roleGrantCatalog().resourceCodes()).doesNotContain("extension:unmapped");
+                assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                        .load(tenantId, siteUserId).dataScope("extension:unmapped").type()).isEqualTo(DataScope.Type.NONE);
+                assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).dataScopes())
+                        .extracting(AccessModels.DataScopeGrant::resourceCode).contains("extension:unmapped");
                 assertThat(accessService.roleGrantCatalog().permissionCodes()).doesNotContain("extension:unmapped:view");
                 assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
                         .load(tenantId, siteUserId).actions()).doesNotContain("extension:unmapped:view");
@@ -1841,6 +1876,8 @@ class B0InfrastructureIT {
                 assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).role().version())
                         .isEqualTo(resourceRole.version());
             } finally {
+                jdbcTemplate.update("DELETE FROM iam_role_data_scope WHERE tenant_id=? AND role_id=? AND resource_code='extension:unmapped'",
+                        tenantId, Long.parseLong(siteManager.id()));
                 jdbcTemplate.update("DELETE FROM iam_role_permission WHERE tenant_id=? AND role_id=? AND permission_id=990101",
                         tenantId, Long.parseLong(siteManager.id()));
                 jdbcTemplate.update("DELETE FROM sys_permission WHERE id=990101");
@@ -1858,6 +1895,20 @@ class B0InfrastructureIT {
             assertThat(navigationService.currentMenus()).filteredOn(node -> node.code().equals("SUPPLIER_MANAGEMENT"))
                     .singleElement().satisfies(node -> assertThat(node.children()).extracting("code")
                             .contains("SUPPLIER_ADMISSION", "SUPPLIER_QUALIFICATION").doesNotContain("SUPPLIER_MASTER", "SUPPLIER_BLACKLIST"));
+            assertThat(accessService.roleGrantCatalog().resourceCodes())
+                    .contains("supplier:admission", "supplier:qualification").doesNotContain("supplier:master");
+            var restrictionDraft = packagePlanService.createVersion(Long.parseLong(plan.id()),
+                    new PackagePlanModels.CreateVersion(4, "独立限制版", LocalDateTime.now(), List.of(
+                            new PackagePlanModels.ModuleGrant("RESTRICTION", true, Map.of()))));
+            var restrictionVersion = packagePlanService.publish(Long.parseLong(restrictionDraft.id()), restrictionDraft.version(), 9001L);
+            packagePlanService.assign(tenantId, Long.parseLong(restrictionVersion.id()),
+                    new PackagePlanModels.AssignSubscription(restrictionVersion.id(), LocalDateTime.now(), null, Map.of()));
+            assertThat(accessService.roleGrantCatalog().resourceCodes()).contains("supplier:master")
+                    .doesNotContain("supplier:qualification", "resource:person");
+            var restrictionSnapshot = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId);
+            assertThat(restrictionSnapshot.dataScope("supplier:master").type()).isEqualTo(DataScope.Type.TENANT_ALL);
+            assertThat(restrictionSnapshot.actions()).contains("supplier:blacklist:view").doesNotContain("supplier:master:view");
             packagePlanService.assign(tenantId, Long.parseLong(published.id()),
                     new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
         }

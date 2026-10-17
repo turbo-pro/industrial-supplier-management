@@ -955,7 +955,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 操作权限、字段权限和菜单选项按租户当前分配的已发布套餐启用模块过滤，系统及公共能力始终可选；未配置模块归属的权限不可选。数据范围资源尚未按套餐过滤。 */
+        /** @description 操作权限、字段权限、菜单及数据范围资源选项按租户当前分配的已发布套餐启用模块过滤，系统及公共能力始终可选；未配置模块归属的权限或数据资源不可选。数据资源允许被多个模块共用，任一归属模块启用即可选择，实际访问仍须具备对应操作权限。套餐降级保留历史配置但在下次请求停止生效。 */
         get: operations["getRoleGrantCatalog"];
         put?: never;
         post?: never;
@@ -989,7 +989,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getRoleGrants"];
-        /** @description 整体替换角色授权；包含未被当前套餐授权的权限或菜单时返回 422，版本与原授权整笔回滚。套餐降级保留已存授权，下一次请求实时过滤有效权限与导航。 */
+        /** @description 整体替换角色授权；包含未知或未被当前套餐授权的权限、菜单或数据范围资源时返回 422，版本与原授权整笔回滚。套餐降级保留已存授权，下一次请求实时过滤有效权限、导航及数据范围。 */
         put: operations["grantRole"];
         post?: never;
         delete?: never;

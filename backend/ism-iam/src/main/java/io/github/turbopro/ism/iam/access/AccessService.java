@@ -46,7 +46,7 @@ public class AccessService {
         long tenantId=tenantId();
         Set<String> modules=entitlements.allowedModules(tenantId);
         return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId,modules),mapper.activeMenuCodes(tenantId,modules),
-                mapper.tenantScopeResourceCodes(tenantId), AuthorizationContext.require().hasAction("iam:role:manage"),
+                mapper.tenantScopeResourceCodes(tenantId,modules), AuthorizationContext.require().hasAction("iam:role:manage"),
                 mapper.activePermissionOptions(tenantId,modules), mapper.activeMenuOptions(tenantId,modules),
                 mapper.activeOrganizationOptions(tenantId));
     }
@@ -101,7 +101,8 @@ public class AccessService {
             DataScope.Type type;
             try { type=DataScope.Type.valueOf(scope.scopeType()); }
             catch (IllegalArgumentException exception) { throw new ApiException(AccessErrorCode.INVALID_GRANT,"数据范围类型不存在"); }
-            mapper.grantScope(tenantId,id,scope.resourceCode(),type.name());
+            if (mapper.grantScope(tenantId,id,scope.resourceCode(),type.name(),modules)!=1)
+                throw new ApiException(AccessErrorCode.INVALID_GRANT,"数据范围资源不存在或未被当前套餐授权");
             if (type == DataScope.Type.ORGANIZATION_SET) {
                 Set<Long> organizationIds=parseIds(scope.organizationIds());
                 if (organizationIds.isEmpty() || mapper.grantScopeOrganizations(tenantId,id,scope.resourceCode(),organizationIds)!=organizationIds.size())

@@ -12,4 +12,9 @@ public final class GrantEntitlementSql {
         m.module_code IN
         <foreach collection='modules' item='module' open='(' separator=',' close=')'>#{module}</foreach>
         """;
+    public static final String RESOURCE = """
+        EXISTS (SELECT 1 FROM sys_data_scope_resource_module resource_module
+        WHERE resource_module.resource_code=ds.resource_code AND resource_module.module_code IN
+        <foreach collection='modules' item='module' open='(' separator=',' close=')'>#{module}</foreach>)
+        """;
 }

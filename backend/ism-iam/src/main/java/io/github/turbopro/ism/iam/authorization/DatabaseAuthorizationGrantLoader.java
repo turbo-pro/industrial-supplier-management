@@ -27,9 +27,9 @@ public class DatabaseAuthorizationGrantLoader implements AuthorizationGrantLoade
         Set<String> modules = entitlements.allowedModules(tenantId);
         Set<String> actions = Set.copyOf(mapper.actionPermissions(tenantId, actorId, modules));
         Set<String> fields = Set.copyOf(mapper.fieldPermissions(tenantId, actorId, modules));
-        List<TenantAuthorizationMapper.DataScopeRow> rows = mapper.dataScopes(tenantId, actorId);
+        List<TenantAuthorizationMapper.DataScopeRow> rows = mapper.dataScopes(tenantId, actorId, modules);
         Map<RoleResource, Set<Long>> organizations = new HashMap<>();
-        for (var row : mapper.organizationScopes(tenantId, actorId)) {
+        for (var row : mapper.organizationScopes(tenantId, actorId, modules)) {
             organizations.computeIfAbsent(new RoleResource(row.roleId(), row.resourceCode()), ignored -> new HashSet<>())
                     .add(row.organizationId());
         }

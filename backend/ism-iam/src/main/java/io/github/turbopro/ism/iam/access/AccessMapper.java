@@ -18,8 +18,8 @@ public interface AccessMapper extends TenantScopedMapper {
     List<String> activePermissionCodes(long tenantId,Set<String> modules);
     @Select("<script>SELECT m.menu_code FROM sys_menu m WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + GrantEntitlementSql.MENU + " ORDER BY m.menu_code</script>")
     List<String> activeMenuCodes(long tenantId,Set<String> modules);
-    @Select("SELECT DISTINCT resource_code FROM iam_role_data_scope WHERE tenant_id=#{tenantId} ORDER BY resource_code")
-    List<String> tenantScopeResourceCodes(long tenantId);
+    @Select("<script>SELECT DISTINCT ds.resource_code FROM sys_data_scope_resource_module ds WHERE EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + GrantEntitlementSql.RESOURCE + " ORDER BY ds.resource_code</script>")
+    List<String> tenantScopeResourceCodes(long tenantId,Set<String> modules);
     @Select("<script>SELECT p.permission_code AS code,p.permission_name AS name,p.permission_type AS type FROM sys_permission p WHERE p.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + GrantEntitlementSql.PERMISSION + " ORDER BY p.permission_code</script>")
     List<AccessModels.PermissionOption> activePermissionOptions(long tenantId,Set<String> modules);
     @Select("<script>SELECT m.menu_code AS code,m.menu_name AS name,parent.menu_code AS parentCode,m.route_path AS routePath FROM sys_menu m LEFT JOIN sys_menu parent ON parent.id=m.parent_id WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + GrantEntitlementSql.MENU + " ORDER BY m.menu_code</script>")
@@ -49,8 +49,8 @@ public interface AccessMapper extends TenantScopedMapper {
                           AND existing.role_id=#{roleId} AND existing.menu_id=m.parent_id)
         """)
     int grantParentMenus(long tenantId,long roleId);
-    @Insert("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(#{tenantId},#{roleId},#{resource},#{type})")
-    int grantScope(long tenantId,long roleId,String resource,String type);
+    @Insert("<script>INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) SELECT DISTINCT #{tenantId},#{roleId},ds.resource_code,#{type} FROM sys_data_scope_resource_module ds WHERE ds.resource_code=#{resource} AND " + GrantEntitlementSql.RESOURCE + "</script>")
+    int grantScope(long tenantId,long roleId,String resource,String type,Set<String> modules);
     @Insert("<script>INSERT INTO iam_role_data_scope_organization(tenant_id,role_id,resource_code,organization_id) SELECT #{tenantId},#{roleId},#{resource},id FROM iam_organization WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND id IN <foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
     int grantScopeOrganizations(long tenantId,long roleId,String resource,Set<Long> ids);
     @Select("SELECT id,username,display_name,status,force_password_change,manual_locked,manual_lock_reason,locked_until,version FROM iam_user WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY created_at,id")

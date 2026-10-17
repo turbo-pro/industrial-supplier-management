@@ -32,23 +32,25 @@ public interface TenantAuthorizationMapper extends TenantScopedMapper {
     List<String> fieldPermissions(long tenantId, long userId, Set<String> modules);
 
     @Select("""
-        SELECT ds.role_id,ds.resource_code,ds.scope_type
+        <script>SELECT ds.role_id,ds.resource_code,ds.scope_type
         FROM iam_user_role ur
         JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id AND r.status='ACTIVE'
         JOIN iam_role_data_scope ds ON ds.tenant_id=r.tenant_id AND ds.role_id=r.id
         WHERE ur.tenant_id=#{tenantId} AND ur.user_id=#{userId}
-        """)
-    List<DataScopeRow> dataScopes(long tenantId, long userId);
+        AND
+        """ + GrantEntitlementSql.RESOURCE + "</script>")
+    List<DataScopeRow> dataScopes(long tenantId, long userId, Set<String> modules);
 
     @Select("""
-        SELECT dso.role_id,dso.resource_code,c.descendant_id AS organization_id
+        <script>SELECT ds.role_id,ds.resource_code,c.descendant_id AS organization_id
         FROM iam_user_role ur
         JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id AND r.status='ACTIVE'
-        JOIN iam_role_data_scope_organization dso ON dso.tenant_id=r.tenant_id AND dso.role_id=r.id
-        JOIN iam_organization_closure c ON c.tenant_id=dso.tenant_id AND c.ancestor_id=dso.organization_id
+        JOIN iam_role_data_scope_organization ds ON ds.tenant_id=r.tenant_id AND ds.role_id=r.id
+        JOIN iam_organization_closure c ON c.tenant_id=ds.tenant_id AND c.ancestor_id=ds.organization_id
         WHERE ur.tenant_id=#{tenantId} AND ur.user_id=#{userId}
-        """)
-    List<OrganizationScopeRow> organizationScopes(long tenantId, long userId);
+        AND
+        """ + GrantEntitlementSql.RESOURCE + "</script>")
+    List<OrganizationScopeRow> organizationScopes(long tenantId, long userId, Set<String> modules);
 
     record DataScopeRow(long roleId, String resourceCode, String scopeType) {}
     record OrganizationScopeRow(long roleId, String resourceCode, long organizationId) {}
