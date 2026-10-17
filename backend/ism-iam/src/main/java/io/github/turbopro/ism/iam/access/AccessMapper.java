@@ -1,6 +1,7 @@
 package io.github.turbopro.ism.iam.access;
 
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;
+import io.github.turbopro.ism.iam.authorization.MenuEntitlementSql;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
@@ -15,13 +16,13 @@ public interface AccessMapper extends TenantScopedMapper {
     AccessModels.RoleRow role(long tenantId,long id);
     @Select("SELECT p.permission_code FROM sys_permission p WHERE p.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY p.permission_code")
     List<String> activePermissionCodes(long tenantId);
-    @Select("SELECT m.menu_code FROM sys_menu m WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY m.menu_code")
+    @Select("SELECT m.menu_code FROM sys_menu m WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + MenuEntitlementSql.ALLOWED + " ORDER BY m.menu_code")
     List<String> activeMenuCodes(long tenantId);
     @Select("SELECT DISTINCT resource_code FROM iam_role_data_scope WHERE tenant_id=#{tenantId} ORDER BY resource_code")
     List<String> tenantScopeResourceCodes(long tenantId);
     @Select("SELECT p.permission_code AS code,p.permission_name AS name,p.permission_type AS type FROM sys_permission p WHERE p.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY p.permission_code")
     List<AccessModels.PermissionOption> activePermissionOptions(long tenantId);
-    @Select("SELECT m.menu_code AS code,m.menu_name AS name,parent.menu_code AS parentCode,m.route_path AS routePath FROM sys_menu m LEFT JOIN sys_menu parent ON parent.id=m.parent_id WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) ORDER BY m.menu_code")
+    @Select("SELECT m.menu_code AS code,m.menu_name AS name,parent.menu_code AS parentCode,m.route_path AS routePath FROM sys_menu m LEFT JOIN sys_menu parent ON parent.id=m.parent_id WHERE m.status='ACTIVE' AND EXISTS (SELECT 1 FROM iam_role r WHERE r.tenant_id=#{tenantId}) AND " + MenuEntitlementSql.ALLOWED + " ORDER BY m.menu_code")
     List<AccessModels.MenuOption> activeMenuOptions(long tenantId);
     @Select("SELECT CAST(id AS CHAR) AS id,organization_code AS code,organization_name AS name,organization_type AS type FROM iam_organization WHERE tenant_id=#{tenantId} AND status='ACTIVE' ORDER BY organization_code,id")
     List<AccessModels.OrganizationOption> activeOrganizationOptions(long tenantId);
@@ -37,7 +38,7 @@ public interface AccessMapper extends TenantScopedMapper {
     @Delete("DELETE FROM iam_role_data_scope WHERE tenant_id=#{tenantId} AND role_id=#{roleId}") int clearScopes(long tenantId,long roleId);
     @Insert("<script>INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT #{tenantId},#{roleId},id FROM sys_permission WHERE status='ACTIVE' AND permission_code IN <foreach collection='codes' item='code' open='(' separator=',' close=')'>#{code}</foreach></script>")
     int grantPermissions(long tenantId,long roleId,Set<String> codes);
-    @Insert("<script>INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT #{tenantId},#{roleId},id FROM sys_menu WHERE status='ACTIVE' AND menu_code IN <foreach collection='codes' item='code' open='(' separator=',' close=')'>#{code}</foreach></script>")
+    @Insert("<script>INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT #{tenantId},#{roleId},m.id FROM sys_menu m WHERE m.status='ACTIVE' AND " + MenuEntitlementSql.ALLOWED + " AND m.menu_code IN <foreach collection='codes' item='code' open='(' separator=',' close=')'>#{code}</foreach></script>")
     int grantMenus(long tenantId,long roleId,Set<String> codes);
     @Insert("""
         INSERT INTO iam_role_menu(tenant_id,role_id,menu_id)

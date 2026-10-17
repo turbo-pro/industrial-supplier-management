@@ -87,7 +87,7 @@ public class AccessService {
             throw new ApiException(AccessErrorCode.INVALID_GRANT,"权限代码不存在");
         if (!command.menuCodes().isEmpty()) {
             if (mapper.grantMenus(tenantId,id,command.menuCodes()) != command.menuCodes().size())
-                throw new ApiException(AccessErrorCode.INVALID_GRANT,"菜单代码不存在");
+                throw new ApiException(AccessErrorCode.INVALID_GRANT,"菜单不存在、已停用或未被当前套餐授权");
             mapper.grantParentMenus(tenantId,id);
         }
         Set<String> resources = new HashSet<>();

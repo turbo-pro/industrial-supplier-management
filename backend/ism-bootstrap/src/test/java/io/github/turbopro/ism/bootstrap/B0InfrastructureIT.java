@@ -1746,6 +1746,51 @@ class B0InfrastructureIT {
             try (var foreign = TenantContext.open(foreignTenantId, foreignAdminId)) {
                 assertThat(accessService.roleGrants(Long.parseLong(foreignRoleId)).role().version()).isZero();
             }
+
+            assertThat(accessService.roleGrantCatalog().menuCodes())
+                    .contains("FILE_MANAGEMENT", "TASK_CENTER", "SUPPLIER_MASTER", "ROLE_MANAGEMENT")
+                    .doesNotContain("SUPPLIER_PERSON", "SUPPLIER_ASSET", "QUALITY_NCR");
+            assertThat(accessService.roleGrantCatalog().menus()).extracting(AccessModels.MenuOption::code)
+                    .doesNotContain("SUPPLIER_PERSON", "SUPPLIER_ASSET");
+            var resourceDraft = packagePlanService.createVersion(Long.parseLong(plan.id()),
+                    new PackagePlanModels.CreateVersion(2, "资源模块版", LocalDateTime.now(), List.of(
+                            new PackagePlanModels.ModuleGrant("SUPPLIER", true, Map.of("SUPPLIER_COUNT", 100L)),
+                            new PackagePlanModels.ModuleGrant("RESOURCE", true, Map.of()))));
+            var resourceVersion = packagePlanService.publish(Long.parseLong(resourceDraft.id()), resourceDraft.version(), 9001L);
+            packagePlanService.assign(tenantId, Long.parseLong(resourceVersion.id()),
+                    new PackagePlanModels.AssignSubscription(resourceVersion.id(), LocalDateTime.now(), null, Map.of()));
+            assertThat(accessService.roleGrantCatalog().menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_ASSET");
+            mockMvc.perform(get("/api/navigation/menus").header("Authorization", adminBearer))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[?(@.code == 'SUPPLIER_RESOURCE')]").isNotEmpty());
+            var beforeMenuGrant = accessService.roleGrants(Long.parseLong(siteManager.id()));
+            var resourceRole = accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
+                    beforeMenuGrant.role().version(), Set.of("iam:menu:view"), Set.of("SUPPLIER_PERSON"),
+                    List.of(new AccessModels.DataScopeGrant("iam:organization", "NONE", Set.of()))));
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).menuCodes())
+                    .contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
+            packagePlanService.assign(tenantId, Long.parseLong(published.id()),
+                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
+            mockMvc.perform(get("/api/navigation/menus").header("Authorization", adminBearer))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[?(@.code == 'SUPPLIER_RESOURCE')]").isEmpty())
+                    .andExpect(jsonPath("$.data[?(@.code == 'RESOURCE_CENTER')]").isNotEmpty());
+            mockMvc.perform(put("/api/access/roles/" + siteManager.id() + "/grants")
+                            .header("Authorization", adminBearer)
+                            .header("Idempotency-Key", "package-denied-menu")
+                            .contentType("application/json")
+                            .content("{\"version\":" + resourceRole.version()
+                                    + ",\"permissionCodes\":[\"iam:menu:view\"],\"menuCodes\":[\"SUPPLIER_PERSON\"],"
+                                    + "\"dataScopes\":[{\"resourceCode\":\"iam:organization\",\"scopeType\":\"NONE\",\"organizationIds\":[]}]}"))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.error.code").value("IAM_ACCESS_INVALID_GRANT"));
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id()))).satisfies(unchanged -> {
+                assertThat(unchanged.role().version()).isEqualTo(resourceRole.version());
+                assertThat(unchanged.menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
+            });
+            try (var foreign = TenantContext.open(foreignTenantId, foreignAdminId)) {
+                assertThat(accessService.roleGrantCatalog().menuCodes()).doesNotContain("SUPPLIER_PERSON");
+            }
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");

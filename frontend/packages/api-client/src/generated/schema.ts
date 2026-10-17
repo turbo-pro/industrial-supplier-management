@@ -955,6 +955,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description 菜单选项按租户当前分配的已发布套餐启用模块过滤，系统及公共能力始终可选；权限代码尚未按套餐过滤。 */
         get: operations["getRoleGrantCatalog"];
         put?: never;
         post?: never;
@@ -988,6 +989,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getRoleGrants"];
+        /** @description 整体替换角色授权；包含未被当前套餐授权的菜单时返回 422，版本与原授权整笔回滚。已有菜单授权记录在套餐降级后保留，登录导航实时过滤。 */
         put: operations["grantRole"];
         post?: never;
         delete?: never;
