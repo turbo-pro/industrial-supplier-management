@@ -3,7 +3,7 @@
 ## 交付边界
 
 - `/system/roles` 不再落入占位页。按当前租户列出角色、读取授权明细，创建自定义角色，按版本修改名称，选择有效权限/菜单代码并编辑每个资源的数据范围，二次确认后整体替换授权。内置角色只读。
-- `GET /api/access/role-grant-catalog` 返回当前有效的权限、按当前分配套餐过滤的菜单代码，以及当前租户已有的数据范围资源代码；`GET /api/access/roles/{id}/grants` 返回当前租户角色、版本、权限、菜单及组织集合原始配置。两接口要求 `iam:role:view`，角色 ID 始终经租户过滤。权限代码尚未按套餐过滤，目录也不代表最终数据可见范围。菜单约束详见 [套餐菜单验收](b1-package-menu-entitlement-review.md)。
+- `GET /api/access/role-grant-catalog` 返回按当前分配套餐过滤的操作/字段权限和菜单代码，以及当前租户已有的数据范围资源代码；`GET /api/access/roles/{id}/grants` 返回当前租户角色、版本、权限、菜单及组织集合原始配置。两接口要求 `iam:role:view`，角色 ID 始终经租户过滤。数据范围目录仍未按套餐过滤，最终数据可见范围还须通过业务鉴权。详见 [套餐权限验收](b1-package-permission-entitlement-review.md)。
 - 目录还返回按当前登录者有效授权计算的 `canManage`，管理端只读账号显示提示并禁用创建、改名及授权编辑；这只是界面呈现，所有写接口继续由后端 `iam:role:manage` 独立鉴权。
 - `PUT /api/access/roles/{id}/grants` 现在要求 `version`。服务端先以 `tenant_id/id/version/ACTIVE/非内置` 条件推进版本，再在同一事务替换授权；陈旧版本返回 409，无效权限/菜单/组织导致整笔回滚，避免并发覆盖或半成品。幂等键、权限校验及审计沿用原控制器。请求契约和生成客户端同步；未新增数据库迁移。
 

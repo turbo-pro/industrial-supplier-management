@@ -15,15 +15,18 @@ import java.util.Set;
 @Component
 public class DatabaseAuthorizationGrantLoader implements AuthorizationGrantLoader {
     private final TenantAuthorizationMapper mapper;
+    private final GrantEntitlements entitlements;
 
-    public DatabaseAuthorizationGrantLoader(TenantAuthorizationMapper mapper) {
+    public DatabaseAuthorizationGrantLoader(TenantAuthorizationMapper mapper, GrantEntitlements entitlements) {
         this.mapper = mapper;
+        this.entitlements = entitlements;
     }
 
     @Override
     public PermissionSnapshot load(long tenantId, long actorId) {
-        Set<String> actions = Set.copyOf(mapper.actionPermissions(tenantId, actorId));
-        Set<String> fields = Set.copyOf(mapper.fieldPermissions(tenantId, actorId));
+        Set<String> modules = entitlements.allowedModules(tenantId);
+        Set<String> actions = Set.copyOf(mapper.actionPermissions(tenantId, actorId, modules));
+        Set<String> fields = Set.copyOf(mapper.fieldPermissions(tenantId, actorId, modules));
         List<TenantAuthorizationMapper.DataScopeRow> rows = mapper.dataScopes(tenantId, actorId);
         Map<RoleResource, Set<Long>> organizations = new HashMap<>();
         for (var row : mapper.organizationScopes(tenantId, actorId)) {

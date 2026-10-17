@@ -25,6 +25,7 @@ import io.github.turbopro.ism.iam.console.ConsoleUserErrorCode;
 import io.github.turbopro.ism.iam.organization.OrganizationModels;
 import io.github.turbopro.ism.iam.organization.OrganizationService;
 import io.github.turbopro.ism.iam.authorization.DatabaseAuthorizationGrantLoader;
+import io.github.turbopro.ism.iam.authorization.GrantEntitlements;
 import io.github.turbopro.ism.iam.authorization.TenantAuthorizationMapper;
 import io.github.turbopro.ism.iam.navigation.NavigationService;
 import io.github.turbopro.ism.iam.access.AccessModels;
@@ -198,6 +199,7 @@ class B0InfrastructureIT {
 
     @Autowired
     private TenantAuthorizationMapper tenantAuthorizationMapper;
+    @Autowired private GrantEntitlements grantEntitlements;
 
     @Autowired
     private NavigationService navigationService;
@@ -1482,7 +1484,7 @@ class B0InfrastructureIT {
                 "SELECT id FROM iam_organization WHERE tenant_id=? AND organization_type='HEADQUARTERS'",
                 Long.class, tenantId);
         try (TenantContext.Scope ignored = TenantContext.open(tenantId, administratorId)) {
-            var grants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+            var grants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
                     .load(tenantId, administratorId);
             assertThat(grants.actions()).contains("iam:organization:view", "iam:organization:manage",
                     "iam:user:manage", "iam:role:manage");
@@ -1636,7 +1638,7 @@ class B0InfrastructureIT {
             });
             var siteUser = accessService.createUser(new AccessModels.CreateUser("site-manager", "场站管理员",
                     "Initial#Site123", site.id(), Set.of(siteManager.id())));
-            var siteGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+            var siteGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
                     .load(tenantId, Long.parseLong(siteUser.id()));
             assertThat(siteGrants.actions()).containsExactlyInAnyOrder("iam:organization:view", "iam:menu:view");
             assertThat(siteGrants.dataScope("iam:organization").organizationIds())
@@ -1692,7 +1694,7 @@ class B0InfrastructureIT {
             var siteToken = authService.login(new AuthModels.LoginCommand(
                     "BOOTSTRAP-TENANT", "site-manager", "Changed#Site123", "site-device"), "127.0.0.1");
             when(grantLoader.load(tenantId, siteUserId)).thenAnswer(invocation ->
-                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper).load(tenantId, siteUserId));
+                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements).load(tenantId, siteUserId));
             String bearer = "Bearer " + siteToken.accessToken();
             var currentRole = accessService.roleGrants(Long.parseLong(siteManager.id()));
             accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
@@ -1729,7 +1731,7 @@ class B0InfrastructureIT {
             var adminToken = authService.login(new AuthModels.LoginCommand(
                     "BOOTSTRAP-TENANT", "tenant-admin", "Changed#Pass123", "bootstrap-device"), "127.0.0.1");
             when(grantLoader.load(tenantId, administratorId)).thenAnswer(invocation ->
-                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper).load(tenantId, administratorId));
+                    new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements).load(tenantId, administratorId));
             String adminBearer = "Bearer " + adminToken.accessToken();
             mockMvc.perform(get("/api/access/roles/" + siteManager.id() + "/grants")
                             .header("Authorization", adminBearer))
@@ -1752,6 +1754,14 @@ class B0InfrastructureIT {
                     .doesNotContain("SUPPLIER_PERSON", "SUPPLIER_ASSET", "QUALITY_NCR");
             assertThat(accessService.roleGrantCatalog().menus()).extracting(AccessModels.MenuOption::code)
                     .doesNotContain("SUPPLIER_PERSON", "SUPPLIER_ASSET");
+            assertThat(accessService.roleGrantCatalog().permissionCodes())
+                    .contains("iam:role:manage", "resource:file:download", "supplier:master:view")
+                    .doesNotContain("resource:person:view", "resource:person:id:view", "supplier:admission:view",
+                            "supplier:blacklist:view");
+            assertThat(accessService.roleGrantCatalog().permissions()).extracting(AccessModels.PermissionOption::code)
+                    .doesNotContain("resource:person:view", "resource:person:id:view");
+            mockMvc.perform(get("/api/resources/persons").header("Authorization", adminBearer))
+                    .andExpect(status().isForbidden());
             var resourceDraft = packagePlanService.createVersion(Long.parseLong(plan.id()),
                     new PackagePlanModels.CreateVersion(2, "资源模块版", LocalDateTime.now(), List.of(
                             new PackagePlanModels.ModuleGrant("SUPPLIER", true, Map.of("SUPPLIER_COUNT", 100L)),
@@ -1760,17 +1770,27 @@ class B0InfrastructureIT {
             packagePlanService.assign(tenantId, Long.parseLong(resourceVersion.id()),
                     new PackagePlanModels.AssignSubscription(resourceVersion.id(), LocalDateTime.now(), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_ASSET");
+            assertThat(accessService.roleGrantCatalog().permissionCodes())
+                    .contains("resource:person:view", "resource:person:id:view");
+            assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId).fields()).contains("resource:person:id:view");
+            mockMvc.perform(get("/api/resources/persons").header("Authorization", adminBearer))
+                    .andExpect(status().isOk());
             mockMvc.perform(get("/api/navigation/menus").header("Authorization", adminBearer))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[?(@.code == 'SUPPLIER_RESOURCE')]").isNotEmpty());
             var beforeMenuGrant = accessService.roleGrants(Long.parseLong(siteManager.id()));
             var resourceRole = accessService.grantRole(Long.parseLong(siteManager.id()), new AccessModels.GrantRole(
-                    beforeMenuGrant.role().version(), Set.of("iam:menu:view"), Set.of("SUPPLIER_PERSON"),
+                    beforeMenuGrant.role().version(), Set.of("iam:menu:view", "resource:person:view", "resource:person:id:view"), Set.of("SUPPLIER_PERSON"),
                     List.of(new AccessModels.DataScopeGrant("iam:organization", "NONE", Set.of()))));
             assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).menuCodes())
                     .contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
             packagePlanService.assign(tenantId, Long.parseLong(published.id()),
                     new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
+            mockMvc.perform(get("/api/resources/persons").header("Authorization", adminBearer))
+                    .andExpect(status().isForbidden());
+            assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                    .load(tenantId, administratorId).fields()).doesNotContain("resource:person:id:view");
             mockMvc.perform(get("/api/navigation/menus").header("Authorization", adminBearer))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data[?(@.code == 'SUPPLIER_RESOURCE')]").isEmpty())
@@ -1787,10 +1807,59 @@ class B0InfrastructureIT {
             assertThat(accessService.roleGrants(Long.parseLong(siteManager.id()))).satisfies(unchanged -> {
                 assertThat(unchanged.role().version()).isEqualTo(resourceRole.version());
                 assertThat(unchanged.menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
+                assertThat(unchanged.permissionCodes()).contains("resource:person:view", "resource:person:id:view");
             });
+            mockMvc.perform(put("/api/access/roles/" + siteManager.id() + "/grants")
+                            .header("Authorization", adminBearer)
+                            .header("Idempotency-Key", "package-denied-permission")
+                            .contentType("application/json")
+                            .content("{\"version\":" + resourceRole.version()
+                                    + ",\"permissionCodes\":[\"resource:person:view\"],\"menuCodes\":[],"
+                                    + "\"dataScopes\":[{\"resourceCode\":\"resource:person\",\"scopeType\":\"NONE\",\"organizationIds\":[]}]}"))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.error.code").value("IAM_ACCESS_INVALID_GRANT"));
+            assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).role().version())
+                    .isEqualTo(resourceRole.version());
             try (var foreign = TenantContext.open(foreignTenantId, foreignAdminId)) {
                 assertThat(accessService.roleGrantCatalog().menuCodes()).doesNotContain("SUPPLIER_PERSON");
+                assertThat(accessService.roleGrantCatalog().permissionCodes()).doesNotContain("resource:person:view");
             }
+            assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_permission WHERE module_code IS NULL", Integer.class))
+                    .isZero();
+            jdbcTemplate.update("INSERT INTO sys_permission(id,permission_code,permission_name,permission_type,status) VALUES(990101,'extension:unmapped:view','未配置归属','ACTION','ACTIVE')");
+            try {
+                jdbcTemplate.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) VALUES(?,?,990101)",
+                        tenantId, Long.parseLong(siteManager.id()));
+                assertThat(accessService.roleGrantCatalog().permissionCodes()).doesNotContain("extension:unmapped:view");
+                assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
+                        .load(tenantId, siteUserId).actions()).doesNotContain("extension:unmapped:view");
+                assertThatThrownBy(() -> accessService.grantRole(Long.parseLong(siteManager.id()),
+                        new AccessModels.GrantRole(resourceRole.version(), Set.of("extension:unmapped:view"), Set.of(),
+                                List.of(new AccessModels.DataScopeGrant("iam:organization", "NONE", Set.of())))))
+                        .isInstanceOfSatisfying(ApiException.class, error ->
+                                assertThat(error.errorCode()).isEqualTo(AccessErrorCode.INVALID_GRANT));
+                assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).role().version())
+                        .isEqualTo(resourceRole.version());
+            } finally {
+                jdbcTemplate.update("DELETE FROM iam_role_permission WHERE tenant_id=? AND role_id=? AND permission_id=990101",
+                        tenantId, Long.parseLong(siteManager.id()));
+                jdbcTemplate.update("DELETE FROM sys_permission WHERE id=990101");
+            }
+            var qualificationDraft = packagePlanService.createVersion(Long.parseLong(plan.id()),
+                    new PackagePlanModels.CreateVersion(3, "独立准入资质版", LocalDateTime.now(), List.of(
+                            new PackagePlanModels.ModuleGrant("QUALIFICATION", true, Map.of()),
+                            new PackagePlanModels.ModuleGrant("RESOURCE", false, Map.of()))));
+            var qualificationVersion = packagePlanService.publish(Long.parseLong(qualificationDraft.id()), qualificationDraft.version(), 9001L);
+            packagePlanService.assign(tenantId, Long.parseLong(qualificationVersion.id()),
+                    new PackagePlanModels.AssignSubscription(qualificationVersion.id(), LocalDateTime.now(), null, Map.of()));
+            assertThat(accessService.roleGrantCatalog().permissionCodes())
+                    .contains("supplier:admission:view", "supplier:qualification:view")
+                    .doesNotContain("supplier:master:view", "resource:person:view");
+            assertThat(navigationService.currentMenus()).filteredOn(node -> node.code().equals("SUPPLIER_MANAGEMENT"))
+                    .singleElement().satisfies(node -> assertThat(node.children()).extracting("code")
+                            .contains("SUPPLIER_ADMISSION", "SUPPLIER_QUALIFICATION").doesNotContain("SUPPLIER_MASTER", "SUPPLIER_BLACKLIST"));
+            packagePlanService.assign(tenantId, Long.parseLong(published.id()),
+                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");
@@ -1827,7 +1896,7 @@ class B0InfrastructureIT {
             AuthModels.TokenPair adminToken = authService.login(new AuthModels.LoginCommand(
                     "ACCESS-LIFECYCLE", "lifecycle-admin", "Initial#Pass123", "preview-device"), "127.0.0.1");
             try (var context = TenantContext.open(tenantId, adminId)) {
-                var adminGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper)
+                var adminGrants = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
                         .load(tenantId, adminId);
                 assertThat(adminGrants.actions()).contains("iam:user:manage");
                 when(grantLoader.load(tenantId, adminId)).thenReturn(adminGrants);

@@ -5,28 +5,31 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Set;
 
 @Mapper
 public interface TenantAuthorizationMapper extends TenantScopedMapper {
     @Select("""
-        SELECT DISTINCT p.permission_code
+        <script>SELECT DISTINCT p.permission_code
         FROM iam_user_role ur
         JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id AND r.status='ACTIVE'
         JOIN iam_role_permission rp ON rp.tenant_id=r.tenant_id AND rp.role_id=r.id
         JOIN sys_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' AND p.permission_type='ACTION'
         WHERE ur.tenant_id=#{tenantId} AND ur.user_id=#{userId}
-        """)
-    List<String> actionPermissions(long tenantId, long userId);
+        AND
+        """ + GrantEntitlementSql.PERMISSION + "</script>")
+    List<String> actionPermissions(long tenantId, long userId, Set<String> modules);
 
     @Select("""
-        SELECT DISTINCT p.permission_code
+        <script>SELECT DISTINCT p.permission_code
         FROM iam_user_role ur
         JOIN iam_role r ON r.tenant_id=ur.tenant_id AND r.id=ur.role_id AND r.status='ACTIVE'
         JOIN iam_role_permission rp ON rp.tenant_id=r.tenant_id AND rp.role_id=r.id
         JOIN sys_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' AND p.permission_type='FIELD'
         WHERE ur.tenant_id=#{tenantId} AND ur.user_id=#{userId}
-        """)
-    List<String> fieldPermissions(long tenantId, long userId);
+        AND
+        """ + GrantEntitlementSql.PERMISSION + "</script>")
+    List<String> fieldPermissions(long tenantId, long userId, Set<String> modules);
 
     @Select("""
         SELECT ds.role_id,ds.resource_code,ds.scope_type

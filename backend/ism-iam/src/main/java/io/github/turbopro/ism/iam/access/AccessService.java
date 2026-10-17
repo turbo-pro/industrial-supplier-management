@@ -7,6 +7,7 @@ import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationC
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.iam.auth.IamErrorCode;
 import io.github.turbopro.ism.iam.auth.PasswordPolicy;
+import io.github.turbopro.ism.iam.authorization.GrantEntitlements;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,10 +29,12 @@ public class AccessService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private final AccessMapper mapper;
     private final PasswordEncoder passwords;
+    private final GrantEntitlements entitlements;
 
-    public AccessService(AccessMapper mapper, PasswordEncoder passwords) {
+    public AccessService(AccessMapper mapper, PasswordEncoder passwords, GrantEntitlements entitlements) {
         this.mapper = mapper;
         this.passwords = passwords;
+        this.entitlements = entitlements;
     }
 
     public List<AccessModels.RoleView> roles() {
@@ -41,9 +44,10 @@ public class AccessService {
     @Transactional(readOnly=true)
     public AccessModels.RoleGrantCatalog roleGrantCatalog() {
         long tenantId=tenantId();
-        return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId),mapper.activeMenuCodes(tenantId),
+        Set<String> modules=entitlements.allowedModules(tenantId);
+        return new AccessModels.RoleGrantCatalog(mapper.activePermissionCodes(tenantId,modules),mapper.activeMenuCodes(tenantId,modules),
                 mapper.tenantScopeResourceCodes(tenantId), AuthorizationContext.require().hasAction("iam:role:manage"),
-                mapper.activePermissionOptions(tenantId), mapper.activeMenuOptions(tenantId),
+                mapper.activePermissionOptions(tenantId,modules), mapper.activeMenuOptions(tenantId,modules),
                 mapper.activeOrganizationOptions(tenantId));
     }
 
@@ -78,15 +82,16 @@ public class AccessService {
         AccessModels.RoleRow role = requireRole(id);
         if (role.builtIn()) throw new ApiException(AccessErrorCode.BUILT_IN_ROLE);
         long tenantId = tenantId();
+        Set<String> modules=entitlements.allowedModules(tenantId);
         if (mapper.advanceRoleGrantVersion(tenantId,id,command.version())!=1)
             throw new ApiException(CommonErrorCode.CONFLICT);
         mapper.clearPermissions(tenantId,id); mapper.clearMenus(tenantId,id);
         mapper.clearScopeOrganizations(tenantId,id); mapper.clearScopes(tenantId,id);
         if (!command.permissionCodes().isEmpty()
-                && mapper.grantPermissions(tenantId,id,command.permissionCodes()) != command.permissionCodes().size())
-            throw new ApiException(AccessErrorCode.INVALID_GRANT,"权限代码不存在");
+                && mapper.grantPermissions(tenantId,id,command.permissionCodes(),modules) != command.permissionCodes().size())
+            throw new ApiException(AccessErrorCode.INVALID_GRANT,"权限不存在、已停用或未被当前套餐授权");
         if (!command.menuCodes().isEmpty()) {
-            if (mapper.grantMenus(tenantId,id,command.menuCodes()) != command.menuCodes().size())
+            if (mapper.grantMenus(tenantId,id,command.menuCodes(),modules) != command.menuCodes().size())
                 throw new ApiException(AccessErrorCode.INVALID_GRANT,"菜单不存在、已停用或未被当前套餐授权");
             mapper.grantParentMenus(tenantId,id);
         }
