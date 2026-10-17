@@ -1435,7 +1435,7 @@ class B0InfrastructureIT {
         jdbcTemplate.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,?)",
                 tenantId, "PLAN-TENANT", "套餐验收租户", "ACTIVE");
         packagePlanService.assign(tenantId, Long.parseLong(full.id()), new PackagePlanModels.AssignSubscription(
-                full.id(), LocalDateTime.now(), null, Map.of()));
+                full.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
         jdbcTemplate.update("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(?,?,?,?,?)",
                 9201L, tenantId, "SUPPLIER_COUNT", "CURRENT", 12L);
 
@@ -1443,11 +1443,68 @@ class B0InfrastructureIT {
         assertThat(preview.removedModules()).contains("QUALITY");
         assertThat(preview.quotaChanges().get("SUPPLIER_COUNT").exceedsTarget()).isTrue();
         assertThatThrownBy(() -> packagePlanService.assign(tenantId, Long.parseLong(basic.id()),
-                new PackagePlanModels.AssignSubscription(basic.id(), LocalDateTime.now(), null, Map.of())))
+                new PackagePlanModels.AssignSubscription(basic.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of())))
                 .isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> packagePlanService.requireQuota(tenantId, "SUPPLIER_COUNT", 89L))
                 .isInstanceOf(ApiException.class);
         packagePlanService.requireModule(tenantId, "QUALITY");
+    }
+
+    @Test
+    void shouldResolveSubscriptionWindowsWithoutEarlyActivationOrExpiredFallback() {
+        var plan=packagePlanService.create(new PackagePlanModels.CreatePackage("SUBSCRIPTION_WINDOWS","订阅时窗"));
+        var supplier=packagePlanService.createVersion(Long.parseLong(plan.id()),new PackagePlanModels.CreateVersion(
+                1,"供应商版",null,List.of(new PackagePlanModels.ModuleGrant("SUPPLIER",true,Map.of("SUPPLIER_COUNT",100L)))));
+        var quality=packagePlanService.createVersion(Long.parseLong(plan.id()),new PackagePlanModels.CreateVersion(
+                2,"质量版",null,List.of(new PackagePlanModels.ModuleGrant("QUALITY",true,Map.of("SUPPLIER_COUNT",20L)))));
+        packagePlanService.publish(Long.parseLong(supplier.id()),supplier.version(),9001L);
+        packagePlanService.publish(Long.parseLong(quality.id()),quality.version(),9001L);
+        long tenantId=9210L;
+        jdbcTemplate.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,package_version_id) VALUES(?,?,?,'ACTIVE',?)",
+                tenantId,"SUBSCRIPTION-WINDOWS","订阅时窗",Long.parseLong(supplier.id()));
+        // Legacy pointer-only tenants keep their old capability until the scheduled switch.
+        var tomorrow=LocalDateTime.now(ZoneOffset.UTC).plusDays(1);
+        packagePlanService.assign(tenantId,Long.parseLong(quality.id()),new PackagePlanModels.AssignSubscription(
+                quality.id(),tomorrow,tomorrow.plusDays(1),Map.of()));
+        assertThat(grantEntitlements.allowedModules(tenantId)).contains("SUPPLIER").doesNotContain("QUALITY");
+        assertThat(platformTenantService.get(tenantId).packageVersionId()).isEqualTo(supplier.id());
+        assertThat(packagePlanService.quota(tenantId,"SUPPLIER_COUNT").limit()).isEqualTo(100L);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=?",Integer.class,tenantId)).isEqualTo(2);
+        // Replacing a scheduled switch cancels the previous future plan, not the live window.
+        packagePlanService.assign(tenantId,Long.parseLong(quality.id()),new PackagePlanModels.AssignSubscription(
+                quality.id(),tomorrow.plusHours(1),tomorrow.plusDays(2),Map.of()));
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=? AND status='ACTIVE'",Integer.class,tenantId)).isEqualTo(2);
+        assertThat(grantEntitlements.allowedModules(tenantId)).contains("SUPPLIER").doesNotContain("QUALITY");
+        long count=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=?",Long.class,tenantId);
+        for(var invalid:List.of(
+                new PackagePlanModels.AssignSubscription(quality.id(),tomorrow,tomorrow,Map.of()),
+                new PackagePlanModels.AssignSubscription(quality.id(),tomorrow,tomorrow.minusHours(1),Map.of()),
+                new PackagePlanModels.AssignSubscription(quality.id(),tomorrow.minusDays(3),tomorrow.minusDays(2),Map.of()),
+                new PackagePlanModels.AssignSubscription(quality.id(),tomorrow,null,Map.of("QUALITY",true)))) {
+            assertThatThrownBy(()->packagePlanService.assign(tenantId,Long.parseLong(quality.id()),invalid)).isInstanceOf(ApiException.class);
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=?",Long.class,tenantId)).isEqualTo(count);
+        // Move only this test's windows across the boundary; no sleeps or real database repair.
+        jdbcTemplate.update("UPDATE plt_subscription SET effective_from=UTC_TIMESTAMP(3)-INTERVAL 2 DAY WHERE tenant_id=? AND package_version_id=? AND status='ACTIVE'",tenantId,Long.parseLong(supplier.id()));
+        jdbcTemplate.update("UPDATE plt_subscription SET effective_from=UTC_TIMESTAMP(3)-INTERVAL 1 MINUTE WHERE tenant_id=? AND package_version_id=? AND status='ACTIVE'",tenantId,Long.parseLong(quality.id()));
+        assertThat(grantEntitlements.allowedModules(tenantId)).contains("QUALITY").doesNotContain("SUPPLIER");
+        packagePlanService.requireModule(tenantId,"QUALITY");
+        assertThat(packagePlanService.quota(tenantId,"SUPPLIER_COUNT").limit()).isEqualTo(20L);
+        assertThat(platformTenantService.get(tenantId).packageVersionId()).isEqualTo(quality.id());
+        jdbcTemplate.update("UPDATE plt_subscription SET effective_to=UTC_TIMESTAMP(3) WHERE tenant_id=? AND package_version_id=? AND status='ACTIVE'",tenantId,Long.parseLong(quality.id()));
+        assertThat(grantEntitlements.allowedModules(tenantId)).contains("SYSTEM","COMMON").doesNotContain("QUALITY","SUPPLIER");
+        assertThatThrownBy(()->packagePlanService.requireModule(tenantId,"QUALITY")).isInstanceOf(ApiException.class);
+        assertThat(packagePlanService.quota(tenantId,"SUPPLIER_COUNT").limit()).isZero();
+        assertThat(platformTenantService.get(tenantId).packageVersionId()).isNull();
+        jdbcTemplate.update("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(9211,?,'SUPPLIER_COUNT','CURRENT',30)",tenantId);
+        assertThat(packagePlanService.preview(tenantId,Long.parseLong(quality.id())).quotaChanges()
+                .get("SUPPLIER_COUNT").exceedsTarget()).isTrue();
+        assertThatThrownBy(()->packagePlanService.assign(tenantId,Long.parseLong(quality.id()),new PackagePlanModels.AssignSubscription(
+                quality.id(),LocalDateTime.now(ZoneOffset.UTC),null,Map.of()))).isInstanceOf(ApiException.class);
+        // A new immediate assignment recovers access without reviving older schedules.
+        packagePlanService.assign(tenantId,Long.parseLong(supplier.id()),new PackagePlanModels.AssignSubscription(
+                supplier.id(),LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1),null,Map.of()));
+        assertThat(grantEntitlements.allowedModules(tenantId)).contains("SUPPLIER").doesNotContain("QUALITY");
     }
 
     @Test
@@ -1774,7 +1831,7 @@ class B0InfrastructureIT {
                             new PackagePlanModels.ModuleGrant("RESOURCE", true, Map.of()))));
             var resourceVersion = packagePlanService.publish(Long.parseLong(resourceDraft.id()), resourceDraft.version(), 9001L);
             packagePlanService.assign(tenantId, Long.parseLong(resourceVersion.id()),
-                    new PackagePlanModels.AssignSubscription(resourceVersion.id(), LocalDateTime.now(), null, Map.of()));
+                    new PackagePlanModels.AssignSubscription(resourceVersion.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().menuCodes()).contains("SUPPLIER_PERSON", "SUPPLIER_ASSET");
             assertThat(accessService.roleGrantCatalog().resourceCodes()).contains("resource:person", "resource:asset");
             assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
@@ -1796,7 +1853,7 @@ class B0InfrastructureIT {
             assertThat(accessService.roleGrants(Long.parseLong(siteManager.id())).menuCodes())
                     .contains("SUPPLIER_PERSON", "SUPPLIER_RESOURCE");
             packagePlanService.assign(tenantId, Long.parseLong(published.id()),
-                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
+                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().resourceCodes()).doesNotContain("resource:person");
             assertThat(new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
                     .load(tenantId, administratorId).dataScope("resource:person").type())
@@ -1888,7 +1945,7 @@ class B0InfrastructureIT {
                             new PackagePlanModels.ModuleGrant("RESOURCE", false, Map.of()))));
             var qualificationVersion = packagePlanService.publish(Long.parseLong(qualificationDraft.id()), qualificationDraft.version(), 9001L);
             packagePlanService.assign(tenantId, Long.parseLong(qualificationVersion.id()),
-                    new PackagePlanModels.AssignSubscription(qualificationVersion.id(), LocalDateTime.now(), null, Map.of()));
+                    new PackagePlanModels.AssignSubscription(qualificationVersion.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().permissionCodes())
                     .contains("supplier:admission:view", "supplier:qualification:view")
                     .doesNotContain("supplier:master:view", "resource:person:view");
@@ -1902,7 +1959,7 @@ class B0InfrastructureIT {
                             new PackagePlanModels.ModuleGrant("RESTRICTION", true, Map.of()))));
             var restrictionVersion = packagePlanService.publish(Long.parseLong(restrictionDraft.id()), restrictionDraft.version(), 9001L);
             packagePlanService.assign(tenantId, Long.parseLong(restrictionVersion.id()),
-                    new PackagePlanModels.AssignSubscription(restrictionVersion.id(), LocalDateTime.now(), null, Map.of()));
+                    new PackagePlanModels.AssignSubscription(restrictionVersion.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
             assertThat(accessService.roleGrantCatalog().resourceCodes()).contains("supplier:master")
                     .doesNotContain("supplier:qualification", "resource:person");
             var restrictionSnapshot = new DatabaseAuthorizationGrantLoader(tenantAuthorizationMapper, grantEntitlements)
@@ -1910,7 +1967,7 @@ class B0InfrastructureIT {
             assertThat(restrictionSnapshot.dataScope("supplier:master").type()).isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(restrictionSnapshot.actions()).contains("supplier:blacklist:view").doesNotContain("supplier:master:view");
             packagePlanService.assign(tenantId, Long.parseLong(published.id()),
-                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(), null, Map.of()));
+                    new PackagePlanModels.AssignSubscription(published.id(), LocalDateTime.now(ZoneOffset.UTC), null, Map.of()));
         }
 
         assertThat(platformTenantService.suspend(Long.parseLong(ready.id())).status()).isEqualTo("SUSPENDED");

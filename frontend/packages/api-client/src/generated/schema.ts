@@ -713,6 +713,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 按 UTC 配置订阅有效期，起始包含、结束不包含。未来计划在起始时刻前不影响当前有效套餐；每次分配替换尚未生效的计划。到期不自动回退旧套餐，公共管理能力保留。过去起始时间按当前时刻立即执行，不追溯改写。结束时间必须晚于起始及当前时间，非空 exceptions 暂不支持并返回 422。租户列表及详情的 packageVersionId 返回当前有效版本，到期可为空。 */
         post: operations["assignTenantSubscription"];
         delete?: never;
         options?: never;
@@ -5132,10 +5133,17 @@ export interface components {
         };
         AssignSubscription: {
             packageVersionId: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description UTC 时间，无偏移的 ISO 本地时间格式；过去时刻按立即执行
+             */
             effectiveFrom: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description UTC 排他结束时间，空表示无固定结束时间
+             */
             effectiveTo?: string | null;
+            /** @description 扩展预留字段，当前只接受空对象 */
             exceptions?: {
                 [key: string]: unknown;
             };

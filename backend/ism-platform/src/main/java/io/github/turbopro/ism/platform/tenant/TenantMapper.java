@@ -1,5 +1,7 @@
 package io.github.turbopro.ism.platform.tenant;
 
+import io.github.turbopro.ism.platform.packageplan.EffectiveSubscriptionSql;
+
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
@@ -10,10 +12,10 @@ import java.util.List;
 
 @Mapper
 public interface TenantMapper {
-    @Select("SELECT id,tenant_code,tenant_name,status,initialization_status,timezone,locale,package_version_id,version,initialized_at FROM plt_tenant ORDER BY created_at,id")
+    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at FROM plt_tenant t ORDER BY t.created_at,t.id")
     List<TenantModels.TenantRow> list();
 
-    @Select("SELECT id,tenant_code,tenant_name,status,initialization_status,timezone,locale,package_version_id,version,initialized_at FROM plt_tenant WHERE id=#{id}")
+    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at FROM plt_tenant t WHERE t.id=#{id}")
     TenantModels.TenantRow find(long id);
 
     @Select("SELECT COUNT(*) FROM plt_package_version WHERE id=#{id} AND status='PUBLISHED'")

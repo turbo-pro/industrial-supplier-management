@@ -66,7 +66,9 @@ public class PackagePlanService {
         removed.removeAll(next.entrySet().stream().filter(e->e.getValue().enabled()).map(Map.Entry::getKey).collect(java.util.stream.Collectors.toSet()));
         Map<String,PackagePlanModels.QuotaChange> changes=new TreeMap<>();
         Map<String,Long> oldQ=flatten(current.values()), newQ=flatten(next.values());
-        for(String code:oldQ.keySet()){ long old=oldQ.get(code), limit=newQ.getOrDefault(code,0L); if(limit<old){long used=used(tenantId,code);changes.put(code,new PackagePlanModels.QuotaChange(old,limit,used,used>limit));}}
+        Set<String> quotaCodes=new TreeSet<>(oldQ.keySet());
+        quotaCodes.addAll(newQ.keySet()); quotaCodes.addAll(mapper.usedQuotaCodes(tenantId));
+        for(String code:quotaCodes){ long old=oldQ.getOrDefault(code,0L), limit=newQ.getOrDefault(code,0L), used=used(tenantId,code); if(limit<old || used>limit) changes.put(code,new PackagePlanModels.QuotaChange(old,limit,used,used>limit)); }
         List<String> advice=new ArrayList<>(); if(!removed.isEmpty()) advice.add("确认失效模块的数据只读保留策略");
         if(changes.values().stream().anyMatch(PackagePlanModels.QuotaChange::exceedsTarget)) advice.add("先清理超出目标额度的资源或确认只读保留");
         return new PackagePlanModels.SubscriptionPreview(Long.toString(tenantId),currentId==null?null:currentId.toString(),Long.toString(targetVersionId),removed,changes,advice);
@@ -74,13 +76,23 @@ public class PackagePlanService {
     @Transactional
     public PackagePlanModels.SubscriptionPreview assign(long tenantId,long targetVersionId,PackagePlanModels.AssignSubscription command) {
         if(Long.parseLong(command.packageVersionId())!=targetVersionId) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        LocalDateTime now=mapper.utcNow();
+        if(command.effectiveFrom()==null || (command.effectiveTo()!=null &&
+                (!command.effectiveTo().isAfter(command.effectiveFrom()) || !command.effectiveTo().isAfter(now))))
+            throw new ApiException(PackagePlanErrorCode.INVALID,"订阅结束时间必须晚于起始时间和当前 UTC 时间");
+        if(!command.exceptions().isEmpty())
+            throw new ApiException(PackagePlanErrorCode.INVALID,"当前尚不支持套餐例外授权，不能忽略已提交的例外配置");
         PackagePlanModels.SubscriptionPreview preview=preview(tenantId,targetVersionId);
         if(preview.quotaChanges().values().stream().anyMatch(PackagePlanModels.QuotaChange::exceedsTarget)) throw new ApiException(PackagePlanErrorCode.QUOTA_EXCEEDED,"目标额度低于当前使用量，不能直接分配");
-        LocalDateTime now=LocalDateTime.now(ZoneOffset.UTC); mapper.terminateSubscription(tenantId,now);
-        mapper.insertSubscription(id(),tenantId,targetVersionId,command.effectiveFrom(),command.effectiveTo(),write(command.exceptions()));
+        // Past starts mean immediate replacement; never rewrite the historical subscription window.
+        LocalDateTime from=command.effectiveFrom().isBefore(now)?now:command.effectiveFrom();
+        mapper.materializeLegacySubscription(tenantId,id(),now);
+        mapper.cancelFutureSubscriptions(tenantId,now);
+        mapper.insertSubscription(id(),tenantId,targetVersionId,from,command.effectiveTo(),write(command.exceptions()));
         if(mapper.updateTenantPackage(tenantId,targetVersionId)!=1) throw new ApiException(CommonErrorCode.NOT_FOUND); return preview;
     }
-    public void requireModule(long tenantId,String moduleCode){ Long version=mapper.findTenantPackageVersion(tenantId); if(version==null||!grantMap(version).getOrDefault(moduleCode,new PackagePlanModels.ModuleGrant(moduleCode,false,Map.of())).enabled()) throw new ApiException(PackagePlanErrorCode.MODULE_UNAVAILABLE); }
+    public void requireModule(long tenantId,String moduleCode){ if(!mapper.enabledTenantModules(tenantId).contains(moduleCode)) throw new ApiException(PackagePlanErrorCode.MODULE_UNAVAILABLE); }
     public PackagePlanModels.QuotaUsage quota(long tenantId,String quotaCode){ Long version=mapper.findTenantPackageVersion(tenantId); long limit=version==null?0:flatten(grantMap(version).values()).getOrDefault(quotaCode,0L),used=used(tenantId,quotaCode); return new PackagePlanModels.QuotaUsage(quotaCode,limit,used,Math.max(0,limit-used),limit>0&&used*100>=limit*80,used>=limit); }
     public void requireQuota(long tenantId,String quotaCode,long delta){ var q=quota(tenantId,quotaCode); if(q.limit()<=0||q.used()+delta>q.limit()) throw new ApiException(PackagePlanErrorCode.QUOTA_EXCEEDED); }
 

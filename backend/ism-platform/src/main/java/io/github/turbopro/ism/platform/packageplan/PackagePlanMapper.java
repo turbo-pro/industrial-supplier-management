@@ -8,7 +8,9 @@ import java.util.List;
 public interface PackagePlanMapper {
     @Select("""
         SELECT m.module_code FROM plt_tenant t
-        JOIN plt_package_version v ON v.id=t.package_version_id AND v.status='PUBLISHED'
+        JOIN plt_package_version v ON v.id=(
+        """ + EffectiveSubscriptionSql.VERSION + """
+        ) AND v.status='PUBLISHED'
         JOIN plt_package_module pm ON pm.package_version_id=v.id AND pm.enabled=1
         JOIN plt_module m ON m.id=pm.module_id AND m.status='ACTIVE'
         WHERE t.id=#{tenantId}
@@ -38,14 +40,22 @@ public interface PackagePlanMapper {
     List<PackagePlanModels.ModuleRow> listModules(long versionId);
     @Update("UPDATE plt_package_version SET status='PUBLISHED',published_at=#{now},published_by=#{actorId},version=version+1 WHERE id=#{id} AND status='DRAFT' AND version=#{version}")
     int publish(long id, int version, long actorId, LocalDateTime now);
-    @Select("SELECT package_version_id FROM plt_tenant WHERE id=#{tenantId}")
+    @Select("SELECT " + EffectiveSubscriptionSql.VERSION + " FROM plt_tenant t WHERE t.id=#{tenantId}")
     Long findTenantPackageVersion(long tenantId);
-    @Update("UPDATE plt_subscription SET status='TERMINATED',effective_to=#{now} WHERE tenant_id=#{tenantId} AND status='ACTIVE'")
-    int terminateSubscription(long tenantId, LocalDateTime now);
-    @Insert("INSERT INTO plt_subscription(id,tenant_id,package_version_id,status,effective_from,effective_to,exception_json) VALUES(#{id},#{tenantId},#{versionId},'ACTIVE',#{from},#{to},#{exceptions})")
+    @Select("SELECT id FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
+    Long lockTenant(long tenantId);
+    @Select("SELECT UTC_TIMESTAMP(3)")
+    LocalDateTime utcNow();
+    @Insert("INSERT INTO plt_subscription(id,tenant_id,package_version_id,status,effective_from,exception_json) SELECT #{id},t.id,t.package_version_id,'ACTIVE',#{now},JSON_OBJECT() FROM plt_tenant t JOIN plt_package_version v ON v.id=t.package_version_id AND v.status='PUBLISHED' WHERE t.id=#{tenantId} AND NOT EXISTS (SELECT 1 FROM plt_subscription s WHERE s.tenant_id=t.id)")
+    int materializeLegacySubscription(long tenantId,long id,LocalDateTime now);
+    @Update("UPDATE plt_subscription SET status='TERMINATED' WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND effective_from > #{now}")
+    int cancelFutureSubscriptions(long tenantId, LocalDateTime now);
+    @Insert("INSERT INTO plt_subscription(id,tenant_id,package_version_id,status,effective_from,effective_to,exception_json,assignment_sequence) SELECT #{id},t.id,#{versionId},'ACTIVE',#{from},#{to},#{exceptions},t.version+1 FROM plt_tenant t WHERE t.id=#{tenantId}")
     int insertSubscription(long id, long tenantId, long versionId, LocalDateTime from, LocalDateTime to, String exceptions);
     @Update("UPDATE plt_tenant SET package_version_id=#{versionId},version=version+1 WHERE id=#{tenantId}")
     int updateTenantPackage(long tenantId, long versionId);
     @Select("SELECT COALESCE(used_value,0) FROM plt_quota_usage WHERE tenant_id=#{tenantId} AND quota_code=#{quotaCode} AND period_key=#{periodKey}")
     Long quotaUsed(long tenantId, String quotaCode, String periodKey);
+    @Select("SELECT quota_code FROM plt_quota_usage WHERE tenant_id=#{tenantId} AND period_key='CURRENT' AND used_value>0")
+    List<String> usedQuotaCodes(long tenantId);
 }
