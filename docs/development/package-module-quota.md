@@ -1,5 +1,7 @@
 # Package, module and quota contract
 
+V68 adds phase-deduplicated in-app expiry notifications, failure/retry records and Console inspection. Automatic scanning is opt-in; no external messaging connector is claimed. See [expiry reminder acceptance](b1-subscription-expiry-reminders-review.md).
+
 Package plans are global control-plane data. A package has editable metadata and immutable versions. Each version contains module grants and non-negative quota limits. Publishing changes a version from `DRAFT` to `PUBLISHED`; published rows and grants have no update path.
 
 Tenant effective capability is the intersection of the published package version, future tenant switches, role permission and business state. `PackagePlanService.requireModule` and `requireQuota` are the server-side gates for business APIs; hiding a menu is never sufficient authorization.

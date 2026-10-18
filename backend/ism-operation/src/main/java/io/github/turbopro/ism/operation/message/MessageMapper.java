@@ -1,6 +1,10 @@
 package io.github.turbopro.ism.operation.message;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;import org.apache.ibatis.annotations.*;import java.time.LocalDateTime;import java.util.*;
 @Mapper public interface MessageMapper extends TenantScopedMapper{
+ @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'TENANT_SUBSCRIPTION_EXPIRY','套餐订阅到期提醒','IN_APP','套餐订阅到期提醒','订阅 {{subscriptionId}}（{{versionName}}）的有效期截止 {{expiresAt}} UTC，提醒阶段：{{stage}}。请联系平台管理员续订；实际权限以系统实时查询为准。',JSON_ARRAY('subscriptionId','versionName','expiresAt','stage'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
+ int ensureSubscriptionExpiryTemplate(long tenantId,long id);
+ @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='TENANT_SUBSCRIPTION_EXPIRY' AND channel='IN_APP' AND status='ACTIVE' FOR SHARE")
+ MessageModels.TemplateRow subscriptionExpiryTemplate(long tenantId);
  @Insert("INSERT INTO msg_template(id,tenant_id,template_code,template_name,channel,title_template,content_template,variable_schema,status) VALUES(#{id},#{tenantId},'SUPPLIER_EXIT_ASSIGNMENT','退出事项责任分派','IN_APP','退出事项待处置','供应商 {{supplierId}} 的退出申请 {{applicationId}} 已分派事项 {{code}} / {{sourceId}} 给您。请在业务台账处置并通知管理人员重新核验；本消息不是完成凭证。',JSON_ARRAY('supplierId','applicationId','code','sourceId'),'ACTIVE') ON DUPLICATE KEY UPDATE id=id")
  int ensureExitAssignmentTemplate(long tenantId,long id);
  @Select("SELECT id,template_code,template_name,channel,title_template,content_template,variable_schema,status,version FROM msg_template WHERE tenant_id=#{tenantId} AND template_code='SUPPLIER_EXIT_ASSIGNMENT' AND channel='IN_APP' FOR SHARE")

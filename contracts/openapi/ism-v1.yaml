@@ -599,6 +599,33 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscriptions/{id}/reminders:
+    get:
+      operationId: listSubscriptionReminders
+      description: 查看订阅到期站内提醒记录，需要 platform:package:view；按租户及订阅共同校验归属。
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Reminder history, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionRemindersResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscriptions/{id}/reminders/dispatch:
+    post:
+      operationId: checkSubscriptionExpiryReminder
+      description: 需要 platform:package:assign。检查当前已生效候选，在 7 天内、1 天内或到期阶段发送一次站内通知给有效租户管理员；未到时间、已被替换或已发送返回 SKIPPED。FAILED 表示投递失败且留有失败记录，不等于发送成功。只有 ACTIVE 且 READY 的租户可发送，到期超过 30 天不补历史通知。人工检查不受后台失败重试的 30 分钟间隔限制；SENT 阶段仍不能重复发送。业务阶段去重独立于请求幂等；投递和消息台账独立事务提交，幂等响应异常时重试可能返回 SKIPPED，但不会重复投递。非邮件、短信或企业微信通知。
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Reminder check result, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionReminderDispatchResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /console/tenants/{tenantId}/quota-usage:
     get:
       operationId: getTenantQuotaUsage
@@ -3308,6 +3335,29 @@ components:
         state: { type: string, enum: [CANCELLED] }
     SubscriptionCancellationResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SubscriptionCancellation' } } }]
+    SubscriptionReminder:
+      type: object
+      required: [stage, status, attemptCount, recipientCount, attemptedAt]
+      properties:
+        stage: { type: string, enum: [WITHIN_7_DAYS, WITHIN_1_DAY, EXPIRED] }
+        status: { type: string, enum: [PENDING, SENT, FAILED] }
+        attemptCount: { type: integer }
+        recipientCount: { type: integer }
+        attemptedAt: { type: string, format: date-time }
+        sentAt: { type: string, format: date-time, nullable: true }
+        errorCode: { type: string, nullable: true }
+    SubscriptionRemindersResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/SubscriptionReminder' } } } }]
+    SubscriptionReminderDispatch:
+      type: object
+      required: [status, recipientCount]
+      properties:
+        status: { type: string, enum: [SENT, FAILED, SKIPPED] }
+        stage: { type: string, nullable: true }
+        recipientCount: { type: integer }
+        errorCode: { type: string, nullable: true }
+    SubscriptionReminderDispatchResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SubscriptionReminderDispatch' } } }]
     QuotaChange:
       type: object
       required: [currentLimit, targetLimit, usedValue, exceedsTarget]

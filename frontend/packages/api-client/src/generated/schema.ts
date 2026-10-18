@@ -755,6 +755,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/tenants/{tenantId}/subscriptions/{id}/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 查看订阅到期站内提醒记录，需要 platform:package:view；按租户及订阅共同校验归属。 */
+        get: operations["listSubscriptionReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/tenants/{tenantId}/subscriptions/{id}/reminders/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 需要 platform:package:assign。检查当前已生效候选，在 7 天内、1 天内或到期阶段发送一次站内通知给有效租户管理员；未到时间、已被替换或已发送返回 SKIPPED。FAILED 表示投递失败且留有失败记录，不等于发送成功。只有 ACTIVE 且 READY 的租户可发送，到期超过 30 天不补历史通知。人工检查不受后台失败重试的 30 分钟间隔限制；SENT 阶段仍不能重复发送。业务阶段去重独立于请求幂等；投递和消息台账独立事务提交，幂等响应异常时重试可能返回 SKIPPED，但不会重复投递。非邮件、短信或企业微信通知。 */
+        post: operations["checkSubscriptionExpiryReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/tenants/{tenantId}/quota-usage": {
         parameters: {
             query?: never;
@@ -5230,6 +5264,32 @@ export interface components {
         SubscriptionCancellationResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["SubscriptionCancellation"];
         };
+        SubscriptionReminder: {
+            /** @enum {string} */
+            stage: "WITHIN_7_DAYS" | "WITHIN_1_DAY" | "EXPIRED";
+            /** @enum {string} */
+            status: "PENDING" | "SENT" | "FAILED";
+            attemptCount: number;
+            recipientCount: number;
+            /** Format: date-time */
+            attemptedAt: string;
+            /** Format: date-time */
+            sentAt?: string | null;
+            errorCode?: string | null;
+        };
+        SubscriptionRemindersResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SubscriptionReminder"][];
+        };
+        SubscriptionReminderDispatch: {
+            /** @enum {string} */
+            status: "SENT" | "FAILED" | "SKIPPED";
+            stage?: string | null;
+            recipientCount: number;
+            errorCode?: string | null;
+        };
+        SubscriptionReminderDispatchResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SubscriptionReminderDispatch"];
+        };
         QuotaChange: {
             /** Format: int64 */
             currentLimit: number;
@@ -7251,6 +7311,59 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSubscriptionReminders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenantId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reminder history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRemindersResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    checkSubscriptionExpiryReminder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reminder check result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionReminderDispatchResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     getTenantQuotaUsage: {

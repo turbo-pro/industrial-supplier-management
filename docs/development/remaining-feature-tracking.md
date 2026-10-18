@@ -1,5 +1,7 @@
 # 剩余功能跟踪
 
+B1 补订阅到期站内提醒、阶段去重、失败恢复、默认关闭的后台扫描及 Console 检查页面；见 [到期提醒验收](b1-subscription-expiry-reminders-review.md)。可配置策略、外部消息渠道及真实后端页面联调仍待推进。
+
 B1 本轮补齐订阅分配/取消的三种双连接争用及审计故障回滚、原幂等键重试验证；B0 24/24、V25 升级 1/1 无跳过，见 [订阅可靠性验收](b1-subscription-contention-review.md)。其余功能与验收缺口不变。
 
 B1 补 Console 订阅分页、未来计划取消与页面，含版本/权限/幂等/审计；见 [计划管理验收](b1-subscription-plan-management-review.md)。真实后端页面联合验收、固定新页面用例、并发争用、审计故障注入及到期提醒仍缺。

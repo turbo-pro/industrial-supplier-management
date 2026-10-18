@@ -20,8 +20,9 @@ import java.util.function.Supplier;
 public class PackagePlanController {
     private final PackagePlanService service; private final ApiResponseFactory responses;
     private final IdempotencyService idempotency; private final AuditService audit; private final ObjectMapper json;
+    private final SubscriptionReminderService reminders;
     public PackagePlanController(PackagePlanService service,ApiResponseFactory responses,IdempotencyService idempotency,
-                                 AuditService audit,ObjectMapper json){this.service=service;this.responses=responses;this.idempotency=idempotency;this.audit=audit;this.json=json;}
+                                 AuditService audit,ObjectMapper json,SubscriptionReminderService reminders){this.service=service;this.responses=responses;this.idempotency=idempotency;this.audit=audit;this.json=json;this.reminders=reminders;}
     @GetMapping("/packages") @RequiresPermission("platform:package:view")
     ApiResponse<List<PackagePlanModels.PackageView>> list(){return responses.success(service.list());}
     @PostMapping("/packages") @RequiresPermission("platform:package:manage")
@@ -59,6 +60,21 @@ public class PackagePlanController {
     private <T> T once(String operation,String key,Object request,Class<T> type,Supplier<T> action){
         String value=idempotency.execute(operation,key,write(request),Duration.ofHours(24),()->write(action.get()));
         try{return json.readValue(value,type);}catch(Exception e){throw new IllegalStateException("幂等响应无法解析",e);}
+    }
+    @GetMapping("/tenants/{tenantId}/subscriptions/{id}/reminders") @RequiresPermission("platform:package:view")
+    ApiResponse<List<SubscriptionReminderModels.Reminder>> reminders(@PathVariable long tenantId,@PathVariable long id){
+        return responses.success(reminders.history(tenantId,id));
+    }
+    @PostMapping("/tenants/{tenantId}/subscriptions/{id}/reminders/dispatch") @RequiresPermission("platform:package:assign")
+    ApiResponse<SubscriptionReminderModels.Dispatch> remind(@PathVariable long tenantId,@PathVariable long id,
+            @RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(once("SUBSCRIPTION_REMINDER:"+tenantId+":"+id,key,Map.of("tenantId",tenantId,"subscriptionId",id),
+                SubscriptionReminderModels.Dispatch.class,()->{
+                    var result=reminders.dispatchAsOperator(tenantId,id,principal.userId());
+                    audit.append(new AuditService.AuditCommand("SUBSCRIPTION_REMINDER_CHECK","SUBSCRIPTION",id,null,
+                            Map.of(),Map.of("tenantId",tenantId,"result",result.status()),null,null));
+                    return result;
+                }));
     }
     private String write(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("请求无法序列化",e);}}
 }

@@ -61,6 +61,9 @@ logging:
     level: "%5p [traceId=%X{traceId:-}]"
 
 ism:
+  subscription-reminders:
+    enabled: ${ISM_SUBSCRIPTION_REMINDERS_ENABLED:false}
+    poll-interval: ${ISM_SUBSCRIPTION_REMINDERS_POLL_INTERVAL:300000}
   storage:
     provider: ${ISM_STORAGE_PROVIDER:LOCAL}
     local-root: ${ISM_STORAGE_LOCAL_ROOT:./data/storage}
