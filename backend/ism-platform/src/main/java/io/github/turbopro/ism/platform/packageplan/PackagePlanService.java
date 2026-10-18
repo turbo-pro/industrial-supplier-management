@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.turbopro.ism.common.api.error.*;
+import io.github.turbopro.ism.operation.AuditService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +17,52 @@ import java.util.*;
 public class PackagePlanService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private final PackagePlanMapper mapper; private final ObjectMapper json;
-    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json) { this.mapper=mapper; this.json=json; }
+    private final AuditService audit;
+    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json,AuditService audit) { this.mapper=mapper; this.json=json; this.audit=audit; }
+
+    @Transactional(readOnly=true)
+    public PackagePlanModels.SubscriptionPage subscriptions(long tenantId,int page,int size) {
+        if(page<0 || page>10000 || size<1 || size>100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var tenant=mapper.subscriptionTenant(tenantId);
+        if(tenant==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var now=mapper.utcNow(); var latest=mapper.latestStartedSubscription(tenantId,now);
+        var current=mapper.findTenantPackageVersion(tenantId);
+        return new PackagePlanModels.SubscriptionPage(Long.toString(tenantId),tenant.version(),
+                current==null?null:current.toString(),now,mapper.subscriptionCount(tenantId),page,size,
+                mapper.subscriptions(tenantId,Math.multiplyExact(page,size),size).stream().map(row->{
+                    String state;
+                    if("CANCELLED".equals(row.status())) state="CANCELLED";
+                    else if(!"ACTIVE".equals(row.status())) state="SUPERSEDED";
+                    else if(row.effectiveFrom().isAfter(now)) state="SCHEDULED";
+                    else if(!Objects.equals(latest,row.id())) state="SUPERSEDED";
+                    else if(row.effectiveTo()!=null && !row.effectiveTo().isAfter(now)) state="EXPIRED";
+                    else if(!"PUBLISHED".equals(row.versionStatus())) state="UNAVAILABLE";
+                    else state="EFFECTIVE";
+                    return new PackagePlanModels.SubscriptionView(Long.toString(row.id()),Long.toString(row.packageVersionId()),
+                            row.packageName(),row.versionName(),state,row.effectiveFrom(),row.effectiveTo(),"SCHEDULED".equals(state),
+                            row.cancelledAt(),row.cancelledBy()==null?null:row.cancelledBy().toString(),row.cancelReason());
+                }).toList());
+    }
+
+    @Transactional
+    public PackagePlanModels.SubscriptionCancellation cancelSubscription(long tenantId,long subscriptionId,
+            PackagePlanModels.CancelSubscription command,long actorId) {
+        if(command.reason()==null || command.reason().isBlank() || command.reason().length()>500)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var tenant=mapper.lockSubscriptionTenant(tenantId);
+        if(tenant==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var row=mapper.subscription(tenantId,subscriptionId);
+        if(row==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(tenant.version()!=command.tenantVersion()) throw new ApiException(CommonErrorCode.CONFLICT,"租户订阅已变化，请刷新后重试");
+        var now=mapper.utcNow();
+        if(mapper.cancelSubscription(tenantId,subscriptionId,now,actorId,command.reason().trim())!=1)
+            throw new ApiException(CommonErrorCode.CONFLICT,"只能取消尚未生效的计划");
+        if(mapper.advanceSubscriptionTenantVersion(tenantId,tenant.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
+        audit.append(new AuditService.AuditCommand("SUBSCRIPTION_CANCEL","SUBSCRIPTION",subscriptionId,null,
+                Map.of("status",row.status(),"tenantId",Long.toString(tenantId)),
+                Map.of("status","CANCELLED","reason",command.reason().trim()),null,null));
+        return new PackagePlanModels.SubscriptionCancellation(Long.toString(subscriptionId),tenant.version()+1,"CANCELLED");
+    }
 
     public List<PackagePlanModels.PackageView> list() { return mapper.listPackages().stream().map(this::view).toList(); }
     public PackagePlanModels.PackageView get(long id) {

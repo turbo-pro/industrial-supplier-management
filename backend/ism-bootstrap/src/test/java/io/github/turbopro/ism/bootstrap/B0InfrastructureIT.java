@@ -1508,6 +1508,81 @@ class B0InfrastructureIT {
     }
 
     @Test
+    void shouldListAndCancelOnlyFutureSubscriptionsWithPermissionAndIdempotency() throws Exception {
+        var plan=packagePlanService.create(new PackagePlanModels.CreatePackage("SUBSCRIPTION_CANCEL","订阅撤销验收"));
+        var draft=packagePlanService.createVersion(Long.parseLong(plan.id()),new PackagePlanModels.CreateVersion(
+                1,"标准版",null,List.of(new PackagePlanModels.ModuleGrant("SUPPLIER",true,Map.of()))));
+        packagePlanService.publish(Long.parseLong(draft.id()),draft.version(),9001L);
+        long tenantId=9220L,foreignTenant=9230L,adminId=9221L,supportId=9222L;
+        for(long id:List.of(tenantId,foreignTenant))
+            jdbcTemplate.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,package_version_id) VALUES(?,?,?,'ACTIVE',?)",
+                    id,"CANCEL-"+id,"计划撤销",Long.parseLong(draft.id()));
+        for(long id:List.of(adminId,supportId)) {
+            jdbcTemplate.update("INSERT INTO plt_user(id,username,display_name,password_hash,status) VALUES(?,?,?,?,'ACTIVE')",
+                    id,"subscription-user-"+id,"订阅管理员",passwordEncoder.encode("Console#Pass123"));
+            jdbcTemplate.update("INSERT INTO plt_user_role(user_id,role_id) VALUES(?,?)",id,id==adminId?1001:1002);
+        }
+        String admin="Bearer "+consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                "subscription-user-"+adminId,"Console#Pass123","subscription-admin"),"127.0.0.1").accessToken();
+        String support="Bearer "+consoleAuthService.login(new ConsoleAuthModels.LoginCommand(
+                "subscription-user-"+supportId,"Console#Pass123","subscription-support"),"127.0.0.1").accessToken();
+        var tomorrow=LocalDateTime.now(ZoneOffset.UTC).plusDays(1);
+        packagePlanService.assign(tenantId,Long.parseLong(draft.id()),new PackagePlanModels.AssignSubscription(draft.id(),tomorrow,null,Map.of()));
+        var history=packagePlanService.subscriptions(tenantId,0,20);
+        assertThat(history.total()).isEqualTo(2);
+        var scheduled=history.items().stream().filter(item->item.state().equals("SCHEDULED")).findFirst().orElseThrow();
+        var current=history.items().stream().filter(item->item.state().equals("EFFECTIVE")).findFirst().orElseThrow();
+        assertThat(scheduled.canCancel()).isTrue(); assertThat(current.canCancel()).isFalse();
+        mockMvc.perform(get("/api/console/tenants/"+tenantId+"/subscriptions").header("Authorization",support))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(2));
+        mockMvc.perform(get("/api/console/tenants/"+tenantId+"/subscriptions?page=1&size=1").header("Authorization",admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(1));
+        mockMvc.perform(get("/api/console/tenants/"+tenantId+"/subscriptions?size=101").header("Authorization",admin))
+                .andExpect(status().isBadRequest());
+        String body="{\"tenantVersion\":"+history.tenantVersion()+",\"reason\":\"调整采购计划\"}";
+        String path="/api/console/tenants/"+tenantId+"/subscriptions/"+scheduled.id()+"/cancel";
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                        .header("Authorization",support).header("Idempotency-Key","support-cancel-denied")
+                        .contentType("application/json").content(body)).andExpect(status().isForbidden());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/console/tenants/"+foreignTenant+"/subscriptions/"+scheduled.id()+"/cancel")
+                        .header("Authorization",admin).header("Idempotency-Key","wrong-tenant-cancel")
+                        .contentType("application/json").content("{\"tenantVersion\":0,\"reason\":\"错误租户\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                        .header("Authorization",admin).header("Idempotency-Key","stale-cancel")
+                        .contentType("application/json").content("{\"tenantVersion\":0,\"reason\":\"过期列表\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/console/tenants/"+tenantId+"/subscriptions/"+current.id()+"/cancel")
+                        .header("Authorization",admin).header("Idempotency-Key","live-cancel-denied")
+                        .contentType("application/json").content(body)).andExpect(status().isConflict());
+        for(int attempt=0;attempt<2;attempt++)
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                            .header("Authorization",admin).header("Idempotency-Key","cancel-future-once")
+                            .contentType("application/json").content(body))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.state").value("CANCELLED"))
+                    .andExpect(jsonPath("$.data.tenantVersion").value(history.tenantVersion()+1));
+        var cancelled=packagePlanService.subscriptions(tenantId,0,20);
+        assertThat(cancelled.currentPackageVersionId()).isEqualTo(draft.id());
+        assertThat(cancelled.items()).filteredOn(item->item.id().equals(scheduled.id())).singleElement().satisfies(item->{
+            assertThat(item.state()).isEqualTo("CANCELLED"); assertThat(item.canCancel()).isFalse();
+            assertThat(item.cancelReason()).isEqualTo("调整采购计划"); assertThat(item.cancelledBy()).isEqualTo(Long.toString(adminId));
+            assertThat(item.cancelledAt()).isNotNull();
+        });
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUBSCRIPTION_CANCEL' AND object_id=?",Integer.class,Long.parseLong(scheduled.id()))).isOne();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                        .header("Authorization",admin).header("Idempotency-Key","cancelled-plan-again")
+                        .contentType("application/json").content("{\"tenantVersion\":"+cancelled.tenantVersion()+",\"reason\":\"再次取消\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                        .header("Authorization",admin).header("Idempotency-Key","empty-cancel-reason")
+                        .contentType("application/json").content("{\"tenantVersion\":"+cancelled.tenantVersion()+",\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        packagePlanService.requireModule(tenantId,"SUPPLIER");
+    }
+
+    @Test
     void shouldProvisionTenantHeadquartersAndFirstAdministrator() throws Exception {
         var plan = packagePlanService.create(new PackagePlanModels.CreatePackage(
                 "TENANT_BOOTSTRAP", "租户开通验收套餐"));

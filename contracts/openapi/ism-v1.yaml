@@ -567,6 +567,38 @@ paths:
         '200': { description: Subscription assigned, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPreviewResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscriptions:
+    get:
+      operationId: listTenantSubscriptions
+      description: 分页查看指定租户的订阅历史及未来计划；需要 platform:package:view。tenantVersion 用于取消时的并发校验，canCancel 仅为读取时提示，保存时重新检查时间边界。
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Subscription history, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/subscriptions/{id}/cancel:
+    post:
+      operationId: cancelTenantSubscription
+      description: 仅取消指定租户尚未生效且仍为 ACTIVE 的计划；需要 platform:package:assign。租户行锁、tenantVersion 校验、审计及幂等保证取消不会误改当前生效套餐。版本陈旧、计划已生效/已替换/已取消返回 409；同一幂等键及请求可重放成功响应，不重复审计。跨租户计划 ID 返回 404。
+      tags: [Console Tenant Subscriptions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CancelSubscription' } } } }
+      responses:
+        '200': { description: Future subscription cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionCancellationResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /console/tenants/{tenantId}/quota-usage:
     get:
       operationId: getTenantQuotaUsage
@@ -3232,6 +3264,50 @@ components:
         effectiveFrom: { type: string, format: date-time, description: UTC 时间，无偏移的 ISO 本地时间格式；过去时刻按立即执行 }
         effectiveTo: { type: string, format: date-time, nullable: true, description: UTC 排他结束时间，空表示无固定结束时间 }
         exceptions: { type: object, additionalProperties: true, description: 扩展预留字段，当前只接受空对象 }
+    CancelSubscription:
+      type: object
+      required: [tenantVersion, reason]
+      properties:
+        tenantVersion: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    SubscriptionView:
+      type: object
+      required: [id, packageVersionId, packageName, versionName, state, effectiveFrom, canCancel]
+      properties:
+        id: { type: string }
+        packageVersionId: { type: string }
+        packageName: { type: string }
+        versionName: { type: string }
+        state: { type: string, enum: [SCHEDULED, EFFECTIVE, EXPIRED, SUPERSEDED, CANCELLED, UNAVAILABLE] }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        canCancel: { type: boolean }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        cancelledBy: { type: string, nullable: true }
+        cancelReason: { type: string, nullable: true }
+    SubscriptionPage:
+      type: object
+      required: [tenantId, tenantVersion, asOf, total, page, size, items]
+      properties:
+        tenantId: { type: string }
+        tenantVersion: { type: integer }
+        currentPackageVersionId: { type: string, nullable: true }
+        asOf: { type: string, format: date-time, description: 数据库 UTC 读取时刻 }
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/SubscriptionView' } }
+    SubscriptionPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SubscriptionPage' } } }]
+    SubscriptionCancellation:
+      type: object
+      required: [subscriptionId, tenantVersion, state]
+      properties:
+        subscriptionId: { type: string }
+        tenantVersion: { type: integer }
+        state: { type: string, enum: [CANCELLED] }
+    SubscriptionCancellationResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SubscriptionCancellation' } } }]
     QuotaChange:
       type: object
       required: [currentLimit, targetLimit, usedValue, exceedsTarget]

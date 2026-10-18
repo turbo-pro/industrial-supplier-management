@@ -43,6 +43,19 @@ public class PackagePlanController {
     @GetMapping("/tenants/{tenantId}/quota-usage") @RequiresPermission("platform:package:view")
     ApiResponse<PackagePlanModels.QuotaUsage> quota(@PathVariable long tenantId,@RequestParam String quotaCode){return responses.success(service.quota(tenantId,quotaCode));}
 
+    @GetMapping("/tenants/{tenantId}/subscriptions") @RequiresPermission("platform:package:view")
+    ApiResponse<PackagePlanModels.SubscriptionPage> subscriptions(@PathVariable long tenantId,
+            @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){
+        return responses.success(service.subscriptions(tenantId,page,size));
+    }
+    @PostMapping("/tenants/{tenantId}/subscriptions/{id}/cancel") @RequiresPermission("platform:package:assign")
+    ApiResponse<PackagePlanModels.SubscriptionCancellation> cancel(@PathVariable long tenantId,@PathVariable long id,
+            @RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.CancelSubscription c,
+            @AuthenticationPrincipal ConsolePrincipal principal){
+        return responses.success(once("SUBSCRIPTION_CANCEL:"+tenantId+":"+id,key,c,
+                PackagePlanModels.SubscriptionCancellation.class,()->service.cancelSubscription(tenantId,id,c,principal.userId())));
+    }
+
     private <T> T once(String operation,String key,Object request,Class<T> type,Supplier<T> action){
         String value=idempotency.execute(operation,key,write(request),Duration.ofHours(24),()->write(action.get()));
         try{return json.readValue(value,type);}catch(Exception e){throw new IllegalStateException("幂等响应无法解析",e);}

@@ -40,6 +40,18 @@ public final class PackagePlanModels {
                                       String targetPackageVersionId, Set<String> removedModules,
                                       Map<String, QuotaChange> quotaChanges, List<String> recommendations) {}
     public record QuotaChange(long currentLimit, long targetLimit, long usedValue, boolean exceedsTarget) {}
+    public record CancelSubscription(@PositiveOrZero int tenantVersion,
+                                     @NotBlank @Size(max=500) String reason) {}
+    public record SubscriptionTenantRow(long id,int version) {}
+    public record SubscriptionRow(long id,long packageVersionId,String packageName,String versionName,
+                                  String status,String versionStatus,LocalDateTime effectiveFrom,LocalDateTime effectiveTo,
+                                  LocalDateTime cancelledAt,Long cancelledBy,String cancelReason) {}
+    public record SubscriptionView(String id,String packageVersionId,String packageName,String versionName,
+                                   String state,LocalDateTime effectiveFrom,LocalDateTime effectiveTo,boolean canCancel,
+                                   LocalDateTime cancelledAt,String cancelledBy,String cancelReason) {}
+    public record SubscriptionPage(String tenantId,int tenantVersion,String currentPackageVersionId,
+                                   LocalDateTime asOf,long total,int page,int size,List<SubscriptionView> items) {}
+    public record SubscriptionCancellation(String subscriptionId,int tenantVersion,String state) {}
     public record QuotaUsage(String quotaCode, long limit, long used, long remaining,
                              boolean warning, boolean hardLimited) {}
 }

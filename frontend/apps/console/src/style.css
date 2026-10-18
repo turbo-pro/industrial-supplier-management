@@ -13,6 +13,7 @@ button { width:100%; height:46px; margin-top:14px; border:0; border-radius:5px; 
 button:disabled { opacity:.65; } [role=status] { color:#167b75; }
 @media (max-width:800px) { .shell { grid-template-columns:1fr; padding:28px; } .context { display:none; } }
 .workspace { min-height:100vh; padding:42px 6vw; color:#172033; background:#f1f4f7; }
+.workspace table { color:inherit; }
 .workspace header { display:flex; justify-content:space-between; align-items:center; margin-bottom:26px; }
 .workspace h1 { margin:4px 0; font-size:32px; }.workspace [role=status] { color:#567; }
 .workspace header>div:last-child { display:flex; align-items:center; gap:16px; }

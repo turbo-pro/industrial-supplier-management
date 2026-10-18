@@ -721,6 +721,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/tenants/{tenantId}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 分页查看指定租户的订阅历史及未来计划；需要 platform:package:view。tenantVersion 用于取消时的并发校验，canCancel 仅为读取时提示，保存时重新检查时间边界。 */
+        get: operations["listTenantSubscriptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/tenants/{tenantId}/subscriptions/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 仅取消指定租户尚未生效且仍为 ACTIVE 的计划；需要 platform:package:assign。租户行锁、tenantVersion 校验、审计及幂等保证取消不会误改当前生效套餐。版本陈旧、计划已生效/已替换/已取消返回 409；同一幂等键及请求可重放成功响应，不重复审计。跨租户计划 ID 返回 404。 */
+        post: operations["cancelTenantSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/tenants/{tenantId}/quota-usage": {
         parameters: {
             query?: never;
@@ -5148,6 +5182,54 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        CancelSubscription: {
+            tenantVersion: number;
+            reason: string;
+        };
+        SubscriptionView: {
+            id: string;
+            packageVersionId: string;
+            packageName: string;
+            versionName: string;
+            /** @enum {string} */
+            state: "SCHEDULED" | "EFFECTIVE" | "EXPIRED" | "SUPERSEDED" | "CANCELLED" | "UNAVAILABLE";
+            /** Format: date-time */
+            effectiveFrom: string;
+            /** Format: date-time */
+            effectiveTo?: string | null;
+            canCancel: boolean;
+            /** Format: date-time */
+            cancelledAt?: string | null;
+            cancelledBy?: string | null;
+            cancelReason?: string | null;
+        };
+        SubscriptionPage: {
+            tenantId: string;
+            tenantVersion: number;
+            currentPackageVersionId?: string | null;
+            /**
+             * Format: date-time
+             * @description 数据库 UTC 读取时刻
+             */
+            asOf: string;
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SubscriptionView"][];
+        };
+        SubscriptionPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SubscriptionPage"];
+        };
+        SubscriptionCancellation: {
+            subscriptionId: string;
+            tenantVersion: number;
+            /** @enum {string} */
+            state: "CANCELLED";
+        };
+        SubscriptionCancellationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SubscriptionCancellation"];
+        };
         QuotaChange: {
             /** Format: int64 */
             currentLimit: number;
@@ -7107,6 +7189,68 @@ export interface operations {
             };
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    listTenantSubscriptions: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                tenantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    cancelTenantSubscription: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelSubscription"];
+            };
+        };
+        responses: {
+            /** @description Future subscription cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionCancellationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     getTenantQuotaUsage: {

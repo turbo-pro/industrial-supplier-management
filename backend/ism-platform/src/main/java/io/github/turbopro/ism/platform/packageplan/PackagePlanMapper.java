@@ -58,4 +58,31 @@ public interface PackagePlanMapper {
     Long quotaUsed(long tenantId, String quotaCode, String periodKey);
     @Select("SELECT quota_code FROM plt_quota_usage WHERE tenant_id=#{tenantId} AND period_key='CURRENT' AND used_value>0")
     List<String> usedQuotaCodes(long tenantId);
+    @Select("SELECT id,version FROM plt_tenant WHERE id=#{tenantId}")
+    PackagePlanModels.SubscriptionTenantRow subscriptionTenant(long tenantId);
+    @Select("SELECT id,version FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
+    PackagePlanModels.SubscriptionTenantRow lockSubscriptionTenant(long tenantId);
+    @Select("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=#{tenantId}")
+    long subscriptionCount(long tenantId);
+    @Select("SELECT id FROM plt_subscription WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND effective_from <= #{asOf} ORDER BY effective_from DESC,assignment_sequence DESC,created_at DESC,id DESC LIMIT 1")
+    Long latestStartedSubscription(long tenantId,LocalDateTime asOf);
+    @Select("""
+        SELECT s.id,s.package_version_id,p.package_name,v.version_name,s.status,v.status AS version_status,
+          s.effective_from,s.effective_to,s.cancelled_at,s.cancelled_by,s.cancel_reason
+        FROM plt_subscription s JOIN plt_package_version v ON v.id=s.package_version_id
+        JOIN plt_package p ON p.id=v.package_id WHERE s.tenant_id=#{tenantId}
+        ORDER BY s.assignment_sequence DESC,s.created_at DESC,s.id DESC LIMIT #{size} OFFSET #{offset}
+        """)
+    List<PackagePlanModels.SubscriptionRow> subscriptions(long tenantId,int offset,int size);
+    @Select("""
+        SELECT s.id,s.package_version_id,p.package_name,v.version_name,s.status,v.status AS version_status,
+          s.effective_from,s.effective_to,s.cancelled_at,s.cancelled_by,s.cancel_reason
+        FROM plt_subscription s JOIN plt_package_version v ON v.id=s.package_version_id
+        JOIN plt_package p ON p.id=v.package_id WHERE s.tenant_id=#{tenantId} AND s.id=#{id}
+        """)
+    PackagePlanModels.SubscriptionRow subscription(long tenantId,long id);
+    @Update("UPDATE plt_subscription SET status='CANCELLED',cancelled_at=#{now},cancelled_by=#{actorId},cancel_reason=#{reason} WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE' AND effective_from > UTC_TIMESTAMP(3)")
+    int cancelSubscription(long tenantId,long id,LocalDateTime now,long actorId,String reason);
+    @Update("UPDATE plt_tenant SET version=version+1 WHERE id=#{tenantId} AND version=#{version}")
+    int advanceSubscriptionTenantVersion(long tenantId,int version);
 }

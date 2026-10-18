@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
+import SubscriptionPlans from './SubscriptionPlans.vue';
 
 const form = reactive({ username: '', password: '' });
 const TOKEN_KEY = 'ism.console.accessToken';
@@ -15,6 +16,7 @@ const showPasswordForm = ref(false);
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
+const subscriptionTenant = ref<components['schemas']['Tenant'] | null>(null);
 const currentUser = ref<components['schemas']['ConsoleUserSummary'] | null>(null);
 const users = ref<components['schemas']['ConsoleUser'][]>([]);
 const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' });
@@ -213,6 +215,7 @@ function logout(reason = '') {
   passwordForm.confirmPassword = '';
   packages.value = [];
   tenants.value = [];
+  subscriptionTenant.value = null;
   users.value = [];
   resetTarget.value = null;
   temporaryPassword.value = '';
@@ -276,11 +279,14 @@ if (accessToken.value) {
     </section>
     <section class="panel">
       <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button type="button">新建租户</button></div>
-      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th></tr></thead>
-        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td></tr>
-        <tr v-if="tenants.length === 0"><td colspan="4" class="empty">尚未创建租户</td></tr></tbody>
+      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>订阅</th></tr></thead>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
+        <tr v-if="tenants.length === 0"><td colspan="5" class="empty">尚未创建租户</td></tr></tbody>
       </table>
     </section>
+    <SubscriptionPlans v-if="subscriptionTenant" :key="subscriptionTenant.id" :tenant-id="subscriptionTenant.id"
+      :tenant-name="subscriptionTenant.name" :token="accessToken" :can-manage="currentUser?.permissions.includes('platform:package:assign') ?? false"
+      @close="subscriptionTenant = null" />
     <section v-if="currentUser?.permissions.includes('platform:user:view')" class="panel">
       <div class="panel-title"><div><h2>平台账号</h2><p>平台账号与租户用户完全隔离；停用会使既有会话失效。</p></div></div>
       <form v-if="canManageUsers()" class="console-user-form" @submit.prevent="createUser">
