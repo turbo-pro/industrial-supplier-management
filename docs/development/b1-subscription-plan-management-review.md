@@ -1,5 +1,7 @@
 # B1 订阅计划查询与取消
 
+后续已新增双连接分配/取消争用与审计故障回滚用例，参见 [订阅可靠性验收](b1-subscription-contention-review.md)；下文执行记录及未覆盖项为初次交付范围。
+
 ## 业务与接口
 
 新增 Console 订阅分页接口：返回套餐/版本名称、当前有效版本、租户版本和 UTC 读取时刻，并区分 SCHEDULED、EFFECTIVE、EXPIRED、SUPERSEDED、CANCELLED、UNAVAILABLE。底层 ACTIVE 只是候选记录，不再让调用方直接将它解释为“当前生效”。旧指针尚无订阅历史时可以显示当前版本，但不会捏造历史记录。

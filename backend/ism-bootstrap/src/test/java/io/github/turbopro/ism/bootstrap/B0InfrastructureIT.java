@@ -3,6 +3,7 @@ package io.github.turbopro.ism.bootstrap;
 import io.github.turbopro.ism.bootstrap.schema.SchemaMarker;
 import io.github.turbopro.ism.bootstrap.schema.SchemaMarkerMapper;
 import io.github.turbopro.ism.common.api.error.ApiException;
+import io.github.turbopro.ism.common.api.error.CommonErrorCode;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantIsolationException;
 import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationGrantLoader;
@@ -1557,6 +1558,25 @@ class B0InfrastructureIT {
                         "/api/console/tenants/"+tenantId+"/subscriptions/"+current.id()+"/cancel")
                         .header("Authorization",admin).header("Idempotency-Key","live-cancel-denied")
                         .contentType("application/json").content(body)).andExpect(status().isConflict());
+        // Failure after the cancellation write must roll back state, version and the idempotency marker.
+        String faultTrigger="CREATE TRIGGER test_subscription_cancel_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.action='SUBSCRIPTION_CANCEL' AND NEW.object_id="
+                +scheduled.id()+" THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected subscription audit failure'; END IF; END";
+        var faultInstall=MYSQL.execInContainer("mysql","--delimiter=//","-uroot","-p"+MYSQL.getPassword(),
+                MYSQL.getDatabaseName(),"-e",faultTrigger+"//");
+        assertThat(faultInstall.getExitCode()).as(faultInstall.getStderr()).isZero();
+        try {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                            .header("Authorization",admin).header("Idempotency-Key","cancel-future-once")
+                            .contentType("application/json").content(body)).andExpect(status().is5xxServerError());
+            var afterFailure=packagePlanService.subscriptions(tenantId,0,20);
+            assertThat(afterFailure.tenantVersion()).isEqualTo(history.tenantVersion());
+            assertThat(afterFailure.items()).filteredOn(item->item.id().equals(scheduled.id())).singleElement()
+                    .satisfies(item->{assertThat(item.state()).isEqualTo("SCHEDULED"); assertThat(item.cancelledAt()).isNull();});
+            assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUBSCRIPTION_CANCEL' AND object_id=?",Integer.class,Long.parseLong(scheduled.id()))).isZero();
+        } finally {
+            assertThat(MYSQL.execInContainer("mysql","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),
+                    "-e","DROP TRIGGER test_subscription_cancel_audit_failure").getExitCode()).isZero();
+        }
         for(int attempt=0;attempt<2;attempt++)
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
                             .header("Authorization",admin).header("Idempotency-Key","cancel-future-once")
@@ -1580,6 +1600,93 @@ class B0InfrastructureIT {
                         .contentType("application/json").content("{\"tenantVersion\":"+cancelled.tenantVersion()+",\"reason\":\" \"}"))
                 .andExpect(status().isBadRequest());
         packagePlanService.requireModule(tenantId,"SUPPLIER");
+    }
+
+    @Test
+    void shouldSerializeSubscriptionAssignmentAndCancellationOnSeparateConnections() throws Exception {
+        var plan=packagePlanService.create(new PackagePlanModels.CreatePackage("SUBSCRIPTION_RACE","订阅争用"));
+        var draft=packagePlanService.createVersion(Long.parseLong(plan.id()),new PackagePlanModels.CreateVersion(
+                1,"并发版",null,List.of(new PackagePlanModels.ModuleGrant("SUPPLIER",true,Map.of()))));
+        long versionId=Long.parseLong(draft.id());
+        packagePlanService.publish(versionId,draft.version(),9001L);
+        int fixture=0;
+        for(String mode:List.of("ASSIGN_CANCEL","CANCEL_ASSIGN","CANCEL_CANCEL")) {
+            long tenantId=9240L+fixture++;
+            jdbcTemplate.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,package_version_id) VALUES(?,?,?,'ACTIVE',?)",
+                    tenantId,"RACE-"+tenantId,"订阅争用",versionId);
+            var tomorrow=LocalDateTime.now(ZoneOffset.UTC).plusDays(1);
+            packagePlanService.assign(tenantId,versionId,new PackagePlanModels.AssignSubscription(draft.id(),tomorrow,null,Map.of()));
+            var before=packagePlanService.subscriptions(tenantId,0,20);
+            long oldPlan=Long.parseLong(before.items().stream().filter(item->item.state().equals("SCHEDULED"))
+                    .findFirst().orElseThrow().id());
+            var command=new PackagePlanModels.CancelSubscription(before.tenantVersion(),"并发取消验收");
+            var firstWritten=new CountDownLatch(1); var releaseFirst=new CountDownLatch(1);
+            var secondEntered=new CountDownLatch(1);
+            var firstConnection=new java.util.concurrent.atomic.AtomicLong();
+            var secondConnection=new java.util.concurrent.atomic.AtomicLong();
+            ExecutorService workers=Executors.newFixedThreadPool(2);
+            try {
+                Future<Object> first=workers.submit(()->transactionTemplate.execute(tx->{
+                    firstConnection.set(jdbcTemplate.queryForObject("SELECT CONNECTION_ID()",Long.class));
+                    try(var console=TenantContext.open(0,9001L)) {
+                        Object result;
+                        if(mode.equals("ASSIGN_CANCEL")) result=packagePlanService.assign(tenantId,versionId,
+                                new PackagePlanModels.AssignSubscription(draft.id(),tomorrow.plusDays(1),null,Map.of()));
+                        else result=packagePlanService.cancelSubscription(tenantId,oldPlan,command,9001L);
+                        firstWritten.countDown();
+                        awaitSubscriptionSignal(releaseFirst);
+                        return result;
+                    }
+                }));
+                assertThat(firstWritten.await(10,java.util.concurrent.TimeUnit.SECONDS)).as(mode).isTrue();
+                Future<Object> second=workers.submit(()->{
+                    try {
+                        return transactionTemplate.execute(tx->{
+                            secondConnection.set(jdbcTemplate.queryForObject("SELECT CONNECTION_ID()",Long.class));
+                            secondEntered.countDown();
+                            try(var console=TenantContext.open(0,9002L)) {
+                                if(mode.equals("CANCEL_ASSIGN")) return packagePlanService.assign(tenantId,versionId,
+                                        new PackagePlanModels.AssignSubscription(draft.id(),tomorrow.plusDays(1),null,Map.of()));
+                                return packagePlanService.cancelSubscription(tenantId,oldPlan,command,9002L);
+                            }
+                        });
+                    } catch(ApiException conflict) { return conflict; }
+                });
+                assertThat(secondEntered.await(10,java.util.concurrent.TimeUnit.SECONDS)).as(mode).isTrue();
+                assertThat(firstConnection.get()).isPositive().isNotEqualTo(secondConnection.get());
+                assertThatThrownBy(()->second.get(200,java.util.concurrent.TimeUnit.MILLISECONDS))
+                        .as("second writer must not finish before the tenant lock is released: "+mode)
+                        .isInstanceOf(java.util.concurrent.TimeoutException.class);
+                releaseFirst.countDown();
+                assertThat(first.get(10,java.util.concurrent.TimeUnit.SECONDS)).isNotNull();
+                Object secondResult=second.get(10,java.util.concurrent.TimeUnit.SECONDS);
+                if(mode.equals("CANCEL_ASSIGN")) assertThat(secondResult).isInstanceOf(PackagePlanModels.SubscriptionPreview.class);
+                else assertThat(secondResult).isInstanceOfSatisfying(ApiException.class,error->
+                        assertThat(error.errorCode()).isEqualTo(CommonErrorCode.CONFLICT));
+                var after=packagePlanService.subscriptions(tenantId,0,20);
+                assertThat(after.currentPackageVersionId()).isEqualTo(before.currentPackageVersionId());
+                assertThat(after.tenantVersion()).isEqualTo(before.tenantVersion()+(mode.equals("CANCEL_ASSIGN")?2:1));
+                assertThat(after.items()).filteredOn(item->item.id().equals(Long.toString(oldPlan))).singleElement()
+                        .satisfies(item->assertThat(item.state()).isEqualTo(mode.equals("ASSIGN_CANCEL")?"SUPERSEDED":"CANCELLED"));
+                assertThat(after.items().stream().filter(item->item.state().equals("SCHEDULED")).count())
+                        .isEqualTo(mode.equals("CANCEL_CANCEL")?0L:1L);
+                if(!mode.equals("CANCEL_CANCEL")) assertThat(after.items()).filteredOn(item->item.state().equals("SCHEDULED"))
+                        .singleElement().satisfies(item->assertThat(item.id()).isNotEqualTo(Long.toString(oldPlan)));
+                assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUBSCRIPTION_CANCEL' AND object_id=?",Integer.class,oldPlan))
+                        .isEqualTo(mode.equals("ASSIGN_CANCEL")?0:1);
+            } finally {
+                releaseFirst.countDown(); workers.shutdownNow();
+                assertThat(workers.awaitTermination(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            }
+        }
+    }
+
+    private static void awaitSubscriptionSignal(CountDownLatch signal) {
+        try {
+            if(!signal.await(10,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Subscription concurrency barrier timed out");
+        } catch(InterruptedException interrupted) {
+            Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted);
+        }
     }
 
     @Test
