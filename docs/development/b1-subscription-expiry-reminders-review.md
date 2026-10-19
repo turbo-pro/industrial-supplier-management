@@ -31,6 +31,26 @@ Console 订阅面板提供提醒记录，展示阶段、状态、次数、人数
 
 ## 验收与剩余项
 
+### 2026-10-19 一键编排与 CI 入口
+
+已增加统一入口，在仓库根执行：
+
+```sh
+node scripts/verify-reminder-e2e.mjs
+```
+
+前提：Linux/macOS、可用 Docker、配置为 JDK 17+ 的 Java 环境、Node 20.19+、pnpm 10.17.1、`pnpm install --frozen-lockfile` 已完成，以及 Chrome 已安装。macOS 可按需先设置自己的 JAVA_HOME；脚本不安装 JDK、不重建本地开发数据库。浏览器 CLI 固定为 0.1.22，通过 npx 获取，首次运行需要网络。
+
+脚本自行创建临时控制目录，启动 Testcontainers 隔离后端，读取随机端口，选择空闲前端端口并以 strictPort/127.0.0.1 启动 Console，然后调用失败恢复浏览器脚本。只有浏览器检查、Maven 进程和最终数据库报告全部成功，才打印整体 pass 并返回 0。后端启动最多等待 6 分钟、前端 1 分钟、浏览器 3 分钟；错误会保留日志并返回非零退出码。退出时先发送 abort，允许夹具清理容器，再分级停止本轮独立进程组，只删除本轮 mkdtemp 控制目录，不终止其他开发服务。
+
+日志与数据库报告保留在 `output/playwright/reminder-e2e-<时间戳>/`，截图沿用 `output/playwright/reminder-recovery-*.png`。同一工作区不应并发执行，截图和 Maven target 报告仍为共用路径。
+
+`.github/workflows/ci.yml` 新增 `console-reminder-e2e` 独立任务，使用 Java 17、Node 22.14.0、pnpm 10.17.1，准备 Chrome 后运行同一个命令；失败也上传日志、截图及数据库测试报告，保留 7 天，作业总超时 20 分钟。使用普通 pull_request/push 权限，不需要业务凭据，不使用 pull_request_target。
+
+本地完整命令退出 0，夹具 1/1，无失败/错误/跳过；错误 JAVA_HOME 负向检查退出 1，明确显示后端启动失败。测试结束仅保留既有本地开发 MySQL；新建容器和服务已回收，无旧库 repair 或历史迁移改动。本机 Node/pnpm 低于仓库声明版本仍有警告，不代表已验证这些旧版本兼容性；CI 使用声明范围内版本。本轮仅确认本地运行及 CI 配置，尚未取得远端 Actions 运行成功证据。
+
+后续仍需真实断网未知结果恢复及可配置提醒策略，不因一条 E2E 通过而标记完整 B1 验收。
+
 ### 2026-10-19 失败恢复脚本化验收
 
 新增 `scripts/verify-reminder-browser.sh` 及两个 Playwright CLI 操作脚本。使用实际页面和后端，不模拟 API：无有效管理员时人工检查返回 FAILED，页面展示恢复说明；夹具先确认消息投递和收件箱均为零、FAILED 台账尝试一次，再恢复两位管理员。页面重试使用不同于失败请求的新幂等键，返回 SENT；再次检查返回 SKIPPED。退出后支持人员可查看已发送台账、无发送按钮，直接构造发送请求返回 403。

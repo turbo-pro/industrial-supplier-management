@@ -12,7 +12,7 @@ FRONTEND="$2"
 cd "$ROOT"
 SESSION="ism-reminder-recovery-$$"
 passed=false
-cli() { npx --yes --package @playwright/cli playwright-cli -s="$SESSION" "$@"; }
+cli() { npx --yes --package @playwright/cli@0.1.22 playwright-cli -s="$SESSION" "$@"; }
 cleanup() {
   if [[ "$passed" != true ]]; then touch "$CONTROL/abort"; fi
   cli close >/dev/null 2>&1 || true
