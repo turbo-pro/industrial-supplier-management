@@ -1,5 +1,7 @@
 # 自动续推交接
 
+最新 B1 失败恢复增量：Playwright CLI 脚本串联真实页面 FAILED→恢复管理员→新幂等键 SENT→SKIPPED→只读 403；夹具恢复前确认零投递/零收件箱及一次 FAILED，最终确认投递/收件箱各 2、SENT 尝试 2 次且错误清空。浏览器脚本与隔离夹具 1/1 均通过，截图已检查、临时资源已回收；未改本地旧库和无关前端。见 [提醒验收](b1-subscription-expiry-reminders-review.md)。后续优先补服务全生命周期一键编排/CI、真实断网未知结果恢复，再推进提醒可配置策略；当前不是完整 B1 验收。
+
 最新 B1 真实浏览器增量：实际 Console + 随机端口 Tomcat + 全新隔离 MySQL 完成管理员登录/提醒首次发送/重复跳过/切换只读账号读台账及构造写请求 403，未模拟 API。显式夹具 ConsoleReminderBrowserFixture 最终数据库断言投递 2、收件箱 2、成功阶段尝试 1 次，1/1 通过且资源已回收。已补可复验步骤和完整页面截图检查，见 [提醒验收](b1-subscription-expiry-reminders-review.md)。后续补自动 CI 串联、真实失败/断网恢复及可配置策略；历史段落所述“真实页面联合验收仍缺”已由本增量覆盖上述正常发送与只读场景，不表示全部 B1 完成。
 
 最新 B1 真实 HTTP 验收增量：订阅提醒以随机端口真实 Tomcat + 隔离 MySQL 验收登录、发送、原键重放、新键去重、只读 403、归属 404 和匿名 401，数据库确认两条投递且阶段尝试一次。SubscriptionReminderIT 6/6、Console 构建和既有模拟浏览器回归 4/4 通过。Console 开发代理新增 ISM_CONSOLE_API_TARGET，便于隔离联调；未触碰本地旧库和无关管理端改动。新提醒面板真实后端浏览器联合验收仍缺，不能以真实 HTTP 或模拟页面替代；见 [提醒验收](b1-subscription-expiry-reminders-review.md)。

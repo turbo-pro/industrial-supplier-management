@@ -46,6 +46,7 @@ class ConsoleReminderBrowserFixture {
         assertThat(directory).as("Pass an existing empty temporary directory with -Dism.browser.fixture-dir").isNotBlank();
         Path control=Path.of(directory).toRealPath();
         try(var files=Files.list(control)) { assertThat(files.count()).isZero(); }
+        boolean recovery=Boolean.getBoolean("ism.browser.recovery");
         try {
             jdbc.update("INSERT INTO plt_package(id,package_code,package_name,status) VALUES(20600,'BROWSER','浏览器验收套餐','ACTIVE')");
             jdbc.update("INSERT INTO plt_package_version(id,package_id,version_no,version_name,status) VALUES(20601,20600,1,'联调版本','PUBLISHED')");
@@ -59,13 +60,28 @@ class ConsoleReminderBrowserFixture {
                 jdbc.update("INSERT INTO plt_user(id,username,display_name,password_hash,status) VALUES(?,?,?,?,'ACTIVE')",20620+i,i==0?"browser-admin":"browser-reader",i==0?"联调管理员":"联调只读人员",passwords.encode("Console#Pass123"));
                 jdbc.update("INSERT INTO plt_user_role(user_id,role_id) VALUES(?,?)",20620+i,i==0?1001:1002);
             }
+            if(recovery) jdbc.update("UPDATE iam_user SET status='DISABLED' WHERE tenant_id=20602");
+            Files.writeString(control.resolve("scenario"),recovery?"failure-recovery":"success");
             Files.writeString(control.resolve("ready"),"http://127.0.0.1:"+port);
             long deadline=System.nanoTime()+Duration.ofMinutes(10).toNanos();
-            while(!Files.exists(control.resolve("finish")) && System.nanoTime()<deadline) Thread.sleep(250);
+            boolean restored=false;
+            while(!Files.exists(control.resolve("finish")) && System.nanoTime()<deadline) {
+                assertThat(Files.exists(control.resolve("abort"))).as("Browser runner aborted").isFalse();
+                if(recovery && !restored && Files.exists(control.resolve("restore"))) {
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=20602",Long.class)).isZero();
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=20602",Long.class)).isZero();
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_subscription_reminder WHERE subscription_id=20603 AND status='FAILED' AND attempt_count=1",Long.class)).isEqualTo(1);
+                    jdbc.update("UPDATE iam_user SET status='ACTIVE' WHERE tenant_id=20602");
+                    restored=true;
+                    Files.writeString(control.resolve("restored"),"ready");
+                }
+                Thread.sleep(250);
+            }
             assertThat(Files.exists(control.resolve("finish"))).as("Browser must signal finish within ten minutes").isTrue();
+            if(recovery) assertThat(restored).isTrue();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM msg_delivery WHERE tenant_id=20602 AND business_type='TENANT_SUBSCRIPTION'",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM msg_inbox WHERE tenant_id=20602",Long.class)).isEqualTo(2);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_subscription_reminder WHERE subscription_id=20603 AND status='SENT' AND attempt_count=1 AND recipient_count=2",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_subscription_reminder WHERE subscription_id=20603 AND status='SENT' AND attempt_count=? AND recipient_count=2 AND error_code IS NULL",Long.class,recovery?2:1)).isEqualTo(1);
         } finally {
             if(Files.exists(STORAGE)) try(var files=Files.walk(STORAGE)) {
                 for(var path:files.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);

@@ -31,6 +31,22 @@ Console 订阅面板提供提醒记录，展示阶段、状态、次数、人数
 
 ## 验收与剩余项
 
+### 2026-10-19 失败恢复脚本化验收
+
+新增 `scripts/verify-reminder-browser.sh` 及两个 Playwright CLI 操作脚本。使用实际页面和后端，不模拟 API：无有效管理员时人工检查返回 FAILED，页面展示恢复说明；夹具先确认消息投递和收件箱均为零、FAILED 台账尝试一次，再恢复两位管理员。页面重试使用不同于失败请求的新幂等键，返回 SENT；再次检查返回 SKIPPED。退出后支持人员可查看已发送台账、无发送按钮，直接构造发送请求返回 403。
+
+最终数据库确认两条投递、两条收件箱、一个 SENT 阶段，尝试次数 2、人数 2、错误码清空。隔离夹具 1/1，通过且无失败/错误/跳过；浏览器脚本退出码 0。已目视检查 `output/playwright/reminder-recovery-failed.png`、`reminder-recovery-sent.png`；只读证据为 `reminder-recovery-readonly.png`。控制台仅 favicon 404、刻意构造的 403 及既有 autocomplete 建议，没有新增脚本异常。
+
+复验方式：沿用下方独立空控制目录及夹具启动步骤，在 Maven 命令增加 `-Dism.browser.recovery=true`。读取 `ready` 文件，用其中的后端 URL 启动仅绑定 127.0.0.1 的 Console 开发服务；待其就绪，在仓库根运行：
+
+```sh
+bash scripts/verify-reminder-browser.sh <控制目录绝对路径> http://127.0.0.1:4175
+```
+
+需要 npx 和已安装的 Chrome。脚本只创建/关闭专属浏览器会话，前后端服务仍由调用方启动。它会检查夹具 scenario，分两阶段运行页面断言，通过控制文件请求夹具复核失败状态并恢复收件人；最后写入 finish。脚本失败写 abort，夹具失败退出并回收容器；恢复等待最多 30 秒。成功时脚本明确提醒仍需等待 Maven 的数据库断言通过，不能单独按浏览器退出码宣称整体验收成功。完成后关闭调用方启动的前端服务，并回收控制目录。
+
+本轮测试资源已回收，既有本地 MySQL 保留；未修改历史迁移、未 repair。仍未完成后端/前端/浏览器一键全生命周期编排或 GitHub CI 接入、真实断网未知结果恢复及可配置提醒策略；本轮没有重跑全部业务模块回归。前文所述“真实失败恢复待补”仅对本次覆盖的无收件人失败场景已补齐，不代表所有异常均已覆盖。
+
 ### 2026-10-19 真实浏览器联合验收
 
 已使用 Playwright CLI、实际 Console 开发服务器、随机端口 Tomcat 和全新 Testcontainers MySQL 完成联合验收，未拦截或模拟任何 API 响应：
