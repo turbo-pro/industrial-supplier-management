@@ -31,6 +31,29 @@ Console 订阅面板提供提醒记录，展示阶段、状态、次数、人数
 
 ## 验收与剩余项
 
+### 2026-10-19 真实浏览器联合验收
+
+已使用 Playwright CLI、实际 Console 开发服务器、随机端口 Tomcat 和全新 Testcontainers MySQL 完成联合验收，未拦截或模拟任何 API 响应：
+
+- 管理员账号密码登录，进入租户订阅计划及提醒记录，初始无记录。
+- 首次人工检查显示向两位管理员发送，台账显示 7 天内到期、已发送、尝试 1 次、收件人 2。
+- 再次检查显示不重复投递，台账仍为尝试 1 次、收件人 2。
+- 退出并用支持人员重新登录，可读取相同台账；发送按钮不存在，显示只读说明。浏览器直接构造写请求返回 403，不能靠隐藏按钮绕过权限。
+- 浏览器完成后，夹具核对数据库投递数 2、收件箱数 2、成功阶段数 1 且尝试次数 1；夹具测试 1/1，失败/错误/跳过为 0。退出后独立数据库和后端自动回收，开发服务及浏览器也已停止。
+
+证据为本地忽略目录 `output/playwright/reminder-real-sent.png`、`reminder-real-readonly-full.png` 及 CLI 快照；已目视检查只读完整页面。控制台错误仅 favicon 404 和刻意验证的越权请求 403，无页面脚本异常。没有修改本地旧数据库或历史迁移。本轮没有重跑全部模块测试，不能标记整个 B1 完成。
+
+新增显式运行夹具 `ConsoleReminderBrowserFixture`，正常 `*IT` 扫描不启动它。复验流程（Docker、JDK 17+、前端依赖已准备）：
+
+1. 用 `mktemp -d /tmp/ism-browser-control.XXXXXX` 创建独立空目录，记下实际绝对路径。
+2. 运行 `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test -Dit.test=ConsoleReminderBrowserFixture -Dism.browser.fixture-dir=<上述目录> -Dfailsafe.failIfNoSpecifiedTests=false verify`，保持运行。夹具 `ready` 文件写入实际后端 URL，只绑定 127.0.0.1。不要使用本地业务库。
+3. 另一个终端在仓库根运行 `ISM_CONSOLE_API_TARGET=<ready中的URL> pnpm --filter @ism/console dev --host 127.0.0.1 --port 4175 --strictPort`。若端口被占用，选择空闲端口，不终止其他服务。
+4. 用专用 Playwright CLI 会话打开该前端，使用 `browser-admin` / `Console#Pass123`，完成上述首次发送及重复检查；再退出，用 `browser-reader` / 同密码检查只读状态。所有账号仅存在于临时库，不用于部署。每次交互使用最新快照定位。
+5. 完成后在控制目录创建 `finish` 文件。夹具执行数据库断言并退出；十分钟内未收到完成信号会失败并回收容器。无发送或重复发送都会使数据库断言失败，而不是仅靠页面提示通过。
+6. 关闭本轮浏览器会话和前端服务；控制目录只含本轮 ready/finish 标记，可自行回收。
+
+该流程目前由 CLI 操作串联，尚未合并为全自动 CI 浏览器作业；失败反馈、断网重试的真实浏览器覆盖、更多时间阶段和可配置提醒策略仍待补齐。前轮模拟页面覆盖不能替代这些场景的真实联合验收。
+
 ### 2026-10-19 真实 HTTP 增量验收
 
 SubscriptionReminderIT 改用随机端口启动真实 Tomcat；新增 TestRestTemplate 用例通过 HTTP 登录获取令牌，验证管理员发送 SENT、相同幂等键重放原结果、新键检查 SKIPPED、支持人员读取成功但发送 403、租户/订阅归属不匹配 404、匿名读取 401。最终数据库仅有两条投递，提醒阶段尝试次数为 1。原有五项用例一并通过，共 6/6，失败、错误、跳过均为 0；数据库由 Testcontainers 独立创建和回收，不使用本地业务库。
