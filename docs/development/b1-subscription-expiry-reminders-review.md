@@ -31,6 +31,20 @@ Console 订阅面板提供提醒记录，展示阶段、状态、次数、人数
 
 ## 验收与剩余项
 
+### 2026-10-19 真实 HTTP 增量验收
+
+SubscriptionReminderIT 改用随机端口启动真实 Tomcat；新增 TestRestTemplate 用例通过 HTTP 登录获取令牌，验证管理员发送 SENT、相同幂等键重放原结果、新键检查 SKIPPED、支持人员读取成功但发送 403、租户/订阅归属不匹配 404、匿名读取 401。最终数据库仅有两条投递，提醒阶段尝试次数为 1。原有五项用例一并通过，共 6/6，失败、错误、跳过均为 0；数据库由 Testcontainers 独立创建和回收，不使用本地业务库。
+
+Console 开发代理支持 `ISM_CONSOLE_API_TARGET`，默认仍为 `http://127.0.0.1:18080`。例如在仓库根运行 `ISM_CONSOLE_API_TARGET=http://127.0.0.1:18082 pnpm --filter @ism/console dev --port 4175 --strictPort`，可将独立前端连接到自行启动的隔离后端；该命令不会创建或修改后端数据库。变量也可通过 Console 目录的本地 Vite 环境文件设置，仅用于开发代理，不是生产部署配置。
+
+Console 构建通过，既有模拟接口浏览器回归 4/4 通过。真实 HTTP 用例不等于新提醒面板的真实后端浏览器联合验收，后者本轮仍未完成；不能将本轮结果宣称为完整端到端验收。复现后端测试：
+
+```sh
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home ./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test -Dit.test=SubscriptionReminderIT -Dfailsafe.failIfNoSpecifiedTests=false verify
+```
+
+需可用 Docker 和 JDK 17+；其他操作系统应改用自己的 JAVA_HOME。测试未修改历史迁移，未 repair、清库或关闭校验。
+
 隔离 MySQL 的 SubscriptionReminderIT 验证阶段递进/去重、有效管理员筛选、跨租户隔离、后台默认关闭、候选状态过滤、多实例并发、同名非站内模板、无管理员失败恢复。针对第二位收件人的收件箱插入注入数据库故障，确认此前投递也全部回滚、失败台账可见、后台退避及修复后恢复发送。临时触发器只在测试容器内创建并 finally 清理。
 
 本轮额外定向回归 V25 升级、订阅时窗、取消权限/幂等、分配取消争用及租户开通/原消息发送；不是整套 B0 全组或 B0–B8 完整验收。最终结果见交接记录。

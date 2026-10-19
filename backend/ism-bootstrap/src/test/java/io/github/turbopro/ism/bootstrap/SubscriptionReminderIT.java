@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.*;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
@@ -28,7 +31,8 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false"})
+@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties={"ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false"})
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker=true)
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
@@ -56,6 +60,49 @@ class SubscriptionReminderIT {
     @Autowired ConsoleAuthService consoleAuth;
     @Autowired PasswordEncoder passwords;
     @Autowired SubscriptionExpiryReminderWorker worker;
+    @Autowired TestRestTemplate http;
+
+    @Test void realHttpLoginDispatchReplayAndReadOnlyPermissions() {
+        var f=fixture(20307);
+        String path="/api/console/tenants/"+f.tenant()+"/subscriptions/"+f.subscription()+"/reminders";
+        for(int i=0;i<2;i++) {
+            long user=20500+i;
+            String username="reminder-http-"+i;
+            jdbc.update("INSERT INTO plt_user(id,username,display_name,password_hash,status) VALUES(?,?,?,?,'ACTIVE')",
+                    user,username,"HTTP验收",passwords.encode("Console#Pass123"));
+            jdbc.update("INSERT INTO plt_user_role(user_id,role_id) VALUES(?,?)",user,i==0?1001:1002);
+            var login=http.postForEntity("/api/console/auth/login",
+                    Map.of("username",username,"password","Console#Pass123","deviceId","http-reminder-"+i),JsonNode.class);
+            assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+            String token=login.getBody().path("data").path("accessToken").asText();
+            assertThat(token).isNotBlank();
+            var headers=new HttpHeaders();headers.setBearerAuth(token);
+            headers.set("Idempotency-Key","http-reminder-"+i);
+            var request=new HttpEntity<Void>(headers);
+            var dispatch=http.exchange(path+"/dispatch",HttpMethod.POST,request,JsonNode.class);
+            assertThat(dispatch.getStatusCode()).isEqualTo(i==0?HttpStatus.OK:HttpStatus.FORBIDDEN);
+            if(i==0) {
+                assertThat(dispatch.getBody().path("data").path("status").asText()).isEqualTo("SENT");
+                var replay=http.exchange(path+"/dispatch",HttpMethod.POST,request,JsonNode.class);
+                assertThat(replay.getStatusCode()).isEqualTo(HttpStatus.OK);
+                assertThat(replay.getBody().path("data")).isEqualTo(dispatch.getBody().path("data"));
+                headers.set("Idempotency-Key","http-reminder-new-check");
+                var repeat=http.exchange(path+"/dispatch",HttpMethod.POST,new HttpEntity<Void>(headers),JsonNode.class);
+                assertThat(repeat.getStatusCode()).isEqualTo(HttpStatus.OK);
+                assertThat(repeat.getBody().path("data").path("status").asText()).isEqualTo("SKIPPED");
+            }
+            var history=http.exchange(path,HttpMethod.GET,request,JsonNode.class);
+            assertThat(history.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(history.getBody().path("data").get(0).path("recipientCount").asInt()).isEqualTo(2);
+            assertThat(http.exchange("/api/console/tenants/20308/subscriptions/"+f.subscription()+"/reminders",
+                    HttpMethod.GET,request,JsonNode.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        }
+        assertThat(http.getForEntity(path,JsonNode.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(deliveries(f)).isEqualTo(2);
+        assertThat(reminders.history(f.tenant(),f.subscription())).singleElement().satisfies(row->{
+            assertThat(row.status()).isEqualTo("SENT");assertThat(row.attemptCount()).isEqualTo(1);
+        });
+    }
 
     record Fixture(long tenant,long subscription,long admin,long otherAdmin) {}
     private Fixture fixture(long tenant) {
