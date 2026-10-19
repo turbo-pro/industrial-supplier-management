@@ -4,6 +4,43 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/portal-invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Requires supplier:master:view and current supplier data scope. Returns latest 100 records, never token hashes or plaintext tokens. Does not imply registered portal identities. */
+        get: operations["listSupplierPortalInvitations"];
+        put?: never;
+        /** @description Requires supplier:master:update and supplier data scope. Atomically replaces pending unexpired invitations. Token returned once only; no email is sent. expectedGeneration prevents retry from creating another invitation. Registration redemption is not yet available. */
+        post: operations["issueSupplierPortalInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/portal-invitations/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires supplier:master:update and supplier data scope. Only a pending unexpired invitation with matching version can be revoked. */
+        post: operations["revokeSupplierPortalInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/restriction-gate-hits": {
         parameters: {
             query?: never;
@@ -2995,6 +3032,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PortalInvitation: {
+            id: string;
+            generation: number;
+            recipientName: string;
+            recipientEmail: string;
+            /** @enum {string} */
+            status: "PENDING" | "EXPIRED" | "REPLACED" | "REVOKED";
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            revokedAt?: string | null;
+            revokeReason?: string | null;
+            version: number;
+        };
+        PortalInvitationHistoryResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                latestGeneration: number;
+                canManage: boolean;
+                items: components["schemas"]["PortalInvitation"][];
+            };
+        };
+        PortalInvitationIssuedResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                invitation: components["schemas"]["PortalInvitation"];
+                /** @description One-time bearer secret. Do not log or persist in client storage. */
+                token: string;
+            };
+        };
+        PortalInvitationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalInvitation"];
+        };
         /** @enum {string} */
         PersonalTableKey: "supplier.master" | "supplier.admission" | "supplier.qualification" | "contract.ledger" | "project.ledger" | "resource.person" | "resource.asset" | "quality.ncr" | "performance.evaluation" | "safety.issue" | "safety.attendance";
         PersonalTableColumn: {
@@ -5772,6 +5842,96 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSupplierPortalInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInvitationHistoryResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    issueSupplierPortalInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedGeneration: number;
+                    recipientName: string;
+                    /** Format: email */
+                    recipientEmail: string;
+                    validHours: number;
+                };
+            };
+        };
+        responses: {
+            /** @description One-time plaintext invitation token; Cache-Control no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInvitationIssuedResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    revokeSupplierPortalInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Revoked invitation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInvitationResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     listSupplierRestrictionGateHits: {
         parameters: {
             query?: {

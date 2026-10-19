@@ -1,0 +1,38 @@
+async page => {
+  const panel = page.getByRole('region', { name: '供应商门户邀请' });
+  await panel.getByRole('button', { name: '签发新邀请（旧邀请失效）' }).click();
+  await panel.getByRole('alert').filter({ hasText: '请填写收件人姓名和有效邮箱' }).waitFor();
+  if (!(await page.evaluate(() => document.activeElement?.getAttribute('role') === 'alert'))) throw new Error('Error summary not focused');
+  await panel.getByRole('textbox', { name: '邀请收件人姓名' }).fill('邀请联系人');
+  await panel.getByRole('textbox', { name: '邀请收件人邮箱' }).fill('contact@example.test');
+  await panel.getByRole('button', { name: '签发新邀请（旧邀请失效）' }).click();
+  await panel.getByText('本次令牌仅展示一次，请安全保管，不要写入日志或公开转发。', { exact: true }).waitFor();
+  await panel.getByText('待使用', { exact: true }).waitFor();
+  if (await page.evaluate(() => [...Object.values(sessionStorage), ...Object.values(localStorage)].some(v => v.includes('mock-only-token')))) throw new Error('Token persisted in browser storage');
+  await page.locator('body').ariaSnapshot();
+  await panel.getByRole('button', { name: '隐藏令牌' }).click();
+  await panel.getByRole('button', { name: '撤销邀请', exact: true }).click();
+  await panel.getByRole('textbox', { name: '邀请撤销原因' }).waitFor();
+  await page.locator('body').ariaSnapshot();
+  await panel.getByRole('textbox', { name: '邀请撤销原因' }).fill('联系人已更换');
+  await panel.getByRole('button', { name: '确认撤销邀请' }).click();
+  await panel.getByText('已撤销', { exact: true }).waitFor();
+  await panel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'output/playwright/portal-invitation-desktop.png', fullPage: true });
+  const mode = async body => page.evaluate(async body => { await fetch('/api/suppliers/900/portal-invitations/ui-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }, body);
+  await mode({ canManage: false });
+  await panel.getByRole('button', { name: '刷新邀请记录' }).click();
+  await panel.getByText('当前账号只读，无权签发或撤销邀请。', { exact: true }).waitFor();
+  if (await panel.getByRole('button', { name: '签发新邀请（旧邀请失效）' }).count()) throw new Error('Readonly issue action exposed');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await panel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'output/playwright/portal-invitation-mobile-readonly.png', fullPage: true });
+  await mode({ failRead: true });
+  await panel.getByRole('button', { name: '刷新邀请记录' }).click();
+  await panel.getByRole('alert').filter({ hasText: '模拟邀请读取失败' }).waitFor();
+  if (await panel.getByText('暂无邀请记录', { exact: true }).count()) throw new Error('Read failure shown as empty');
+  await mode({ failRead: false });
+  await panel.getByRole('button', { name: '刷新邀请记录' }).click();
+  await panel.getByText('已撤销', { exact: true }).waitFor();
+  return { mocked: true, validationFocus: true, issueRevoke: true, tokenNotPersisted: true, readonly: true, loadRecovery: true };
+}

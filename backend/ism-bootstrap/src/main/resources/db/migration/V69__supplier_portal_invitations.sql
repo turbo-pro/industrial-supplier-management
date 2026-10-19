@@ -1,0 +1,21 @@
+CREATE TABLE sup_portal_invitation (
+    id BIGINT NOT NULL PRIMARY KEY,
+    tenant_id BIGINT NOT NULL,
+    supplier_id BIGINT NOT NULL,
+    generation INT NOT NULL,
+    recipient_name VARCHAR(100) NOT NULL,
+    recipient_email VARCHAR(254) NOT NULL,
+    token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'PENDING',
+    expires_at DATETIME(3) NOT NULL,
+    created_by BIGINT NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    revoked_by BIGINT NULL,
+    revoked_at DATETIME(3) NULL,
+    revoke_reason VARCHAR(500) NULL,
+    version INT NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_portal_invitation_token (token_hash),
+    UNIQUE KEY uk_portal_invitation_generation (tenant_id,supplier_id,generation),
+    KEY idx_portal_invitation_supplier (tenant_id,supplier_id,id),
+    CONSTRAINT fk_portal_invitation_supplier FOREIGN KEY (supplier_id) REFERENCES sup_supplier(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
