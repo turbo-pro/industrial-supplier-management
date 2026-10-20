@@ -6,6 +6,45 @@ info:
 servers:
   - url: /api
 paths:
+  /portal/auth/register:
+    post:
+      operationId: registerSupplierPortalAccount
+      tags: [Supplier Portal]
+      description: Default disabled. Single-use invitation capability determines tenant/supplier/email; request tenant headers and email fields cannot override binding. Independent portal account only, no employee/role/session created. No email ownership verification. Shared DB peer rate limit 20 well-formed attempts per UTC minute; do not trust arbitrary forwarded client IP headers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invitationToken, username, password]
+              properties:
+                invitationToken: { type: string, pattern: '^[A-Za-z0-9_-]{43}$', writeOnly: true }
+                username: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{2,63}$' }
+                password: { type: string, minLength: 12, maxLength: 72, writeOnly: true, description: Requires upper/lower/digit/symbol and max 72 UTF-8 bytes. }
+      responses:
+        '200':
+          description: Account bound and invitation consumed atomically. No access token is issued. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        type: object
+                        required: [accountId, tenantId, supplierId, username]
+                        properties:
+                          accountId: { type: string }
+                          tenantId: { type: string }
+                          supplierId: { type: string }
+                          username: { type: string }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '429': { $ref: '#/components/responses/ApiFailure' }
   /suppliers/{supplierId}/portal-invitations:
     parameters:
       - { name: supplierId, in: path, required: true, schema: { type: string } }
@@ -20,7 +59,7 @@ paths:
     post:
       operationId: issueSupplierPortalInvitation
       tags: [Supplier Portal Invitations]
-      description: Requires supplier:master:update and supplier data scope. Atomically replaces pending unexpired invitations. Token returned once only; no email is sent. expectedGeneration prevents retry from creating another invitation. Registration redemption is not yet available.
+      description: Requires supplier:master:update and supplier data scope. Atomically replaces pending unexpired invitations. Token returned once only; no email is sent. expectedGeneration prevents retry from creating another invitation. Registration redemption requires explicit deployment enablement.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2194,7 +2233,7 @@ components:
         generation: { type: integer }
         recipientName: { type: string }
         recipientEmail: { type: string }
-        status: { type: string, enum: [PENDING, EXPIRED, REPLACED, REVOKED] }
+        status: { type: string, enum: [PENDING, EXPIRED, REPLACED, REVOKED, ACCEPTED] }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time, nullable: true }

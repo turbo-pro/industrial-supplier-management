@@ -61,6 +61,8 @@ logging:
     level: "%5p [traceId=%X{traceId:-}]"
 
 ism:
+  portal:
+    registration-enabled: ${ISM_PORTAL_REGISTRATION_ENABLED:false}
   subscription-reminders:
     enabled: ${ISM_SUBSCRIPTION_REMINDERS_ENABLED:false}
     poll-interval: ${ISM_SUBSCRIPTION_REMINDERS_POLL_INTERVAL:300000}

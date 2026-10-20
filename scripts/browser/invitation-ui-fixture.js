@@ -10,7 +10,7 @@ async page => {
     else if (path === '/organizations/current') data = { id: '100', code: 'HQ', name: '总部', type: 'HEADQUARTERS' };
     else if (path === '/navigation/menus') data = [];
     else if (path.includes('branding')) data = { systemName: '工业供应商管理系统', logoUrl: '', faviconUrl: '', footerText: '' };
-    else if (path.endsWith('/portal-invitations/ui-mode')) { const body = route.request().postDataJSON(); canManage = body.canManage ?? canManage; failRead = body.failRead ?? failRead; }
+    else if (path.endsWith('/portal-invitations/ui-mode')) { const body = route.request().postDataJSON(); canManage = body.canManage ?? canManage; failRead = body.failRead ?? failRead; if (body.accepted && items[0]) items[0] = { ...items[0], status: 'ACCEPTED' }; }
     else if (path.endsWith('/portal-invitations') && method === 'GET') {
       if (failRead) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { message: '模拟邀请读取失败' } }) });
       data = { latestGeneration: generation, canManage, items };

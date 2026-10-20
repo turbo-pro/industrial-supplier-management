@@ -34,5 +34,9 @@ async page => {
   await mode({ failRead: false });
   await panel.getByRole('button', { name: '刷新邀请记录' }).click();
   await panel.getByText('已撤销', { exact: true }).waitFor();
-  return { mocked: true, validationFocus: true, issueRevoke: true, tokenNotPersisted: true, readonly: true, loadRecovery: true };
+  await mode({ accepted: true });
+  await panel.getByRole('button', { name: '刷新邀请记录' }).click();
+  await panel.getByText('已注册兑换', { exact: true }).waitFor();
+  await page.screenshot({ path: 'output/playwright/portal-invitation-accepted.png', fullPage: true });
+  return { mocked: true, validationFocus: true, issueRevoke: true, tokenNotPersisted: true, readonly: true, loadRecovery: true, acceptedLabel: true };
 }

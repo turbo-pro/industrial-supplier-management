@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/portal/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Default disabled. Single-use invitation capability determines tenant/supplier/email; request tenant headers and email fields cannot override binding. Independent portal account only, no employee/role/session created. No email ownership verification. Shared DB peer rate limit 20 well-formed attempts per UTC minute; do not trust arbitrary forwarded client IP headers. */
+        post: operations["registerSupplierPortalAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/portal-invitations": {
         parameters: {
             query?: never;
@@ -16,7 +33,7 @@ export interface paths {
         /** @description Requires supplier:master:view and current supplier data scope. Returns latest 100 records, never token hashes or plaintext tokens. Does not imply registered portal identities. */
         get: operations["listSupplierPortalInvitations"];
         put?: never;
-        /** @description Requires supplier:master:update and supplier data scope. Atomically replaces pending unexpired invitations. Token returned once only; no email is sent. expectedGeneration prevents retry from creating another invitation. Registration redemption is not yet available. */
+        /** @description Requires supplier:master:update and supplier data scope. Atomically replaces pending unexpired invitations. Token returned once only; no email is sent. expectedGeneration prevents retry from creating another invitation. Registration redemption requires explicit deployment enablement. */
         post: operations["issueSupplierPortalInvitation"];
         delete?: never;
         options?: never;
@@ -3038,7 +3055,7 @@ export interface components {
             recipientName: string;
             recipientEmail: string;
             /** @enum {string} */
-            status: "PENDING" | "EXPIRED" | "REPLACED" | "REVOKED";
+            status: "PENDING" | "EXPIRED" | "REPLACED" | "REVOKED" | "ACCEPTED";
             /** Format: date-time */
             expiresAt: string;
             /** Format: date-time */
@@ -5842,6 +5859,46 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    registerSupplierPortalAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    invitationToken: string;
+                    username: string;
+                    /** @description Requires upper/lower/digit/symbol and max 72 UTF-8 bytes. */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Account bound and invitation consumed atomically. No access token is issued. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            accountId: string;
+                            tenantId: string;
+                            supplierId: string;
+                            username: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            429: components["responses"]["ApiFailure"];
+        };
+    };
     listSupplierPortalInvitations: {
         parameters: {
             query?: never;

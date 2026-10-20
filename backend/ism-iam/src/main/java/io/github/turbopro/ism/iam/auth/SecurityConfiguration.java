@@ -32,6 +32,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh",
                                 "/api/console/auth/login", "/api/console/auth/refresh", "/actuator/health/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/portal/auth/register").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
                     response.setStatus(401);

@@ -9,7 +9,7 @@ const errorBox = ref<HTMLElement>();
 const history = ref<components['schemas']['PortalInvitationHistoryResponse']['data']>();
 const name = ref(''), email = ref(''), hours = ref(24), reason = ref('');
 const target = ref<components['schemas']['PortalInvitation']>();
-const labels = { PENDING: '待使用', EXPIRED: '已过期', REPLACED: '已被重发替代', REVOKED: '已撤销' };
+const labels = { PENDING: '待使用', EXPIRED: '已过期', REPLACED: '已被重发替代', REVOKED: '已撤销', ACCEPTED: '已注册兑换' };
 async function fail(message: string) { error.value = message; await nextTick(); errorBox.value?.focus(); }
 async function load() {
   loading.value = true; error.value = '';
@@ -49,7 +49,7 @@ async function revoke() {
   <section aria-label="供应商门户邀请" class="portal-invitations">
     <h3>门户邀请 <el-button :disabled="busy" :aria-expanded="expanded" @click="open">{{ expanded ? '收起邀请管理' : '门户邀请管理' }}</el-button></h3>
     <template v-if="expanded">
-      <el-alert title="当前仅管理邀请凭证，尚未开放门户注册兑换；不会发送邮件，也不会自动创建账号或批准准入。" type="info" :closable="false" />
+      <el-alert title="注册接口默认关闭，需部署方启用后才能兑换；门户注册与登录页面尚未提供，不会发送邮件或自动批准准入。" type="info" :closable="false" />
       <p v-if="error" ref="errorBox" role="alert" tabindex="-1">{{ error }}</p>
       <p v-if="loading" role="status">正在读取邀请记录…</p>
       <div v-if="token" class="invitation-secret"><strong>本次令牌仅展示一次，请安全保管，不要写入日志或公开转发。</strong><p><code>{{ token }}</code></p><el-button @click="token=''">隐藏令牌</el-button></div>

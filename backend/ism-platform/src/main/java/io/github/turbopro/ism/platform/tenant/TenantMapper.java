@@ -12,6 +12,9 @@ import java.util.List;
 
 @Mapper
 public interface TenantMapper {
+    record PortalTenantState(String status,String initializationStatus) {}
+    @Select("SELECT status,initialization_status FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
+    PortalTenantState lockForPortalRegistration(long tenantId);
     @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at FROM plt_tenant t ORDER BY t.created_at,t.id")
     List<TenantModels.TenantRow> list();
 
