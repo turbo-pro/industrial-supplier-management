@@ -34,6 +34,7 @@ class PortalBrowserFixture {
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
     @Autowired PortalInvitationService invites;
+    @Autowired org.springframework.security.crypto.password.PasswordEncoder passwords;
 
     @Test void serveUntilBrowserFinishesThenVerifyPersistentEffects() throws Exception {
         Path control = Path.of(Objects.requireNonNull(System.getProperty("ism.browser.fixture-dir"))).toRealPath();
@@ -45,6 +46,21 @@ class PortalBrowserFixture {
         jdbc.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,initialization_status,package_version_id) VALUES(21001,'PORTAL-BROWSER','门户浏览器租户','ACTIVE','READY',21003)");
         jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(21004,21001,'HQ','总部','HEADQUARTERS','ACTIVE')");
         jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(21005,21001,21004,'SUP','浏览器供应商','MANUFACTURER',9,9)");
+        boolean management=Boolean.getBoolean("ism.browser.portal-management");
+        if(management){
+            jdbc.update("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(21001,21004,21004,0)");
+            for(int i=0;i<2;i++){
+                jdbc.update("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status) VALUES(?,21001,?,?,?,'ACTIVE')",21006+i,i==0?"browser-admin":"browser-reader",i==0?"联调管理员":"联调只读用户",passwords.encode("Employee#Pass123"));
+                jdbc.update("INSERT INTO iam_role(id,tenant_id,role_code,role_name,built_in,status) VALUES(?,21001,?,?,0,'ACTIVE')",21008+i,"BROWSER-"+i,"联调角色"+i);
+                jdbc.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(21001,?,?)",21006+i,21008+i);
+                jdbc.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(21001,?,'supplier:master','TENANT_ALL')",21008+i);
+                jdbc.update("INSERT INTO iam_user_organization(tenant_id,user_id,organization_id,is_primary) VALUES(21001,?,21004,1)",21006+i);
+                jdbc.update("INSERT INTO iam_user_context(tenant_id,user_id,current_organization_id) VALUES(21001,?,21004)",21006+i);
+                jdbc.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT 21001,?,id FROM sys_menu WHERE menu_code='SUPPLIER_MASTER'",21008+i);
+            }
+            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21008,id FROM sys_permission WHERE status='ACTIVE' AND module_code IN ('SYSTEM','COMMON','SUPPLIER')");
+            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21009,id FROM sys_permission WHERE status='ACTIVE' AND permission_code IN ('iam:organization:view','iam:menu:view','supplier:master:view','table:view:manage')");
+        }
         PortalInvitationModels.Issued invitation;
         try(var tenant=TenantContext.open(21001,9); var grants=AuthorizationContext.open(new PermissionSnapshot(
                 Set.of("supplier:master:update"), Map.of("supplier:master", DataScope.all()), Set.of()))) {
@@ -62,13 +78,19 @@ class PortalBrowserFixture {
         assertThat(Files.exists(control.resolve("finish"))).as("Browser completion signal").isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=21001 AND supplier_id=21005 AND username='browser.user'",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=21001 AND status='ACCEPTED'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_refresh_token WHERE tenant_id=21001",Long.class)).isZero();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_user WHERE tenant_id=21001",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(management?2:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_user WHERE tenant_id=21001",Long.class)).isEqualTo(management?2:0);
+        if(!management)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_refresh_token WHERE tenant_id=21001",Long.class)).isZero();
+        if(management){
+            assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE tenant_id=21001",String.class)).isEqualTo("ACTIVE");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action LIKE 'SUPPLIER_PORTAL_ACCOUNT_%' AND operator_id=21006",Long.class)).isEqualTo(3);
+        }
         assertThat(jdbc.queryForObject("SELECT failed_count FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isZero();
-        assertThat(jdbc.queryForObject("SELECT token_hash FROM iam_portal_session WHERE tenant_id=21001",String.class)).matches("[a-f0-9]{64}");
+        assertThat(jdbc.queryForList("SELECT token_hash FROM iam_portal_session WHERE tenant_id=21001",String.class)).allMatch(hash->hash.matches("[a-f0-9]{64}"));
     }
 }
