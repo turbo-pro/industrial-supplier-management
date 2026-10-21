@@ -55,6 +55,10 @@ jobs:
   console-reminder-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [console-reminder, portal-auth]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -70,15 +74,22 @@ jobs:
           java-version: '17'
           cache: maven
       - run: pnpm install --frozen-lockfile
-      - name: Install Chrome for real Console verification
+      - name: Install Chrome for real browser verification
         run: pnpm --filter @ism/console exec playwright install --with-deps chrome
-      - name: Verify real Console reminder recovery with isolated MySQL
-        run: node scripts/verify-reminder-e2e.mjs
+      - name: Verify real browser flow with isolated MySQL
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          if [ "$SCENARIO" = portal-auth ]; then
+            node scripts/verify-reminder-e2e.mjs --portal
+          else
+            node scripts/verify-reminder-e2e.mjs
+          fi
       - name: Preserve browser evidence and backend assertion logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: console-reminder-e2e
+          name: ${{ matrix.scenario }}-e2e
           path: |
             output/playwright/
             .playwright-cli/

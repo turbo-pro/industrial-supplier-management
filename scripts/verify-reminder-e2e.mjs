@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const control = mkdtempSync(join(tmpdir(), 'ism-reminder-e2e-'));
-const artifacts = join(root, 'output/playwright', `reminder-e2e-${Date.now()}`);
+const portal = process.argv.includes('--portal');
+const fixture = portal ? 'PortalBrowserFixture' : 'ConsoleReminderBrowserFixture';
+const control = mkdtempSync(join(tmpdir(), portal ? 'ism-portal-e2e-' : 'ism-reminder-e2e-'));
+const artifacts = join(root, 'output/playwright', `${portal ? 'portal' : 'reminder'}-e2e-${Date.now()}`);
 mkdirSync(artifacts, { recursive: true });
 const children = [];
 let interrupted = false;
@@ -62,7 +64,7 @@ process.on('SIGTERM', () => { interrupted = true; });
 try {
   console.log(`[artifacts] ${artifacts}`);
   const backend = start('backend', join(root, 'mvnw'), ['--batch-mode', '--no-transfer-progress', '-q', '-pl', 'backend/ism-bootstrap', '-am',
-    '-Pintegration-test', '-Dit.test=ConsoleReminderBrowserFixture', '-Dism.browser.recovery=true',
+    '-Pintegration-test', `-Dit.test=${fixture}`, '-Dism.browser.recovery=true',
     `-Dism.browser.fixture-dir=${control}`, '-Dfailsafe.failIfNoSpecifiedTests=false', 'verify']);
   await until(() => existsSync(join(control, 'ready')), backend, 360_000);
   const target = readFileSync(join(control, 'ready'), 'utf8').trim();
@@ -70,15 +72,17 @@ try {
   console.log('[ready] isolated backend');
   const port = await unusedPort();
   const frontendUrl = `http://127.0.0.1:${port}`;
-  const frontend = start('frontend', 'pnpm', ['--filter', '@ism/console', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    { ISM_CONSOLE_API_TARGET: target });
+  const frontend = start('frontend', 'corepack', ['pnpm', '--filter', portal ? '@ism/portal' : '@ism/console', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+    portal ? { ISM_PORTAL_API_TARGET: target } : { ISM_CONSOLE_API_TARGET: target });
   await until(async () => { try { return (await fetch(frontendUrl, { signal: AbortSignal.timeout(1000) })).ok; } catch { return false; } }, frontend, 60_000);
   ensureRunning(backend);
-  console.log('[run] real browser failure/recovery/readonly checks');
-  const browser = start('browser', 'bash', ['scripts/verify-reminder-browser.sh', control, frontendUrl]);
+  console.log(portal ? '[run] real portal registration/login/me/logout' : '[run] real browser failure/recovery/readonly checks');
+  const browser = portal
+    ? start('browser', process.execPath, ['scripts/verify-portal-browser.mjs', control, frontendUrl])
+    : start('browser', 'bash', ['scripts/verify-reminder-browser.sh', control, frontendUrl]);
   await waitExit(browser, 180_000);
   await waitExit(backend, 60_000);
-  const report = join(root, 'backend/ism-bootstrap/target/failsafe-reports/io.github.turbopro.ism.bootstrap.ConsoleReminderBrowserFixture.txt');
+  const report = join(root, `backend/ism-bootstrap/target/failsafe-reports/io.github.turbopro.ism.bootstrap.${fixture}.txt`);
   const summary = readFileSync(report, 'utf8');
   if (!/Tests run: 1, Failures: 0, Errors: 0, Skipped: 0/.test(summary)) throw new Error('Fixture report is not a clean pass');
   copyFileSync(report, join(artifacts, 'database-assertions.txt'));
