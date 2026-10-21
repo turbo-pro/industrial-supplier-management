@@ -1,3 +1,13 @@
 # Supplier Portal
 
-This application will be initialized after the shared design tokens and API client contracts are available.
+仓库根目录运行 `corepack pnpm --filter @ism/portal dev`，访问 `http://127.0.0.1:4175`。
+
+开发代理默认 `http://127.0.0.1:18080`，本应用 `.env.local` 可设置 `ISM_PORTAL_API_TARGET`。生产使用 HTTPS 反向代理 `/api`，不要直接暴露 Vite 开发服务作为公网 Demo。
+
+服务端注册与认证默认关闭，受控环境分别启用 `ISM_PORTAL_REGISTRATION_ENABLED=true`、`ISM_PORTAL_AUTHENTICATION_ENABLED=true`。不得为试用修复/清空旧数据库或关闭迁移校验。管理账号创建邀请后，通过可信渠道提供邀请凭证及租户编码；门户注册后再登录，不会发送邮件或自动批准准入。
+
+密码、邀请和令牌不写浏览器存储。令牌仅存内存，刷新需重新登录，刷新本身不撤销服务端会话；请使用“退出当前会话”，网络失败需重试。
+
+构建 `corepack pnpm --filter @ism/portal build`。Node >=20.19、pnpm 10.17.1。
+
+页面模拟验收：启动后使用 Playwright CLI 打开专用会话，再从仓库根目录执行 `run-code --filename scripts/browser/portal-auth-ui.js`。它不建立真实账号，不是服务端 E2E。详见 `docs/development/supplier-portal-ui-review.md`。
