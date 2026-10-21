@@ -28,6 +28,7 @@ class PortalAuthIT {
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("spring.datasource.url",MYSQL::getJdbcUrl);r.add("spring.datasource.username",MYSQL::getUsername);r.add("spring.datasource.password",MYSQL::getPassword);}
     @Autowired JdbcTemplate jdbc;@Autowired PortalInvitationService invites;@Autowired PortalRegistrationService registrations;
     @Autowired PortalAuthService auth;@Autowired MockMvc mvc;@Autowired JwtTokenService internalTokens;
+    @Autowired PortalAccountManagementService administration;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
     Fixture fixture(){
@@ -109,6 +110,71 @@ class PortalAuthIT {
         try{mvc.perform(post("/api/portal/auth/logout").header("Authorization","Bearer "+token)).andExpect(status().isInternalServerError());me(token,200);}
         finally{drop();}
         mvc.perform(post("/api/portal/auth/logout").header("Authorization","Bearer "+token)).andExpect(status().isOk());me(token,401);
+    }
+    io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Account manage(Fixture f,int version,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action action){
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","supplier:master:update"),Map.of("supplier:master",DataScope.all()),Set.of()))){
+            return administration.change(f.supplier(),f.account(),version,action,"账号安全维护");
+        }
+    }
+    @Test void administrationDisablesRestoresAndPermanentlyRevokesAllDevices()throws Exception{
+        var f=fixture();var first=login(f);var second=login(f);
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.all()),Set.of()))){
+            var list=administration.list(f.supplier(),1,20);
+            assertThat(list.canManage()).isFalse();assertThat(list.accounts().total()).isEqualTo(1);
+            assertThat(list.accounts().items().get(0).liveSessions()).isEqualTo(2);
+        }
+        var disabled=manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE);
+        assertThat(disabled.status()).isEqualTo("DISABLED");assertThat(disabled.version()).isEqualTo(1);assertThat(disabled.liveSessions()).isZero();
+        me(first.accessToken(),401);me(second.accessToken(),401);assertThatThrownBy(()->login(f)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        manage(f,1,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.ENABLE);
+        me(first.accessToken(),401);var third=login(f);me(third.accessToken(),200);
+        manage(f,2,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);
+        me(third.accessToken(),401);me(login(f).accessToken(),200);
+        assertThatThrownBy(()->manage(f,2,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action LIKE 'SUPPLIER_PORTAL_ACCOUNT_%'",Long.class,f.tenant())).isEqualTo(3);
+    }
+    @Test void administrationRequiresActionScopeAndCorrectTenantAndSupplier(){
+        var f=fixture();var other=fixture();
+        try(var tenant=TenantContext.open(f.tenant(),9)){
+            assertThatThrownBy(()->administration.list(f.supplier(),1,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            try(var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.all()),Set.of()))){
+                assertThatThrownBy(()->administration.change(f.supplier(),f.account(),0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE,"越权")).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                assertThatThrownBy(()->administration.list(other.supplier(),1,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                assertThatThrownBy(()->administration.list(f.supplier(),0,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            }
+            try(var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.none()),Set.of()))){
+                assertThatThrownBy(()->administration.list(f.supplier(),1,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            }
+            try(var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:update"),Map.of("supplier:master",DataScope.all()),Set.of()))){
+                assertThatThrownBy(()->administration.change(f.supplier(),other.account(),0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE,"错绑")).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            }
+        }
+    }
+    @Test void administrationAuditFailureRollsBackStatusVersionAndSessionRevocation()throws Exception{
+        var f=fixture();var session=login(f);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action LIKE 'SUPPLIER_PORTAL_ACCOUNT_%' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected account audit failure'; END IF; END");
+        try{assertThatThrownBy(()->manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE)).isInstanceOf(RuntimeException.class);}
+        finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE id=?",String.class,f.account())).isEqualTo("ACTIVE");me(session.accessToken(),200);
+        assertThat(manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE).status()).isEqualTo("DISABLED");
+    }
+    @Test void concurrentAdministrationWithSameVersionHasOnlyOneWinner()throws Exception{
+        var f=fixture();var token=login(f).accessToken();
+        var start=new java.util.concurrent.CountDownLatch(1);var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        try{
+            var first=pool.submit(()->{start.await();try{manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE);return true;}catch(io.github.turbopro.ism.common.api.error.ApiException conflict){assertThat(conflict.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.CONFLICT);return false;}});
+            var second=pool.submit(()->{start.await();try{manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);return true;}catch(io.github.turbopro.ism.common.api.error.ApiException conflict){assertThat(conflict.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.CONFLICT);return false;}});
+            start.countDown();assertThat(List.of(first.get(15,java.util.concurrent.TimeUnit.SECONDS),second.get(15,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(true,false);
+        }finally{start.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(1);me(token,401);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action LIKE 'SUPPLIER_PORTAL_ACCOUNT_%'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void unavailableSupplierStillAllowsDisableButNeverEnable(){
+        var f=fixture();jdbc.update("UPDATE sup_supplier SET status='SUSPENDED' WHERE id=?",f.supplier());
+        manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE);
+        assertThatThrownBy(()->manage(f,1,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.ENABLE)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        manage(f,1,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);
     }
     void install(String trigger)throws Exception{var result=MYSQL.execInContainer("mysql","--delimiter=//","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e",trigger+"//");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}
     void drop()throws Exception{var result=MYSQL.execInContainer("mysql","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e","DROP TRIGGER portal_auth_audit_failure");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}

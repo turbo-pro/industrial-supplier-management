@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/portal-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Internal supplier:master:view plus live supplier scope. No credentials or email returned. Session count is unexpired/unrevoked matching-version sessions, not business eligibility. Cache-Control no-store. */
+        get: operations["listSupplierPortalAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/portal-accounts/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Internal supplier:master:update plus live scope. Versioned status change atomically revokes all sessions and audits reason. Restoring never restores old tokens. Supplier pending exit or unavailable blocks enable, never disable/revoke. No external recovery claim. */
+        post: operations["changeSupplierPortalAccountStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/portal-accounts/{id}/revoke-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Internal supplier:master:update plus live scope. Revokes all current account sessions with monotonic token/account version and audit, but does not disable future logins. Stale retries return 409; refresh before deciding another action. */
+        post: operations["revokeSupplierPortalAccountSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/auth/login": {
         parameters: {
             query?: never;
@@ -3100,6 +3151,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PortalAccountChange: {
+            version: number;
+            reason: string;
+        };
+        PortalManagedAccount: {
+            id: string;
+            username: string;
+            displayName: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            version: number;
+            /** Format: int64 */
+            liveSessions: number;
+            /** Format: date-time */
+            lastLoginAt?: string | null;
+        };
+        PortalManagedAccountResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalManagedAccount"];
+        };
+        PortalAccountPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                canManage: boolean;
+                accounts: {
+                    page: number;
+                    size: number;
+                    /** Format: int64 */
+                    total: number;
+                    items: components["schemas"]["PortalManagedAccount"][];
+                };
+            };
+        };
         PortalIdentity: {
             accountId: string;
             tenantId: string;
@@ -5929,6 +6011,103 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSupplierPortalAccounts: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped account page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalAccountPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    changeSupplierPortalAccountStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalAccountChange"] & {
+                    /** @enum {string} */
+                    status: "ACTIVE" | "DISABLED";
+                };
+            };
+        };
+        responses: {
+            /** @description Updated account; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalManagedAccountResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    revokeSupplierPortalAccountSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalAccountChange"];
+            };
+        };
+        responses: {
+            /** @description Updated account; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalManagedAccountResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
     loginSupplierPortal: {
         parameters: {
             query?: never;

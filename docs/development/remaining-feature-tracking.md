@@ -1,6 +1,8 @@
 # 剩余功能跟踪
 
-B3 门户认证已补后端专用 login/me/logout、独立随机会话、即时状态阻断和当前会话撤销，与员工/Console 域隔离。前端注册登录/身份复核/退出、模拟接口验收及隔离真实后端浏览器一键验收已补；自助业务、账号管理/找回及完整回收策略仍缺，见 [页面验收](supplier-portal-ui-review.md) 与 [门户认证](supplier-portal-auth-review.md)。
+B3 门户账号列表、停用/恢复、单账号全部会话撤销和管理端原因确认已补；真实 MySQL 权限/版本/审计回滚及模拟页面通过。尚缺退出自动联动、密码维护/找回、会话清理及跨端真实浏览器验收，见 [账号维护验收](supplier-portal-account-management-review.md)。
+
+B3 门户认证已补后端专用 login/me/logout、独立随机会话、即时状态阻断和当前会话撤销，与员工/Console 域隔离。前端注册登录/身份复核/退出、模拟接口验收及隔离真实后端浏览器一键验收已补；自助业务、密码维护/找回及退出整体回收策略仍缺，见 [页面验收](supplier-portal-ui-review.md)、[账号维护](supplier-portal-account-management-review.md) 与 [门户认证](supplier-portal-auth-review.md)。
 
 B3 门户注册再补后端单次兑换与独立身份：默认关闭的匿名接口、租户/供应商绑定、有效模块复核、共享限流、事务审计；账号与内部用户/角色/会话隔离。仍缺门户认证/实时撤销、注册登录页面、邮箱验证/渠道和自助业务，不可称门户整体完成。见 [注册验收](supplier-portal-registration-review.md)。
 

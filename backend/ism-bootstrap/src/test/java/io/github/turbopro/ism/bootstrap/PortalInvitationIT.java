@@ -102,6 +102,27 @@ class PortalInvitationIT {
         }
         assertThat(issue(f,1).invitation().generation()).isEqualTo(2);
     }
+    @Test void managesAccountsThroughScopedVersionedHttpWithoutExposingCredentials()throws Exception{
+        var f=fixture();long account=f.supplier()+10;
+        jdbc.update("INSERT INTO iam_portal_account(id,tenant_id,supplier_id,username,display_name,email,password_hash) VALUES(?,?,?,'portal.http','联系人','http@example.test','not-a-login-hash')",account,f.tenant(),f.supplier());
+        when(tokens.decode("writer")).thenReturn(Jwt.withTokenValue("writer").header("alg","HS256").subject("9").claim("tokenVersion",0).claim("tokenFamilyId","inv-family").build());
+        when(auth.requireActiveSession(9,0,"inv-family")).thenReturn(new AuthModels.AuthUser(9,f.tenant(),"admin","管理员","unused","ACTIVE",false,null,false,0,0,null));
+        when(grants.load(f.tenant(),9)).thenReturn(permissions(DataScope.all()));
+        String path="/api/suppliers/"+f.supplier()+"/portal-accounts", item=path+"/"+account;
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header("Authorization","Bearer writer")).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
+                .andExpect(jsonPath("$.data.accounts.items[0].id").value(Long.toString(account)))
+                .andExpect(jsonPath("$.data.accounts.items[0].passwordHash").doesNotExist()).andExpect(jsonPath("$.data.accounts.items[0].email").doesNotExist());
+        mvc.perform(post(item+"/status").header("Authorization","Bearer writer").contentType("application/json").content("{\"status\":\"DISABLED\",\"reason\":\"维护\"}")).andExpect(status().isBadRequest());
+        mvc.perform(post(item+"/status").header("Authorization","Bearer writer").contentType("application/json").content("{\"version\":0,\"status\":\"DISABLED\",\"reason\":\"维护\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DISABLED")).andExpect(jsonPath("$.data.version").value(1));
+        mvc.perform(post(item+"/revoke-sessions").header("Authorization","Bearer writer").contentType("application/json").content("{\"version\":0,\"reason\":\"陈旧版本\"}")).andExpect(status().isConflict());
+        when(grants.load(f.tenant(),9)).thenReturn(new PermissionSnapshot(Set.of("supplier:master:view"),Map.of("supplier:master",DataScope.all()),Set.of()));
+        mvc.perform(get(path).header("Authorization","Bearer writer")).andExpect(status().isOk()).andExpect(jsonPath("$.data.canManage").value(false));
+        mvc.perform(post(item+"/status").header("Authorization","Bearer writer").contentType("application/json").content("{\"version\":1,\"status\":\"ACTIVE\",\"reason\":\"越权\"}")).andExpect(status().isForbidden());
+        when(grants.load(f.tenant(),9)).thenReturn(permissions(DataScope.none()));
+        mvc.perform(get(path).header("Authorization","Bearer writer")).andExpect(status().isNotFound());
+    }
     @Test void protectsHttpPermissionsValidationAndSecretResponses() throws Exception {
         var f=fixture();String path="/api/suppliers/"+f.supplier()+"/portal-invitations";
         when(tokens.decode("writer")).thenReturn(Jwt.withTokenValue("writer").header("alg","HS256").subject("9").claim("tokenVersion",0).claim("tokenFamilyId","inv-family").build());

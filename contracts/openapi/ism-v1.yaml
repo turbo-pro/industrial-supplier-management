@@ -6,6 +6,71 @@ info:
 servers:
   - url: /api
 paths:
+  /suppliers/{supplierId}/portal-accounts:
+    get:
+      operationId: listSupplierPortalAccounts
+      tags: [Supplier Portal Accounts]
+      description: Internal supplier:master:view plus live supplier scope. No credentials or email returned. Session count is unexpired/unrevoked matching-version sessions, not business eligibility. Cache-Control no-store.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Scoped account page, content: { application/json: { schema: { $ref: '#/components/schemas/PortalAccountPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /suppliers/{supplierId}/portal-accounts/{id}/status:
+    post:
+      operationId: changeSupplierPortalAccountStatus
+      tags: [Supplier Portal Accounts]
+      description: Internal supplier:master:update plus live scope. Versioned status change atomically revokes all sessions and audits reason. Restoring never restores old tokens. Supplier pending exit or unavailable blocks enable, never disable/revoke. No external recovery claim.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/PortalAccountChange' }
+                - type: object
+                  required: [status]
+                  properties:
+                    status: { type: string, enum: [ACTIVE, DISABLED] }
+      responses:
+        '200': { description: Updated account; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalManagedAccountResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /suppliers/{supplierId}/portal-accounts/{id}/revoke-sessions:
+    post:
+      operationId: revokeSupplierPortalAccountSessions
+      tags: [Supplier Portal Accounts]
+      description: Internal supplier:master:update plus live scope. Revokes all current account sessions with monotonic token/account version and audit, but does not disable future logins. Stale retries return 409; refresh before deciding another action.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PortalAccountChange' }
+      responses:
+        '200': { description: Updated account; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalManagedAccountResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /portal/auth/login:
     post:
       operationId: loginSupplierPortal
@@ -2270,6 +2335,44 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    PortalAccountChange:
+      type: object
+      required: [version, reason]
+      properties:
+        version: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    PortalManagedAccount:
+      type: object
+      required: [id, username, displayName, status, version, liveSessions]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        version: { type: integer }
+        liveSessions: { type: integer, format: int64 }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+    PortalManagedAccountResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PortalManagedAccount' } } }]
+    PortalAccountPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [canManage, accounts]
+              properties:
+                canManage: { type: boolean }
+                accounts:
+                  type: object
+                  required: [page, size, total, items]
+                  properties:
+                    page: { type: integer }
+                    size: { type: integer }
+                    total: { type: integer, format: int64 }
+                    items: { type: array, items: { $ref: '#/components/schemas/PortalManagedAccount' } }
     PortalIdentity:
       type: object
       required: [accountId, tenantId, supplierId, username, displayName]

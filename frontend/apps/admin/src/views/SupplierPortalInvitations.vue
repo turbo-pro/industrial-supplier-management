@@ -2,6 +2,7 @@
 import { nextTick, ref } from 'vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import SupplierPortalAccounts from './SupplierPortalAccounts.vue';
 const props = defineProps<{ supplierId: string; supplierStatus: string }>();
 const session = useSessionStore();
 const expanded = ref(false), busy = ref(false), loading = ref(false), error = ref(''), token = ref('');
@@ -49,7 +50,7 @@ async function revoke() {
   <section aria-label="供应商门户邀请" class="portal-invitations">
     <h3>门户邀请 <el-button :disabled="busy" :aria-expanded="expanded" @click="open">{{ expanded ? '收起邀请管理' : '门户邀请管理' }}</el-button></h3>
     <template v-if="expanded">
-      <el-alert title="注册接口默认关闭，需部署方启用后才能兑换；门户注册与登录页面尚未提供，不会发送邮件或自动批准准入。" type="info" :closable="false" />
+      <el-alert title="门户注册与认证默认关闭，需部署方启用后使用独立门户页面；不会发送邮件或自动批准准入。" type="info" :closable="false" />
       <p v-if="error" ref="errorBox" role="alert" tabindex="-1">{{ error }}</p>
       <p v-if="loading" role="status">正在读取邀请记录…</p>
       <div v-if="token" class="invitation-secret"><strong>本次令牌仅展示一次，请安全保管，不要写入日志或公开转发。</strong><p><code>{{ token }}</code></p><el-button @click="token=''">隐藏令牌</el-button></div>
@@ -74,6 +75,7 @@ async function revoke() {
       </template>
       <el-button :disabled="busy || loading" @click="load">刷新邀请记录</el-button>
     </template>
+    <SupplierPortalAccounts :key="supplierId" :supplier-id="supplierId" :supplier-status="supplierStatus" />
   </section>
 </template>
 <style scoped>
