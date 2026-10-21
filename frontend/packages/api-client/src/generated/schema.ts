@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/portal/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Default disabled. Dedicated opaque portal session, not an employee/Console JWT. Shared transport-peer budget with registration; five wrong passwords lock this portal account for 15 minutes. Session expires after eight hours without sliding refresh. */
+        post: operations["loginSupplierPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires a live opaque portal bearer, never employee/Console JWT. Current bound identity only, not tenant business data. Checks account version, tenant/module/supplier state on every request. */
+        get: operations["getSupplierPortalIdentity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Revokes only the authenticated portal session atomically with audit. Replaying revoked bearer returns 401. Does not terminate other devices or internal sessions. */
+        post: operations["logoutSupplierPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/auth/register": {
         parameters: {
             query?: never;
@@ -3049,6 +3100,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PortalIdentity: {
+            accountId: string;
+            tenantId: string;
+            supplierId: string;
+            username: string;
+            displayName: string;
+        };
+        PortalIdentityResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalIdentity"];
+        };
+        PortalSessionResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                user: components["schemas"]["PortalIdentity"];
+                /** @description Opaque portal-only bearer secret */
+                accessToken: string;
+                /** Format: date-time */
+                expiresAt: string;
+            };
+        };
         PortalInvitation: {
             id: string;
             generation: number;
@@ -5859,6 +5929,81 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    loginSupplierPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tenantCode: string;
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Portal session only; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSessionResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            429: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupplierPortalIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bound identity; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIdentityResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    logoutSupplierPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
     registerSupplierPortalAccount: {
         parameters: {
             query?: never;

@@ -25,6 +25,7 @@ public class SecurityConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter,
                                             ConsoleJwtAuthenticationFilter consoleJwtFilter,
+                                            io.github.turbopro.ism.iam.portal.PortalAuthenticationFilter portalFilter,
                                             ApiResponseFactory responses, ObjectMapper objectMapper) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -32,7 +33,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh",
                                 "/api/console/auth/login", "/api/console/auth/refresh", "/actuator/health/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/portal/auth/register").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/portal/auth/register","/api/portal/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
                     response.setStatus(401);
@@ -43,6 +44,7 @@ public class SecurityConfiguration {
                 }))
                 .addFilterBefore(consoleJwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(portalFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 }

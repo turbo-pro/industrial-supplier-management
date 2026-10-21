@@ -6,6 +6,47 @@ info:
 servers:
   - url: /api
 paths:
+  /portal/auth/login:
+    post:
+      operationId: loginSupplierPortal
+      tags: [Supplier Portal]
+      description: Default disabled. Dedicated opaque portal session, not an employee/Console JWT. Shared transport-peer budget with registration; five wrong passwords lock this portal account for 15 minutes. Session expires after eight hours without sliding refresh.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantCode, username, password]
+              properties:
+                tenantCode: { type: string, maxLength: 64 }
+                username: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{2,63}$' }
+                password: { type: string, maxLength: 72, writeOnly: true }
+      responses:
+        '200': { description: Portal session only; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalSessionResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '429': { $ref: '#/components/responses/ApiFailure' }
+  /portal/auth/me:
+    get:
+      operationId: getSupplierPortalIdentity
+      tags: [Supplier Portal]
+      description: Requires a live opaque portal bearer, never employee/Console JWT. Current bound identity only, not tenant business data. Checks account version, tenant/module/supplier state on every request.
+      security: [{ portalBearer: [] }]
+      responses:
+        '200': { description: Bound identity; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalIdentityResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/auth/logout:
+    post:
+      operationId: logoutSupplierPortal
+      tags: [Supplier Portal]
+      description: Revokes only the authenticated portal session atomically with audit. Replaying revoked bearer returns 401. Does not terminate other devices or internal sessions.
+      security: [{ portalBearer: [] }]
+      responses:
+        '200': { description: Revoked; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /portal/auth/register:
     post:
       operationId: registerSupplierPortalAccount
@@ -2214,6 +2255,10 @@ components:
       description: Unique request key retained for 24 hours; retries must use the same request body.
       schema: { type: string, minLength: 8, maxLength: 128 }
   securitySchemes:
+    portalBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Opaque portal session
     bearerAuth:
       type: http
       scheme: bearer
@@ -2225,6 +2270,35 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    PortalIdentity:
+      type: object
+      required: [accountId, tenantId, supplierId, username, displayName]
+      properties:
+        accountId: { type: string }
+        tenantId: { type: string }
+        supplierId: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+    PortalIdentityResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/PortalIdentity' }
+    PortalSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [user, accessToken, expiresAt]
+              properties:
+                user: { $ref: '#/components/schemas/PortalIdentity' }
+                accessToken: { type: string, description: Opaque portal-only bearer secret, never use as an internal JWT or log it. }
+                expiresAt: { type: string, format: date-time }
     PortalInvitation:
       type: object
       required: [id, generation, recipientName, recipientEmail, status, expiresAt, createdAt, version]
