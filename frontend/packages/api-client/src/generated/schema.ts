@@ -545,6 +545,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Independent approval rechecks local readiness, atomically disables all bound local portal accounts, advances their token versions, revokes all their sessions and valid unconsumed invitations. LOCAL_PORTAL_RECOVERY event records counts before archive sealing. Failure rolls back the entire approval. Cancel/reject never permanently revoke. External recovery remains NOT_VERIFIED; no external connector success is implied. */
         post: operations["reviewSupplierExitApplication"];
         delete?: never;
         options?: never;

@@ -36,4 +36,23 @@ public class PortalAccountAdministrationImpl implements PortalAccountAdministrat
                 Map.of("status",status,"version",version+1,"supplierId",supplierId,"revokedSessions",revoked,"reason",reason.trim()),null,null));
         return mapper.lock(tenant.tenantId(),supplierId,id);
     }
+    @Override @Transactional(propagation=Propagation.MANDATORY)
+    public ExitRecovery recoverForExit(long supplierId,long applicationId){
+        if(supplierId<=0 || applicationId<=0)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var tenant=TenantContext.require();long after=0,processed=0,revoked=0;
+        while(true){
+            var batch=mapper.exitBatch(tenant.tenantId(),supplierId,after);
+            if(batch.isEmpty())break;
+            for(var account:batch){
+                long id=Long.parseLong(account.id());
+                if(mapper.change(tenant.tenantId(),supplierId,id,account.version(),"DISABLED")!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+                int count=mapper.revokeAll(tenant.tenantId(),id);
+                audit.append(new AuditService.AuditCommand("SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY","SUPPLIER_PORTAL_ACCOUNT",id,null,
+                        Map.of("status",account.status(),"version",account.version()),
+                        Map.of("status","DISABLED","version",account.version()+1,"supplierId",supplierId,"applicationId",applicationId,"revokedSessions",count),null,null));
+                after=id;processed++;revoked+=count;
+            }
+        }
+        return new ExitRecovery(processed,revoked);
+    }
 }

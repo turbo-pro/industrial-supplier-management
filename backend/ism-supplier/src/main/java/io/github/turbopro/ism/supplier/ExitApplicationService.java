@@ -16,10 +16,14 @@ public class ExitApplicationService {
     private final AppealEvidenceVerifier evidence;private final List<SupplierExitCheck> checks;
     private final OperationIdGenerator ids;private final AuditService audit;private final ExitAssigneeVerifier assignees;private final ExitAssignmentNotifier notifications;
     private final ExitArchiveService archives;
+    private final io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration portalAccounts;
+    private final PortalInvitationMapper portalInvitations;
     public ExitApplicationService(ExitMapper mapper,SupplierMapper suppliers,SupplierService scope,
-        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees,ExitAssignmentNotifier notifications,ExitArchiveService archives){
+        AppealEvidenceVerifier evidence,List<SupplierExitCheck> checks,OperationIdGenerator ids,AuditService audit,ExitAssigneeVerifier assignees,ExitAssignmentNotifier notifications,ExitArchiveService archives,
+        io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration portalAccounts,PortalInvitationMapper portalInvitations){
         this.mapper=mapper;this.suppliers=suppliers;this.scope=scope;this.evidence=evidence;
         this.checks=List.copyOf(checks);this.ids=ids;this.audit=audit;this.assignees=assignees;this.notifications=notifications;this.archives=archives;
+        this.portalAccounts=portalAccounts;this.portalInvitations=portalInvitations;
     }
     public ExitModels.Page list(long supplierId,int page,int size){
         var supplier=scope.get(supplierId);long tenant=TenantContext.require().tenantId();
@@ -77,12 +81,15 @@ public class ExitApplicationService {
         if(suppliers.completeExit(i.tenantId(),i.actorId(),supplierId,current.version())!=1)throw conflict();
         finish(supplierId,id,"BUSINESS_CLOSED",command.comment().trim(),command.version());
         mapper.insertResult(ids.nextId(),i.tenantId(),id,supplierId,i.actorId(),command.comment().trim());
+        var recovered=portalAccounts.recoverForExit(supplierId,id);
+        int revokedInvitations=portalInvitations.revokeForExit(i.tenantId(),supplierId,i.actorId(),"退出申请 #"+id+" 批准后自动撤销");
+        event(id,"LOCAL_PORTAL_RECOVERY","本地门户回收：处理账号 "+recovered.accounts()+"，撤销会话记录 "+recovered.revokedSessions()+"，撤销有效未消费邀请 "+revokedInvitations+"；其他外部访问仍未核验");
         event(id,"BUSINESS_CLOSE",command.comment().trim());
         archives.seal(supplierId,id);
         // Inventory obligations only. No external account or access is presumed to exist or to have been revoked.
         for(String channel:List.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL"))
             if(mapper.insertAccessRecoveryTask(ids.nextId(),i.tenantId(),id,supplierId,channel,i.actorId())!=1)throw conflict();
-        audit("SUPPLIER_EXIT_BUSINESS_CLOSE",id,Map.of("supplierId",supplierId,"fromStatus",current.status(),"toStatus","EXITED","completionScope","LOCAL_BUSINESS","accessRecoveryStatus","NOT_VERIFIED"));
+        audit("SUPPLIER_EXIT_BUSINESS_CLOSE",id,Map.of("supplierId",supplierId,"fromStatus",current.status(),"toStatus","EXITED","completionScope","LOCAL_BUSINESS","accessRecoveryStatus","NOT_VERIFIED","localPortalAccounts",recovered.accounts(),"revokedPortalSessions",recovered.revokedSessions(),"revokedPortalInvitations",revokedInvitations));
         return view(require(supplierId,id));
     }
     private SupplierModels.SupplierRow lock(long supplierId){

@@ -19,4 +19,6 @@ public interface PortalAccountAdministrationMapper extends TenantScopedMapper {
     int change(long tenantId,long supplierId,long id,int version,String status);
     @Update("UPDATE iam_portal_session SET revoked_at=UTC_TIMESTAMP(3) WHERE tenant_id=#{tenantId} AND account_id=#{id} AND revoked_at IS NULL")
     int revokeAll(long tenantId,long id);
+    @Select("SELECT "+FIELDS+" FROM iam_portal_account a WHERE a.tenant_id=#{tenantId} AND a.supplier_id=#{supplierId} AND a.id>#{afterId} ORDER BY a.id LIMIT 100 FOR UPDATE")
+    List<Account> exitBatch(long tenantId,long supplierId,long afterId);
 }

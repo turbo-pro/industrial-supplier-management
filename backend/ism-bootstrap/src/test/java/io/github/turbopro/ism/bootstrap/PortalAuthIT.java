@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"ism.portal.registration-enabled=true","ism.portal.authentication-enabled=true","ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false"})
+@SpringBootTest(properties={"ism.portal.registration-enabled=true","ism.portal.authentication-enabled=true","ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false","ism.integration.finance.mode=MANUAL"})
 @AutoConfigureMockMvc @Testcontainers @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class PortalAuthIT {
     @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.0").withDatabaseName("portal_auth").withUsername("ism").withPassword("ism");
@@ -29,6 +29,9 @@ class PortalAuthIT {
     @Autowired JdbcTemplate jdbc;@Autowired PortalInvitationService invites;@Autowired PortalRegistrationService registrations;
     @Autowired PortalAuthService auth;@Autowired MockMvc mvc;@Autowired JwtTokenService internalTokens;
     @Autowired PortalAccountManagementService administration;
+    @Autowired ExitApplicationService exits;
+    @Autowired ExitArchiveService archives;
+    @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
     Fixture fixture(){
@@ -175,6 +178,78 @@ class PortalAuthIT {
         manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.DISABLE);
         assertThatThrownBy(()->manage(f,1,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.ENABLE)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
         manage(f,1,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);
+    }
+    AuthorizationContext.Scope exitGrants(){return AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:view","supplier:master:update","supplier:exit:create","supplier:exit:review"),Map.of("supplier:master",DataScope.all()),Set.of()));}
+    ExitModels.View prepareExit(Fixture f){
+        long file=f.supplier()+50;
+        jdbc.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,9,'exit.pdf','application/pdf',1,?,'LOCAL','test/exit','ACTIVE')",file,f.tenant(),"e".repeat(64));
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+            finance.insert(f.tenant(),f.supplier(),file,"隔离测试人工财务证据",9);finance.review(f.tenant(),f.supplier(),"APPROVED","独立复核",10,0);
+            return exits.create(f.supplier(),new ExitModels.Create(ExitModels.Type.NORMAL,"合作结束",Long.toString(file)));
+        }
+    }
+    ExitModels.View approveExit(Fixture f,ExitModels.View application){
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=exitGrants()){
+            return exits.review(f.supplier(),Long.parseLong(application.id()),new ExitModels.Review(ExitModels.Decision.APPROVE,"独立核验通过",application.version()));
+        }
+    }
+    String pendingInvite(Fixture f){
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+            return invites.issue(f.supplier(),new PortalInvitationModels.Issue(1,"新联系人","next@example.test",24)).token();
+        }
+    }
+    @Test void approvedExitRecoversEveryLocalAccountAndInvitationWithoutClaimingExternalSuccess()throws Exception{
+        var f=fixture();String token=login(f).accessToken();login(f);String invitation=pendingInvite(f);
+        // Force a second keyset page, including already-disabled accounts.
+        for(int n=0;n<100;n++)jdbc.update("INSERT INTO iam_portal_account(id,tenant_id,supplier_id,username,display_name,email,password_hash,status) SELECT ?,tenant_id,supplier_id,?,'批量账号',?,password_hash,? FROM iam_portal_account WHERE id=?",900000000L+f.supplier()*1000+n,"batch."+n,"batch"+n+"@example.test",n%2==0?"ACTIVE":"DISABLED",f.account());
+        long otherSupplier=f.supplier()+20,otherAccount=f.supplier()+21;
+        jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,'OTHER','其他供应商','MANUFACTURER',9,9)",otherSupplier,f.tenant(),f.supplier()+1);
+        jdbc.update("INSERT INTO iam_portal_account(id,tenant_id,supplier_id,username,display_name,email,password_hash) SELECT ?,tenant_id,?,'other.user','其他联系人','other@example.test',password_hash FROM iam_portal_account WHERE id=?",otherAccount,otherSupplier,f.account());
+        var other=auth.login(new PortalAuthModels.Login(f.code(),"other.user","Portal#Pass123"));
+        var application=prepareExit(f);var closed=approveExit(f,application);
+        assertThat(closed.status()).isEqualTo("BUSINESS_CLOSED");assertThat(closed.result().accessRecoveryStatus()).isEqualTo("NOT_VERIFIED");
+        assertThat(closed.events()).anySatisfy(event->{assertThat(event.action()).isEqualTo("LOCAL_PORTAL_RECOVERY");assertThat(event.comment()).contains("处理账号 101","撤销会话记录 2","撤销有效未消费邀请 1");});
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=? AND supplier_id=? AND status='DISABLED' AND version=1 AND token_version=1",Long.class,f.tenant(),f.supplier())).isEqualTo(101);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY'",Long.class,f.tenant())).isEqualTo(101);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=? AND supplier_id=? AND status='REVOKED' AND revoked_by=10",Long.class,f.tenant(),f.supplier())).isEqualTo(1);
+        me(token,401);me(other.accessToken(),200);
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=exitGrants()){
+            assertThat(archives.get(f.supplier(),Long.parseLong(application.id())).integrityVerified()).isTrue();
+        }
+        // Counterfactual isolated-DB restore proves permanent revocation, not just the EXITED gate.
+        jdbc.update("UPDATE sup_supplier SET status='DRAFT' WHERE id=?",f.supplier());me(token,401);
+        assertThatThrownBy(()->registrations.register(new PortalRegistrationModels.Register(invitation,"Cannot.Rejoin","Portal#Pass123"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThatThrownBy(()->approveExit(f,application)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+    }
+    @Test void exitAuditFailureRollsBackAccountsInvitationsApprovalAndArchive()throws Exception{
+        var f=fixture();String token=login(f).accessToken();pendingInvite(f);var application=prepareExit(f);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='SUPPLIER_EXIT_BUSINESS_CLOSE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected exit final audit failure'; END IF; END");
+        try{assertThatThrownBy(()->approveExit(f,application)).isInstanceOf(RuntimeException.class).hasStackTraceContaining("injected exit final audit failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT status FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("DRAFT");
+        assertThat(jdbc.queryForObject("SELECT status FROM sup_exit_application WHERE id=?",String.class,Long.parseLong(application.id()))).isEqualTo("SUBMITTED");
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE account_id=? AND revoked_at IS NULL",Long.class,f.account())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=? AND supplier_id=? AND status='PENDING'",Long.class,f.tenant(),f.supplier())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_exit_result WHERE application_id=?",Long.class,Long.parseLong(application.id()))).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_exit_archive WHERE application_id=?",Long.class,Long.parseLong(application.id()))).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_exit_access_recovery_task WHERE application_id=?",Long.class,Long.parseLong(application.id()))).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_exit_event WHERE application_id=? AND action='LOCAL_PORTAL_RECOVERY'",Long.class,Long.parseLong(application.id()))).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY'",Long.class,f.tenant())).isZero();
+        approveExit(f,application);me(token,401);
+    }
+    @Test void cancellingOrRejectingExitNeverPermanentlyRecoversLocalAccounts()throws Exception{
+        for(boolean reject:List.of(false,true)){
+            var f=fixture();String token=login(f).accessToken();pendingInvite(f);var application=prepareExit(f);
+            assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+            try(var tenant=TenantContext.open(f.tenant(),reject?10:9);var grants=exitGrants()){
+                if(reject)exits.review(f.supplier(),Long.parseLong(application.id()),new ExitModels.Review(ExitModels.Decision.REJECT,"继续合作",application.version()));
+                else exits.cancel(f.supplier(),Long.parseLong(application.id()),new ExitModels.Version(application.version()));
+            }
+            me(token,200);
+            assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE id=?",String.class,f.account())).isEqualTo("ACTIVE");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=? AND supplier_id=? AND status='PENDING'",Long.class,f.tenant(),f.supplier())).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY'",Long.class,f.tenant())).isZero();
+        }
     }
     void install(String trigger)throws Exception{var result=MYSQL.execInContainer("mysql","--delimiter=//","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e",trigger+"//");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}
     void drop()throws Exception{var result=MYSQL.execInContainer("mysql","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e","DROP TRIGGER portal_auth_audit_failure");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}

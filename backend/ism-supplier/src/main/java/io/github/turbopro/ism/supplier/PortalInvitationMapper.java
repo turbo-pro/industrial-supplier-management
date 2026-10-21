@@ -24,4 +24,6 @@ public interface PortalInvitationMapper extends TenantScopedMapper {
     int insert(long id,long tenantId,long supplierId,int generation,String name,String email,String hash,int hours,long actorId);
     @Update("UPDATE sup_portal_invitation SET status='REVOKED',revoked_by=#{actorId},revoked_at=UTC_TIMESTAMP(3),revoke_reason=#{reason},version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} AND version=#{version} AND status='PENDING' AND expires_at>UTC_TIMESTAMP(3)")
     int revoke(long tenantId,long supplierId,long id,int version,long actorId,String reason);
+    @Update("UPDATE sup_portal_invitation SET status='REVOKED',revoked_by=#{actorId},revoked_at=UTC_TIMESTAMP(3),revoke_reason=#{reason},version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='PENDING' AND expires_at>UTC_TIMESTAMP(3)")
+    int revokeForExit(long tenantId,long supplierId,long actorId,String reason);
 }

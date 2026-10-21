@@ -11,4 +11,7 @@ public interface PortalAccountAdministration {
     enum Action { ENABLE, DISABLE, REVOKE_SESSIONS }
     Page list(long supplierId, int page, int size);
     Account change(long supplierId, long accountId, int version, Action action, String reason);
+    record ExitRecovery(long accounts, long revokedSessions) {}
+    /** Approval-only internal call. Caller holds the supplier lock and owns the exit transaction. */
+    ExitRecovery recoverForExit(long supplierId, long applicationId);
 }

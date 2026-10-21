@@ -1038,7 +1038,8 @@ class B0InfrastructureIT {
                     assertThat(archive.entityCount()).isOne();
                     jdbcTemplate.update("UPDATE sup_exit_event SET comment=CONCAT(comment,'!') WHERE tenant_id=? AND application_id=? AND action='BUSINESS_CLOSE'",tenantId,finalExitId);
                     assertThat(exitArchiveService.get(supplierId,finalExitId).integrityVerified()).isFalse();
-                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","ENTITY_DEADLINE","ENTITY_REMIND","AUTO_ENTITY_REMIND","RECHECK","BUSINESS_CLOSE");
+                    assertThat(closed.events()).extracting(io.github.turbopro.ism.supplier.ExitModels.Event::action).containsExactly("SUBMIT","RECHECK","ENTITY_ASSIGN","ENTITY_DEADLINE","ENTITY_REMIND","AUTO_ENTITY_REMIND","RECHECK","LOCAL_PORTAL_RECOVERY","BUSINESS_CLOSE");
+                    assertThat(closed.events()).filteredOn(event->event.action().equals("LOCAL_PORTAL_RECOVERY")).singleElement().satisfies(event->assertThat(event.comment()).contains("处理账号 0","撤销会话记录 0","撤销有效未消费邀请 0"));
                     assertThat(exitApplicationService.list(supplierId,0,20).total()).isEqualTo(3);
                     assertThatThrownBy(()->exitApplicationService.review(supplierId,finalExitId,new io.github.turbopro.ism.supplier.ExitModels.Review(io.github.turbopro.ism.supplier.ExitModels.Decision.APPROVE,"重复",closed.version()))).isInstanceOf(ApiException.class);
                 }

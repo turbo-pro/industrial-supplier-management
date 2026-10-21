@@ -252,7 +252,7 @@ async function act(row:Application,action:'recheck'|'cancel'){
 async function review(row:Application,decision:'APPROVE'|'REJECT'){
   if(!props.supplier)return;
   try{
-    const comment=(await ElMessageBox.prompt(decision==='APPROVE'?'批准将不可逆关闭本地业务；外部账号及门禁仍标记为未核验。请填写审批意见':'请填写驳回原因','独立退出审批',{inputValidator:(value:string)=>!!value.trim()||'审批意见不能为空'})).value;
+    const comment=(await ElMessageBox.prompt(decision==='APPROVE'?'批准将不可逆关闭本地业务，并停用全部本地门户账号、撤销其会话及有效未消费邀请；其他外部账号及门禁仍未核验。请填写审批意见':'请填写驳回原因','独立退出审批',{inputValidator:(value:string)=>!!value.trim()||'审批意见不能为空'})).value;
     busy.value=true;
     const {error}=await session.client.POST('/suppliers/{supplierId}/exit-applications/{id}/review',{
       params:{path:{supplierId:props.supplier.id,id:row.id}},body:{decision,comment,version:row.version}
@@ -312,7 +312,7 @@ watch(()=>[props.modelValue,props.supplier?.id],()=>{requestVersion++;failureReq
             <el-table-column label="操作" width="320"><template #default="{row:entity}"><router-link :to="entity.route">业务入口</router-link><template v-if="row.status==='SUBMITTED'&&entity.state==='OPEN'"><el-button link type="primary" :disabled="busy" @click="openAssign(row,entity)">责任/说明</el-button><el-button link :disabled="busy" @click="openDeadline(row,entity)">期限</el-button><el-button link type="warning" :disabled="busy||!entity.assigneeId" @click="remind(row,entity)">催办</el-button></template></template></el-table-column>
           </el-table>
           <el-pagination :current-page="(entityPages[row.id]?.page??0)+1" :total="entityPages[row.id]?.total??row.entityTotal" :page-size="20" layout="total, prev, pager, next" :disabled="busy||!!entityPages[row.id]?.loading" @current-change="(value:number)=>loadEntities(row,value-1)"/>
-          <el-timeline style="margin-top:16px"><el-timeline-item v-for="event in row.events" :key="event.id" :timestamp="event.createdAt">{{event.action==='AUTO_ENTITY_REMIND'?'自动催办':event.action}} · 操作人 {{event.actorId==='0'?'系统任务':event.actorId}} · {{event.comment}}</el-timeline-item></el-timeline>
+          <el-timeline style="margin-top:16px"><el-timeline-item v-for="event in row.events" :key="event.id" :timestamp="event.createdAt">{{event.action==='LOCAL_PORTAL_RECOVERY'?'本地门户回收':event.action==='AUTO_ENTITY_REMIND'?'自动催办':event.action}} · 操作人 {{event.actorId==='0'?'系统任务':event.actorId}} · {{event.comment}}</el-timeline-item></el-timeline>
         </template>
       </el-table-column>
       <el-table-column label="类型" width="90"><template #default="{row}">{{row.type==='NORMAL'?'正常退出':'淘汰'}}</template></el-table-column>

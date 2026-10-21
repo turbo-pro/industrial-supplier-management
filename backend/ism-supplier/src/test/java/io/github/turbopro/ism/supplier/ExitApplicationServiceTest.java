@@ -19,7 +19,9 @@ class ExitApplicationServiceTest {
     final ExitAssigneeVerifier assignees=mock(ExitAssigneeVerifier.class);
     final ExitAssignmentNotifier notifications=mock(ExitAssignmentNotifier.class);
     final ExitArchiveService archives=mock(ExitArchiveService.class);
-    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees,notifications,archives);}
+    final io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration accounts=mock(io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.class);
+    final PortalInvitationMapper invitations=mock(PortalInvitationMapper.class);
+    ExitApplicationService service(List<SupplierExitCheck> checks){return new ExitApplicationService(mapper,suppliers,scope,evidence,checks,ids,mock(AuditService.class),assignees,notifications,archives,accounts,invitations);}
     void setup(){
         when(suppliers.findForNewBusiness(10,30)).thenReturn(current);when(current.status()).thenReturn("ACTIVE");
         when(current.organizationId()).thenReturn(20L);when(current.createdBy()).thenReturn(7L);
@@ -108,6 +110,7 @@ class ExitApplicationServiceTest {
         assertThrows(ApiException.class,()->service(List.of(id->ExitReadinessEvaluatorTest.clear())).review(30,90,approve()));
     }verify(mapper,never()).insertResult(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyString());}
     @Test void approvalSeparatesLocalClosureFromExternalRecovery(){setup();when(suppliers.completeExit(10,8,30,0)).thenReturn(1);
+        when(accounts.recoverForExit(30,90)).thenReturn(new io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.ExitRecovery(2,3));
         when(mapper.insertAccessRecoveryTask(anyLong(),eq(10L),eq(90L),eq(30L),anyString(),eq(8L))).thenReturn(1);
         when(mapper.finish(10,30,90,"BUSINESS_CLOSED","核验通过",8,0)).thenReturn(1);
         when(mapper.get(10,30,90)).thenReturn(row("SUBMITTED",0),row("BUSINESS_CLOSED",1));
@@ -115,6 +118,7 @@ class ExitApplicationServiceTest {
         try(var t=TenantContext.open(10,8);var a=auth()){assertEquals("BUSINESS_CLOSED",service(List.of(id->ExitReadinessEvaluatorTest.clear())).review(30,90,approve()).status());}
         verify(suppliers).completeExit(10,8,30,0);verify(mapper).insertResult(100,10,90,30,8,"核验通过");
         verify(archives).seal(30,90);
+        verify(accounts).recoverForExit(30,90);verify(invitations).revokeForExit(10,30,8,"退出申请 #90 批准后自动撤销");
         for(String channel:List.of("PORTAL_ACCOUNT","DOOR_ACCESS","API_CREDENTIAL"))
             verify(mapper).insertAccessRecoveryTask(100,10,90,30,channel,8);
     }
