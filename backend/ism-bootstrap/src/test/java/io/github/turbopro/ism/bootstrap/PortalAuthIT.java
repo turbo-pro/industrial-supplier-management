@@ -31,6 +31,7 @@ class PortalAuthIT {
     @Autowired PortalAccountManagementService administration;
     @Autowired ExitApplicationService exits;
     @Autowired ExitArchiveService archives;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -197,6 +198,63 @@ class PortalAuthIT {
         try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
             return invites.issue(f.supplier(),new PortalInvitationModels.Issue(1,"新联系人","next@example.test",24)).token();
         }
+    }
+    @Test void registrationAndLoginWaitForExitCommitAndCannotLeakAccess()throws Exception{
+        for(boolean register:List.of(false,true))exitContention(register,false);
+    }
+    @Test void registrationAndLoginWaitForExitRollbackAndRecoverOnlyAfterCancellation()throws Exception{
+        for(boolean register:List.of(false,true))exitContention(register,true);
+    }
+    void exitContention(boolean register,boolean rollback)throws Exception{
+        var f=fixture();String oldToken=login(f).accessToken();String invitation=pendingInvite(f);var application=prepareExit(f);
+        var prepared=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        try{
+            var approval=pool.submit(()->new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status->{
+                approveExit(f,application);prepared.countDown();
+                try{if(!release.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("approval release timed out");}
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
+                if(rollback)status.setRollbackOnly();return true;
+            }));
+            assertThat(prepared.await(15,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var request=pool.submit(()->{
+                assertThatThrownBy(()->{
+                    if(register)registrations.register(new PortalRegistrationModels.Register(invitation,"Concurrent.User","Portal#Pass123"));
+                    else login(f);
+                }).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+                return true;
+            });
+            // Observe an actual InnoDB supplier-row wait, not a timing-only Future assertion.
+            try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement()){
+                long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);boolean waiting=false;
+                while(System.nanoTime()<deadline){
+                    try(var rows=statement.executeQuery("SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA='portal_auth' AND l.OBJECT_NAME='sup_supplier'")){
+                        rows.next();if(rows.getLong(1)>0){waiting=true;break;}
+                    }
+                    Thread.sleep(25);
+                }
+                assertThat(waiting).as("portal request must wait for the exit supplier lock").isTrue();
+            }
+            assertThat(request.isDone()).isFalse();release.countDown();
+            assertThat(approval.get(15,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(request.get(15,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=? AND revoked_at IS NULL",Long.class,f.tenant())).isEqualTo(rollback?1:0);
+            if(rollback){
+                me(oldToken,401); // Pending exit still blocks access despite rollback of approval.
+                try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+                    exits.cancel(f.supplier(),Long.parseLong(application.id()),new ExitModels.Version(application.version()));
+                }
+                me(oldToken,200);
+                if(register)registrations.register(new PortalRegistrationModels.Register(invitation,"Concurrent.User","Portal#Pass123"));
+                else login(f);
+            }else{
+                me(oldToken,401);
+                assertThat(jdbc.queryForObject("SELECT status FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("EXITED");
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=? AND status='REVOKED'",Long.class,f.tenant())).isEqualTo(1);
+            }
+        }finally{release.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(20,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
     }
     @Test void approvedExitRecoversEveryLocalAccountAndInvitationWithoutClaimingExternalSuccess()throws Exception{
         var f=fixture();String token=login(f).accessToken();login(f);String invitation=pendingInvite(f);
