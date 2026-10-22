@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 const [control, url, adminUrl, scenario] = process.argv.slice(2);
-if(scenario && !['management','exit'].includes(scenario))throw new Error('Unknown portal browser scenario');
+if(scenario && !['management','exit','password'].includes(scenario))throw new Error('Unknown portal browser scenario');
 if (adminUrl && !/^http:\/\/127\.0\.0\.1:\d+$/.test(adminUrl)) throw new Error('Loopback admin URL required');
 if (!control || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url ?? '') || !existsSync(join(control, 'ready'))) throw new Error('Active loopback fixture required');
 const token = readFileSync(join(control, 'invitation'), 'utf8').trim();
@@ -16,7 +16,7 @@ function cli(args, quiet = false) {
   if (!quiet) process.stdout.write(result.stdout ?? '');
   if (result.error || result.status !== 0 || /### Error/.test(result.stdout ?? '')) {
     const detail=(result.stdout?.split('### Error')[1]?.split('### ')[0] || result.error?.message || 'nonzero exit')
-      .replaceAll(token,'[redacted]').replaceAll('Employee#Pass123','[redacted]').replaceAll('Portal#Pass123','[redacted]').slice(0,1500);
+      .replaceAll(token,'[redacted]').replaceAll('Employee#Pass123','[redacted]').replaceAll('Portal#Pass123','[redacted]').replaceAll('Changed#Pass456','[redacted]').slice(0,1500);
     throw new Error(`Browser command ${args[0]} failed; ${detail}`);
   }
 }
@@ -24,6 +24,7 @@ try {
   cli(['open', url, '--browser', 'chrome']);
   cli(['snapshot']);
   cli(['run-code', '--filename', script], true);
+  if(scenario==='password')cli(['run-code','--filename','scripts/browser/portal-real-password.js'],true);
   if(adminUrl){
     const managementScript = join(control,'portal-management-flow.js');
     writeFileSync(managementScript,readFileSync(scenario==='exit'?'scripts/browser/portal-real-exit.js':'scripts/browser/portal-real-management.js','utf8').replaceAll('__ADMIN_URL__',adminUrl),{mode:0o600});

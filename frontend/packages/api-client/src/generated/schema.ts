@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Portal bearer only. Rechecks tenant, supplier, account and current session inside the write transaction. Verifies current password; wrong attempts share the login five-attempt/15-minute lock. New password must differ and contain upper/lower/digit/symbol, maximum 72 UTF-8 bytes. Password, management/token versions, revocation of ALL sessions and audit commit atomically. Success requires a fresh login; never issues a replacement token. No email recovery or administrator reset. */
+        post: operations["changeSupplierPortalPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/auth/register": {
         parameters: {
             query?: never;
@@ -6180,6 +6197,36 @@ export interface operations {
                     "application/json": components["schemas"]["EmptyResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    changeSupplierPortalPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    currentPassword: string;
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Password changed and all sessions revoked; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };

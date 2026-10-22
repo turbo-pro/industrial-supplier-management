@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--portal','--portal-management','--portal-exit'].includes(arg)))
-  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--portal | --portal-management | --portal-exit]');
+if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--portal','--portal-management','--portal-exit','--portal-password'].includes(arg)))
+  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--portal | --portal-management | --portal-exit | --portal-password]');
+const password = process.argv.includes('--portal-password');
 const exit = process.argv.includes('--portal-exit');
 const management = process.argv.includes('--portal-management') || exit;
-const portal = process.argv.includes('--portal') || management;
-const scenario = exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
+const portal = process.argv.includes('--portal') || management || password;
+const scenario = password ? 'portal-password' : exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
 const fixture = portal ? 'PortalBrowserFixture' : 'ConsoleReminderBrowserFixture';
 const control = mkdtempSync(join(tmpdir(), portal ? 'ism-portal-e2e-' : 'ism-reminder-e2e-'));
 const artifacts = join(root, 'output/playwright', `${scenario}-e2e-${Date.now()}`);
@@ -70,7 +71,7 @@ try {
   console.log(`[artifacts] ${artifacts}`);
   const backend = start('backend', join(root, 'mvnw'), ['--batch-mode', '--no-transfer-progress', '-q', '-pl', 'backend/ism-bootstrap', '-am',
     '-Pintegration-test', `-Dit.test=${fixture}`, '-Dism.browser.recovery=true', `-Dism.browser.portal-management=${management}`, `-Dism.browser.portal-exit=${exit}`,
-    `-Dism.browser.fixture-dir=${control}`, '-Dfailsafe.failIfNoSpecifiedTests=false', 'verify']);
+    `-Dism.browser.portal-password=${password}`, `-Dism.browser.fixture-dir=${control}`, '-Dfailsafe.failIfNoSpecifiedTests=false', 'verify']);
   await until(() => existsSync(join(control, 'ready')), backend, 360_000);
   const target = readFileSync(join(control, 'ready'), 'utf8').trim();
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(target)) throw new Error('Invalid isolated backend URL');
@@ -87,9 +88,9 @@ try {
     const admin = start('admin-frontend', 'corepack', ['pnpm','--filter','@ism/admin','dev','--host','127.0.0.1','--port',new URL(adminUrl).port,'--strictPort'], { ISM_DEV_API_TARGET: target });
     await until(async () => {try{return (await fetch(adminUrl,{signal:AbortSignal.timeout(1000)})).ok;}catch{return false;}},admin,60_000);
   }
-  console.log(exit ? '[run] real independent exit approval and portal access recovery' : management ? '[run] real employee management and portal session invalidation' : portal ? '[run] real portal registration/login/me/logout' : '[run] real browser failure/recovery/readonly checks');
+  console.log(password ? '[run] real portal password change and all-session revocation' : exit ? '[run] real independent exit approval and portal access recovery' : management ? '[run] real employee management and portal session invalidation' : portal ? '[run] real portal registration/login/me/logout' : '[run] real browser failure/recovery/readonly checks');
   const browser = portal
-    ? start('browser', process.execPath, ['scripts/verify-portal-browser.mjs', control, frontendUrl, adminUrl, exit ? 'exit' : 'management'])
+    ? start('browser', process.execPath, ['scripts/verify-portal-browser.mjs', control, frontendUrl, adminUrl, password ? 'password' : exit ? 'exit' : 'management'])
     : start('browser', 'bash', ['scripts/verify-reminder-browser.sh', control, frontendUrl]);
   await waitExit(browser, 180_000);
   await waitExit(backend, 60_000);

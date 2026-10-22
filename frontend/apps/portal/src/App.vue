@@ -12,6 +12,11 @@ const form = reactive({ tenantCode: '', username: '', password: '', invitationTo
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
+const changingPassword = ref(false);
+const passwordVisible = ref(false);
+const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmation: '' });
+function clearPasswordForm() { passwordForm.currentPassword = ''; passwordForm.newPassword = ''; passwordForm.confirmation = ''; passwordVisible.value = false; }
+function togglePasswordForm() { clearPasswordForm(); changingPassword.value = !changingPassword.value; error.value = ''; notice.value = ''; }
 const errorPanel = ref<HTMLElement>();
 async function fail(message: string) { error.value = message; await nextTick(); errorPanel.value?.focus(); }
 function switchMode() {
@@ -60,8 +65,8 @@ async function refreshIdentity() {
   try {
     const result = await client.GET('/portal/auth/me');
     if (result.data) { identity.value = result.data.data; notice.value = '当前身份已由服务器重新确认。'; }
-    else if (result.response.status === 401) { accessToken = undefined; identity.value = undefined; await fail('会话已失效，请重新登录。'); }
-    else { identity.value = undefined; accessToken = undefined; await fail(responseError(result.response.status)); }
+    else if (result.response.status === 401) { accessToken = undefined; identity.value = undefined; changingPassword.value = false; clearPasswordForm(); await fail('会话已失效，请重新登录。'); }
+    else { identity.value = undefined; accessToken = undefined; changingPassword.value = false; clearPasswordForm(); await fail(responseError(result.response.status)); }
   } catch { await fail('无法确认当前身份，请检查连接后重试。当前显示的是上次成功确认的信息。'); }
   finally { busy.value = false; }
 }
@@ -71,10 +76,35 @@ async function logout() {
   try {
     const result = await client.POST('/portal/auth/logout');
     if (!result.response.ok && result.response.status !== 401) return await fail('退出未确认，请重试。当前会话尚未确认撤销。');
-    accessToken = undefined; identity.value = undefined;
+    accessToken = undefined; identity.value = undefined; changingPassword.value = false; clearPasswordForm();
     notice.value = '已退出当前会话。其他设备的登录不受影响。';
   } catch { await fail('网络异常，退出未确认。请恢复连接后重试退出。'); }
   finally { busy.value = false; }
+}
+async function changePassword() {
+  if (busy.value) return;
+  error.value = ''; notice.value = '';
+  const { currentPassword, newPassword, confirmation } = passwordForm;
+  if (newPassword !== confirmation) return fail('两次新密码不一致，请重新确认。');
+  if (newPassword === currentPassword) return fail('新密码不能与原密码相同。');
+  if (newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)
+      || new TextEncoder().encode(newPassword).length > 72 || new TextEncoder().encode(currentPassword).length > 72) return fail('新密码至少 12 位，包含大小写字母、数字和符号，且密码不能超过 72 个 UTF-8 字节。');
+  busy.value = true;
+  try {
+    const result = await client.POST('/portal/auth/password', { body: { currentPassword, newPassword } });
+    if (result.response.ok) {
+      accessToken = undefined; identity.value = undefined; changingPassword.value = false; mode.value = 'login';
+      notice.value = '密码已修改，所有设备的旧会话均已撤销。请使用新密码重新登录。';
+    } else if (result.response.status === 401) {
+      accessToken = undefined; identity.value = undefined; changingPassword.value = false;
+      await fail('会话已失效，未确认密码变更。请重新登录后核查。');
+    } else if (result.response.status === 422) await fail('原密码不正确、账号暂时锁定，或新密码不符合要求。原密码连续错误 5 次将锁定密码操作及登录 15 分钟，请勿反复尝试。');
+    else await fail(responseError(result.response.status));
+  } catch {
+    // The server may have committed even if its response was lost. Do not replay a password mutation.
+    accessToken = undefined; identity.value = undefined; changingPassword.value = false;
+    await fail('网络异常，密码修改结果未确认，已清除本页会话。请先用新密码登录核查；不要重复提交改密。');
+  } finally { clearPasswordForm(); busy.value = false; }
 }
 onMounted(() => { document.title = '供应商协作门户 · ISM'; });
 </script>
@@ -91,6 +121,18 @@ onMounted(() => { document.title = '供应商协作门户 · ISM'; });
         <dl><dt>用户名</dt><dd>{{ identity.username }}</dd><dt>账号 ID</dt><dd>{{ identity.accountId }}</dd><dt>租户 ID</dt><dd>{{ identity.tenantId }}</dd><dt>供应商 ID</dt><dd>{{ identity.supplierId }}</dd></dl>
         <p class="help">此页仅确认账号绑定，不代表准入审批通过。资料提交及业务协同尚未开放。</p>
         <div class="actions"><button :disabled="busy" @click="refreshIdentity">重新确认身份</button><button class="secondary" :disabled="busy" @click="logout">退出当前会话</button></div>
+        <button class="switch" :disabled="busy" :aria-expanded="changingPassword" aria-controls="password-settings" @click="togglePasswordForm">{{ changingPassword ? '取消修改密码' : '修改我的密码' }}</button>
+        <form v-if="changingPassword" id="password-settings" @submit.prevent="changePassword">
+          <h2>修改密码</h2>
+          <p id="change-password-help" class="help">成功后所有设备均须重新登录。至少 12 位，包含大小写字母、数字和符号，最多 72 个 UTF-8 字节。原密码连续错误 5 次锁定密码操作及登录 15 分钟。</p>
+          <fieldset :disabled="busy">
+            <label>原密码<input v-model="passwordForm.currentPassword" required :type="passwordVisible ? 'text' : 'password'" maxlength="72" autocomplete="current-password"></label>
+            <label>新密码<input v-model="passwordForm.newPassword" required :type="passwordVisible ? 'text' : 'password'" minlength="12" maxlength="72" autocomplete="new-password" aria-describedby="change-password-help"></label>
+            <label>确认新密码<input v-model="passwordForm.confirmation" required :type="passwordVisible ? 'text' : 'password'" minlength="12" maxlength="72" autocomplete="new-password"></label>
+            <button class="secondary" type="button" :aria-pressed="passwordVisible" @click="passwordVisible = !passwordVisible">{{ passwordVisible ? '隐藏密码' : '显示密码' }}</button>
+            <button class="primary" type="submit">{{ busy ? '正在处理…' : '确认修改并退出所有会话' }}</button>
+          </fieldset>
+        </form>
       </template>
       <template v-else>
         <h2>{{ mode === 'login' ? '账号登录' : '邀请注册' }}</h2>

@@ -65,6 +65,31 @@ public class PortalAuthService {
                 audit.append(new AuditService.AuditCommand("PORTAL_LOGOUT","PORTAL_ACCOUNT",principal.accountId(),null,Map.of(),Map.of("sessionId",principal.sessionId()),null,null));
         }});
     }
+    public void changePassword(PortalAuthModels.Principal principal,PortalAuthModels.ChangePassword command){
+        requireEnabled();
+        if(!io.github.turbopro.ism.iam.auth.PasswordPolicy.isStrong(command.newPassword())
+                || command.newPassword().getBytes(StandardCharsets.UTF_8).length>72)
+            throw new ApiException(CommonErrorCode.RULE_BLOCKED,"新密码至少12位，包含大小写字母、数字和符号，且不超过72个UTF-8字节");
+        if(command.currentPassword()==null || command.currentPassword().getBytes(StandardCharsets.UTF_8).length>72)
+            throw new ApiException(CommonErrorCode.RULE_BLOCKED,"原密码不正确或账号暂时锁定");
+        boolean changed=Boolean.TRUE.equals(tx.execute(status->{try(var context=TenantContext.open(principal.tenantId(),principal.accountId())){
+            gates(principal.tenantId(),principal.supplierId());
+            var account=accounts.lock(principal.tenantId(),principal.accountId());
+            var session=accounts.lockOwnSession(principal.tenantId(),principal.sessionId(),principal.accountId());
+            // Recheck inside the write transaction: filter authentication may precede a concurrent revocation.
+            if(account==null || account.supplierId()!=principal.supplierId() || !"ACTIVE".equals(account.status())
+                    || session==null || !session.valid() || session.tokenVersion()!=account.tokenVersion())throw invalid();
+            if(account.locked())return false;
+            if(!passwords.matches(command.currentPassword(),account.passwordHash())){accounts.failure(principal.tenantId(),account.id());return false;}
+            if(passwords.matches(command.newPassword(),account.passwordHash()))throw new ApiException(CommonErrorCode.RULE_BLOCKED,"新密码不能与原密码相同");
+            accounts.changePassword(principal.tenantId(),account.id(),passwords.encode(command.newPassword()));
+            int revoked=accounts.revokeAll(principal.tenantId(),account.id());
+            audit.append(new AuditService.AuditCommand("PORTAL_PASSWORD_CHANGE","PORTAL_ACCOUNT",account.id(),null,Map.of(),Map.of("revokedSessions",revoked),null,null));
+            return true;
+        }}));
+        // Commit failed-password counters, but never commit a partial password/session/audit change.
+        if(!changed)throw new ApiException(CommonErrorCode.RULE_BLOCKED,"原密码不正确或账号暂时锁定，请稍后再试");
+    }
     private void gates(long tenantId,long supplierId){
         try{tenants.lockAvailable(tenantId);suppliers.lockAvailable(supplierId);if(!"ACTIVE".equals(identity.status(tenantId)))throw invalid();}
         catch(ApiException unavailable){throw invalid();}

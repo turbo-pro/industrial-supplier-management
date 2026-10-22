@@ -10,6 +10,10 @@
 
 构建 `corepack pnpm --filter @ism/portal build`。Node >=20.19、pnpm 10.17.1。
 
+登录后可展开“修改我的密码”，校验原密码并设置新密码；成功后所有设备旧会话撤销，必须重新登录。原密码错误与登录共享 5 次/15 分钟锁定。网络结果未知不自动重试，先使用新密码核查。当前没有邮箱/短信找回密码或管理员重置门户密码。
+
+真实改密验收：`node scripts/verify-reminder-e2e.mjs --portal-password`，独立库核对密码哈希、版本、全部会话撤销及本人审计。详细范围见 `docs/development/supplier-portal-password-review.md`。
+
 页面模拟验收：启动后使用 Playwright CLI 打开专用会话，再从仓库根目录执行 `run-code --filename scripts/browser/portal-auth-ui.js`。它不建立真实账号，不是服务端 E2E。详见 `docs/development/supplier-portal-ui-review.md`。
 
 真实联合验收：JDK 17+、Docker、上述 Node/pnpm 及 Chrome 可用时，在根目录执行 `node scripts/verify-reminder-e2e.mjs --portal`。命令启动 Testcontainers 独立 MySQL、随机端口后端与门户，跑真实浏览器，再核对数据库；只有两者通过才退出 0。清理自己创建的临时控制目录和进程，日志保留在 `output/playwright/portal-e2e-*`，不接触旧开发库。CI 安装 Chrome 可使用 `pnpm --filter @ism/console exec playwright install --with-deps chrome`（复用已有工具依赖）。

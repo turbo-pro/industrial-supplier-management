@@ -11,6 +11,10 @@ public final class PortalAuthModels {
         @Override public String toString(){return "PortalLogin[credentials=REDACTED]";}
     }
     public record User(String accountId,String tenantId,String supplierId,String username,String displayName) {}
+    public record ChangePassword(@NotBlank @Size(max=72) String currentPassword,
+                                 @NotBlank @Size(min=12,max=72) String newPassword) {
+        @Override public String toString(){return "PortalChangePassword[credentials=REDACTED]";}
+    }
     public record Session(User user,String accessToken,LocalDateTime expiresAt) {
         @Override public String toString(){return "PortalSession[token=REDACTED]";}
     }

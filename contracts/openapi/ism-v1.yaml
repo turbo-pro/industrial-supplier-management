@@ -112,6 +112,27 @@ paths:
         '200': { description: Revoked; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/auth/password:
+    post:
+      operationId: changeSupplierPortalPassword
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      description: Portal bearer only. Rechecks tenant, supplier, account and current session inside the write transaction. Verifies current password; wrong attempts share the login five-attempt/15-minute lock. New password must differ and contain upper/lower/digit/symbol, maximum 72 UTF-8 bytes. Password, management/token versions, revocation of ALL sessions and audit commit atomically. Success requires a fresh login; never issues a replacement token. No email recovery or administrator reset.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1, maxLength: 72, writeOnly: true }
+                newPassword: { type: string, minLength: 12, maxLength: 72, writeOnly: true }
+      responses:
+        '200': { description: Password changed and all sessions revoked; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /portal/auth/register:
     post:
       operationId: registerSupplierPortalAccount

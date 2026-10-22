@@ -52,6 +52,52 @@ class PortalAuthIT {
     PortalAuthModels.Session login(Fixture f){return auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Portal#Pass123"));}
     void me(String token,int expected)throws Exception{mvc.perform(get("/api/portal/auth/me").header("Authorization","Bearer "+token)).andExpect(status().is(expected));}
 
+    @Test void passwordChangeRevokesEverySessionAndRequiresNewPassword()throws Exception{
+        var f=fixture();var first=login(f);var second=login(f);
+        mvc.perform(post("/api/portal/auth/password").header("Authorization","Bearer "+first.accessToken()).contentType("application/json")
+                .content("{\"currentPassword\":\"Portal#Pass123\",\"newPassword\":\"Changed#Pass456\"}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        me(first.accessToken(),401);me(second.accessToken(),401);
+        assertThatThrownBy(()->login(f)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        var fresh=auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Changed#Pass456"));me(fresh.accessToken(),200);
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE account_id=? AND revoked_at IS NOT NULL",Long.class,f.account())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_PASSWORD_CHANGE'",Long.class,f.tenant())).isEqualTo(1);
+        assertThat(new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456").toString()).doesNotContain("Pass123","Pass456");
+        mvc.perform(post("/api/portal/auth/password").contentType("application/json").content("{\"currentPassword\":\"Portal#Pass123\",\"newPassword\":\"Changed#Pass456\"}")).andExpect(status().isUnauthorized());
+    }
+    @Test void passwordChangeValidatesStrengthAndPersistsWrongPasswordLockout()throws Exception{
+        var f=fixture();String token=login(f).accessToken();var principal=auth.authenticate(token);
+        for(String password:List.of("weak","Portal#Pass123","Aa1!"+"中".repeat(24))){
+            assertThatThrownBy(()->auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123",password))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        assertThat(jdbc.queryForObject("SELECT failed_count FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        for(int i=0;i<5;i++)assertThatThrownBy(()->auth.changePassword(principal,new PortalAuthModels.ChangePassword("Incorrect#Pass123","Changed#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT failed_count FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(5);
+        assertThatThrownBy(()->auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        me(token,200);
+        jdbc.update("UPDATE iam_portal_account SET locked_until=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE id=?",f.account());
+        auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456"));me(token,401);
+    }
+    @Test void passwordChangeRechecksSessionAfterFilterAuthentication(){
+        var f=fixture();var principal=auth.authenticate(login(f).accessToken());
+        manage(f,0,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);
+        assertThatThrownBy(()->auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_PASSWORD_CHANGE'",Long.class,f.tenant())).isZero();
+        login(f);
+    }
+    @Test void passwordAuditFailureRollsBackPasswordVersionsAndAllSessions()throws Exception{
+        var f=fixture();String first=login(f).accessToken();String second=login(f).accessToken();var principal=auth.authenticate(first);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_PASSWORD_CHANGE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected password audit failure'; END IF; END");
+        try{assertThatThrownBy(()->auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456"))).isInstanceOf(RuntimeException.class).hasStackTraceContaining("injected password audit failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        me(first,200);me(second,200);login(f);
+        auth.changePassword(principal,new PortalAuthModels.ChangePassword("Portal#Pass123","Changed#Pass456"));me(first,401);me(second,401);
+    }
+
     @Test void httpLoginReturnsBoundIdentityAndCannotCrossInternalRealms()throws Exception{
         var f=fixture();var response=mvc.perform(post("/api/portal/auth/login").contentType("application/json").content("{\"tenantCode\":\""+f.code()+"\",\"username\":\"PORTAL.USER\",\"password\":\"Portal#Pass123\"}"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.user.accountId").value(Long.toString(f.account()))).andReturn();
