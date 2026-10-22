@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [console-reminder, portal-auth, portal-management]
+        scenario: [console-reminder, portal-auth, portal-management, portal-exit]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -80,7 +80,9 @@ jobs:
         env:
           SCENARIO: ${{ matrix.scenario }}
         run: |
-          if [ "$SCENARIO" = portal-management ]; then
+          if [ "$SCENARIO" = portal-exit ]; then
+            node scripts/verify-reminder-e2e.mjs --portal-exit
+          elif [ "$SCENARIO" = portal-management ]; then
             node scripts/verify-reminder-e2e.mjs --portal-management
           elif [ "$SCENARIO" = portal-auth ]; then
             node scripts/verify-reminder-e2e.mjs --portal

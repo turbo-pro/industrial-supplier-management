@@ -1,0 +1,93 @@
+async page=>{
+  const writer=await page.context().newPage(),reviewer=await page.context().newPage();
+  const employee=async(tab,username)=>{
+    await tab.goto('__ADMIN_URL__/');await tab.locator('body').ariaSnapshot();
+    await tab.getByRole('textbox',{name:'租户编码',exact:true}).fill('PORTAL-BROWSER');
+    await tab.getByRole('textbox',{name:'用户名',exact:true}).fill(username);
+    await tab.getByRole('textbox',{name:'密码',exact:true}).fill('Employee#Pass123');
+    await tab.getByRole('button',{name:'登录系统',exact:true}).click();
+    await tab.getByRole('button',{name:'登录系统',exact:true}).waitFor({state:'hidden'});
+    await tab.goto('__ADMIN_URL__/suppliers/master');await tab.locator('body').ariaSnapshot();
+  };
+  const openExit=async tab=>{
+    const direct=tab.getByRole('button',{name:'退出流程',exact:true});
+    if(await direct.count())await direct.click();
+    else{await tab.getByRole('button',{name:'浏览器供应商的更多操作',exact:true}).click();await tab.getByRole('menuitem',{name:'退出流程',exact:true}).click();}
+    const flow=tab.getByRole('dialog',{name:'浏览器供应商 · 退出流程',exact:true});
+    await flow.waitFor();await tab.locator('body').ariaSnapshot();return flow;
+  };
+  try{
+    await page.getByRole('textbox',{name:'租户编码',exact:true}).fill('PORTAL-BROWSER');
+    await page.getByRole('textbox',{name:'用户名',exact:true}).fill('browser.user');
+    await page.getByRole('textbox',{name:'密码',exact:true}).fill('Portal#Pass123');
+    const login=page.waitForResponse(r=>r.url().endsWith('/portal/auth/login')&&r.status()===200);
+    await page.getByRole('button',{name:'登录门户',exact:true}).click();
+    const portalToken=(await(await login).json()).data.accessToken;
+    await page.getByRole('heading',{name:'当前登录身份'}).waitFor();
+    await employee(writer,'browser-admin');
+    await writer.goto('__ADMIN_URL__/suppliers/master?supplierId=21005');
+    const invitations=writer.getByRole('region',{name:'供应商门户邀请',exact:true});
+    await invitations.waitFor();await writer.locator('body').ariaSnapshot();
+    await invitations.getByRole('button',{name:'门户邀请管理',exact:true}).click();
+    await invitations.getByRole('textbox',{name:'邀请收件人姓名'}).fill('待加入联系人');
+    await invitations.getByRole('textbox',{name:'邀请收件人邮箱'}).fill('pending@example.test');
+    const issued=writer.waitForResponse(r=>r.url().endsWith('/portal-invitations')&&r.request().method()==='POST');
+    await invitations.getByRole('button',{name:'签发新邀请（旧邀请失效）',exact:true}).click();
+    const issueResponse=await issued;if(issueResponse.status()!==200)throw new Error('Real invitation issue failed');
+    const pendingToken=(await issueResponse.json()).data.token;
+    await invitations.getByRole('button',{name:'隐藏令牌',exact:true}).click();
+    await writer.getByRole('button',{name:'关闭',exact:true}).click();
+    const submittedFlow=await openExit(writer);
+    await submittedFlow.getByRole('textbox',{name:'退出原因',exact:true}).fill('真实跨端退出回收验收');
+    await submittedFlow.getByRole('textbox',{name:'已上传的依据文件 ID',exact:true}).fill('21010');
+    await submittedFlow.getByRole('button',{name:'提交退出申请',exact:true}).click();
+    const confirm=writer.getByRole('dialog',{name:'提交退出申请',exact:true});
+    await confirm.waitFor();await writer.locator('body').ariaSnapshot();
+    const created=writer.waitForResponse(r=>r.url().endsWith('/exit-applications')&&r.request().method()==='POST');
+    await confirm.getByRole('button',{name:'确定',exact:true}).click();
+    const createResponse=await created;if(createResponse.status()!==200)throw new Error('Real exit creation failed');
+    const application=(await createResponse.json()).data;
+    if(application.status!=='SUBMITTED'||application.createdBy!=='21006'||!application.localReady)throw new Error('Exit application is not ready for independent review');
+    const writerToken=await writer.evaluate(()=>sessionStorage.getItem('ism.admin.accessToken'));
+    const self=await writer.request.post(`__ADMIN_URL__/api/suppliers/21005/exit-applications/${application.id}/review`,{headers:{Authorization:`Bearer ${writerToken}`},data:{version:application.version,decision:'APPROVE',comment:'自审必须拒绝'}});
+    const selfFailure=await self.json();
+    if(self.status()!==400||!selfFailure.error?.message?.includes('申请人不能审批自己的退出申请'))throw new Error('Applicant was not rejected at independent review boundary');
+    await employee(reviewer,'browser-reader');
+    const reviewedFlow=await openExit(reviewer);
+    await reviewedFlow.getByRole('button',{name:'批准',exact:true}).click();
+    const review=reviewer.getByRole('dialog',{name:'独立退出审批',exact:true});
+    await review.waitFor();await reviewer.locator('body').ariaSnapshot();
+    await review.getByText(/停用全部本地门户账号、撤销其会话及有效未消费邀请/).waitFor();
+    await review.getByRole('textbox').fill('已独立核验本地业务及门户回收');
+    const approved=reviewer.waitForResponse(r=>r.url().endsWith(`/exit-applications/${application.id}/review`)&&r.request().method()==='POST');
+    await review.getByRole('button',{name:'确定',exact:true}).click();
+    const response=await approved;if(response.status()!==200)throw new Error('Real independent exit approval failed');
+    const closed=(await response.json()).data;
+    if(closed.status!=='BUSINESS_CLOSED'||closed.result.accessRecoveryStatus!=='NOT_VERIFIED')throw new Error('Invalid exit completion boundary');
+    const event=closed.events.find(e=>e.action==='LOCAL_PORTAL_RECOVERY');
+    if(!event||!event.comment.includes('处理账号 1')||!event.comment.includes('撤销会话记录 1')||!event.comment.includes('撤销有效未消费邀请 1'))throw new Error('Missing real portal recovery counts');
+    await page.getByRole('button',{name:'重新确认身份'}).click();
+    await page.getByRole('alert').filter({hasText:'会话已失效'}).waitFor();
+    const replay=await page.request.get(new URL('/api/portal/auth/me',page.url()).href,{headers:{Authorization:`Bearer ${portalToken}`}});
+    if(replay.status()!==401)throw new Error('Old portal token accepted after exit');
+    await page.getByRole('textbox',{name:'密码',exact:true}).fill('Portal#Pass123');
+    await page.getByRole('button',{name:'登录门户',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'凭证无效'}).waitFor();
+    const redemption=await page.request.post(new URL('/api/portal/auth/register',page.url()).href,{data:{invitationToken:pendingToken,username:'cannot.rejoin',password:'Portal#Pass123'}});
+    if(redemption.status()!==422)throw new Error('Pending invitation was not blocked after exit');
+    await reviewedFlow.getByRole('cell',{name:'本地业务已关闭',exact:true}).waitFor();
+    await reviewedFlow.getByRole('button',{name:'展开当前行',exact:true}).click();
+    await reviewer.locator('body').ariaSnapshot();
+    await reviewedFlow.getByText(/本地门户回收 · 操作人 21007/).waitFor();
+    const archive=reviewer.waitForResponse(r=>r.url().endsWith(`/exit-applications/${application.id}/archive`));
+    await reviewedFlow.getByRole('button',{name:'查看本地证据封存校验',exact:true}).click();
+    const archivedResponse=await archive;
+    const archived=(await archivedResponse.json()).data;
+    if(archivedResponse.status()!==200||!archived.integrityVerified||archived.eventCount!==3||archived.externalAccessStatus!=='NOT_VERIFIED')throw new Error('Exit archive validation failed');
+    await reviewer.getByText('本地记录校验一致',{exact:true}).waitFor();
+    // Capture settled dialogs, not a partially transparent transition frame.
+    await reviewer.evaluate(()=>Promise.all(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished.catch(()=>{}))));
+    await reviewer.screenshot({path:'output/playwright/portal-real-exit-archive.png',fullPage:true});
+    await page.screenshot({path:'output/playwright/portal-real-exit-denied.png',fullPage:true});
+  }finally{await writer.close();await reviewer.close();}
+}
