@@ -1,6 +1,6 @@
 # 剩余功能跟踪
 
-B3 门户账号列表、停用/恢复、单账号全部会话撤销和管理端原因确认已补；真实 MySQL 权限/版本/审计回滚、模拟页面及真实员工管理→门户失效跨端浏览器通过。新批准退出已联动全部本地账号/有效邀请同事务处置及封存统计，真实员工退出审批→门户失效浏览器闭环已补；审批持锁先行并发及自助改密/全部会话撤销已验收。过期会话保留与默认关闭的系统批量清理已补，29项定向回归通过，见 [会话保留](supplier-portal-session-retention-review.md)。仍缺其余并发、历史补偿执行、密码找回及清理生产压力/宕机验收。见 [改密验收](supplier-portal-password-review.md)、[真实退出验收](supplier-exit-portal-browser-review.md)、[本地退出联动](supplier-exit-local-portal-recovery-review.md) 与 [账号维护](supplier-portal-account-management-review.md)。
+B3 门户账号列表、停用/恢复、单账号全部会话撤销和管理端原因确认已补；真实 MySQL 权限/版本/审计回滚、模拟页面及真实员工管理→门户失效跨端浏览器通过。新批准退出已联动全部本地账号/有效邀请同事务处置及封存统计，真实员工退出审批→门户失效浏览器闭环已补；审批先行的登录/注册提交回滚争用、注册先锁且退出申请等待后批准回收新账号已验收，`PortalAuthIT` 33/33。过期会话保留与默认关闭的系统批量清理已补，29项定向回归通过，见 [会话保留](supplier-portal-session-retention-review.md)。仍缺其他并发组合、历史补偿执行及生产压力/宕机验收。见 [并发验收](supplier-exit-portal-contention-review.md)、[改密验收](supplier-portal-password-review.md)、[真实退出验收](supplier-exit-portal-browser-review.md)、[本地退出联动](supplier-exit-local-portal-recovery-review.md) 与 [账号维护](supplier-portal-account-management-review.md)。
 
 B3 门户认证已补后端专用 login/me/logout/password、独立随机会话、即时状态阻断、当前会话撤销及自助改密全部会话撤销，与员工/Console 域隔离。前端注册登录/身份复核/退出/改密及隔离真实后端浏览器一键验收已补，过期会话系统清理已补；自助业务、密码找回及退出整体回收策略仍缺，见 [会话保留](supplier-portal-session-retention-review.md)、[改密验收](supplier-portal-password-review.md)、[页面验收](supplier-portal-ui-review.md)、[账号维护](supplier-portal-account-management-review.md) 与 [门户认证](supplier-portal-auth-review.md)。
 
@@ -58,6 +58,6 @@ B1 本轮补齐数据范围资源的套餐目录、写入和运行时过滤，�
 
 ## 后续纪律
 
-2026-10-22 并发补验：退出审批持锁先行，注册/登录在提交和回滚两种结果下真实等待，且不漏新账号/会话；PortalAuthIT 16/16。历史补偿仅完成边界设计，没有执行能力，注册先行等其余竞态未覆盖，仍不能标记整个 B7 完成，见 [并发验收](supplier-exit-portal-contention-review.md)。
+2026-10-23 并发补验：审批持锁先行的注册/登录提交与回滚争用，加上注册先锁、退出提交等待、随后批准回收新账号；`PortalAuthIT` 33/33。历史补偿仅完成边界设计，没有执行能力，其他并发组合未覆盖，仍不能标记整个 B7 完成，见 [并发验收](supplier-exit-portal-contention-review.md)。
 
 优先承接 `continuous-delivery-progress.md` 的安全可执行工作。每轮把新增实现落入原任务包，记录具体测试范围与未完成边界。持续补全 127 包追踪矩阵，避免只做最新一条需求而遗漏早期已确认范围。旧库 V25 异常不得自动 repair、清库或关闭校验。

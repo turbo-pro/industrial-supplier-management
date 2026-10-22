@@ -407,6 +407,91 @@ class PortalAuthIT {
     @Test void registrationAndLoginWaitForExitRollbackAndRecoverOnlyAfterCancellation()throws Exception{
         for(boolean register:List.of(false,true))exitContention(register,true);
     }
+    @Test void registrationHoldingSupplierLockFinishesBeforeExitSubmissionAndApprovalRecoversIt()throws Exception{
+        var f=fixture();String invitation=pendingInvite(f);long file=f.supplier()+50;
+        jdbc.update("INSERT INTO res_file_object(id,tenant_id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status) VALUES(?,?,9,'exit.pdf','application/pdf',1,?,'LOCAL','test/registration-first-exit','ACTIVE')",file,f.tenant(),"d".repeat(64));
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+            finance.insert(f.tenant(),f.supplier(),file,"隔离测试人工财务证据",9);finance.review(f.tenant(),f.supplier(),"APPROVED","独立复核",10,0);
+        }
+        String trigger="portal_auth_registration_wait";String barrier="portal_auth_registration_"+f.supplier();
+        install("CREATE TRIGGER "+trigger+" BEFORE INSERT ON iam_portal_account FOR EACH ROW BEGIN IF NEW.username='concurrent.user' THEN DO GET_LOCK('"+barrier+"',0); DO SLEEP(15); DO RELEASE_LOCK('"+barrier+"'); END IF; END");
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(2);var registrationStarted=new java.util.concurrent.CountDownLatch(1);
+        try{
+            var registration=pool.submit(()->{registrationStarted.countDown();return registrations.register(new PortalRegistrationModels.Register(invitation,"Concurrent.User","Portal#Pass123"));});
+            assertThat(registrationStarted.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(awaitRegistrationBarrier(barrier,10)).as("real registration insert reaches the database trigger").isTrue();
+            assertThat(supplierRowLockCount()).as("registration transaction retains its supplier row lock while the account insert is blocked; locks="+supplierLockSnapshot()+", engine="+jdbc.queryForObject("SELECT ENGINE FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='sup_supplier'",String.class)).isPositive();
+            var exitStarted=new java.util.concurrent.CountDownLatch(1);
+            var exitSubmission=pool.submit(()->{
+                exitStarted.countDown();
+                try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+                    return exits.create(f.supplier(),new ExitModels.Create(ExitModels.Type.NORMAL,"并发退出申请",Long.toString(file)));
+                }
+            });
+            assertThat(exitStarted.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            boolean supplierWait=awaitSupplierLockWait(10);
+            if(!supplierWait&&exitSubmission.isDone()){
+                try{var early=exitSubmission.get();throw new AssertionError("exit submission completed before the registration transaction released the supplier row: "+early);}
+                catch(java.util.concurrent.ExecutionException failure){throw new AssertionError("exit submission failed before reaching the supplier lock",failure.getCause());}
+            }
+            assertThat(supplierWait).as("exit submission waits behind the registration supplier lock; requestDone="+exitSubmission.isDone()+", trxLockWaits="+lockWaitCount()).isTrue();
+            assertThat(registration.isDone()).isFalse();assertThat(exitSubmission.isDone()).isFalse();
+            var registered=registration.get(25,java.util.concurrent.TimeUnit.SECONDS);
+            drop(trigger);
+            var application=exitSubmission.get(20,java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(application.status()).isEqualTo("SUBMITTED");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=? AND status='ACTIVE'",Long.class,f.tenant())).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT status FROM sup_portal_invitation WHERE tenant_id=? AND recipient_email='next@example.test'",String.class,f.tenant())).isEqualTo("ACCEPTED");
+
+            approveExit(f,application);
+            assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE tenant_id=? AND id=?",String.class,f.tenant(),Long.parseLong(registered.accountId()))).isEqualTo("DISABLED");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=? AND status='ACTIVE'",Long.class,f.tenant())).isZero();
+            assertThat(jdbc.queryForObject("SELECT status FROM sup_portal_invitation WHERE tenant_id=? AND recipient_email='next@example.test'",String.class,f.tenant())).isEqualTo("ACCEPTED");
+            assertThatThrownBy(()->auth.login(new PortalAuthModels.Login(f.code(),"Concurrent.User","Portal#Pass123"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY'",Long.class,f.tenant())).isEqualTo(2);
+        }finally{
+            try{drop(trigger);}catch(Exception ignored){}
+            pool.shutdownNow();assertThat(pool.awaitTermination(20,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
+    boolean awaitRegistrationBarrier(String barrier,int timeoutSeconds)throws Exception{
+        long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.prepareStatement("SELECT IS_USED_LOCK(?) IS NOT NULL")){
+            statement.setString(1,barrier);
+            while(System.nanoTime()<deadline){
+                try(var rows=statement.executeQuery()){rows.next();if(rows.getBoolean(1))return true;}
+                Thread.sleep(25);
+            }
+            return false;
+        }
+    }
+    boolean awaitSupplierLockWait(int timeoutSeconds)throws Exception{
+        try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement()){
+            long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(timeoutSeconds);
+            while(System.nanoTime()<deadline){
+                try(var rows=statement.executeQuery("SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA='portal_auth' AND l.OBJECT_NAME='sup_supplier'")){
+                    rows.next();if(rows.getLong(1)>0)return true;
+                }
+                Thread.sleep(25);
+            }
+            return false;
+        }
+    }
+    long lockWaitCount()throws Exception{
+        try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement();var rows=statement.executeQuery("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state='LOCK WAIT'")){
+            rows.next();return rows.getLong(1);
+        }
+    }
+    long supplierRowLockCount()throws Exception{
+        try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement();var rows=statement.executeQuery("SELECT COUNT(*) FROM performance_schema.data_locks WHERE OBJECT_SCHEMA='portal_auth' AND OBJECT_NAME='sup_supplier' AND LOCK_STATUS='GRANTED' AND LOCK_TYPE='RECORD'")){
+            rows.next();return rows.getLong(1);
+        }
+    }
+    String supplierLockSnapshot()throws Exception{
+        try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement();var rows=statement.executeQuery("SELECT COALESCE(GROUP_CONCAT(CONCAT(LOCK_TYPE,':',LOCK_MODE,':',LOCK_STATUS,':',COALESCE(INDEX_NAME,'')) ORDER BY LOCK_TYPE),'<none>') FROM performance_schema.data_locks WHERE OBJECT_SCHEMA='portal_auth' AND OBJECT_NAME='sup_supplier'")){
+            rows.next();return rows.getString(1);
+        }
+    }
     void exitContention(boolean register,boolean rollback)throws Exception{
         var f=fixture();String oldToken=login(f).accessToken();String invitation=pendingInvite(f);var application=prepareExit(f);
         var prepared=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
@@ -513,4 +598,5 @@ class PortalAuthIT {
     }
     void install(String trigger)throws Exception{var result=MYSQL.execInContainer("mysql","--delimiter=//","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e",trigger+"//");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}
     void drop()throws Exception{var result=MYSQL.execInContainer("mysql","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e","DROP TRIGGER portal_auth_audit_failure");assertThat(result.getExitCode()).as(result.getStderr()).isZero();}
+    void drop(String trigger)throws Exception{var result=MYSQL.execInContainer("mysql","-uroot","-p"+MYSQL.getPassword(),MYSQL.getDatabaseName(),"-e","DROP TRIGGER IF EXISTS "+trigger);assertThat(result.getExitCode()).as(result.getStderr()).isZero();}
 }
