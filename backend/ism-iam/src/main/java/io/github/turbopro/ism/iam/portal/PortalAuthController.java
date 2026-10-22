@@ -12,8 +12,9 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController @RequestMapping("/api/portal/auth")
 public class PortalAuthController {
-    private final PortalAuthService auth;private final PortalPublicAttemptGuard rate;private final ApiResponseFactory responses;
-    public PortalAuthController(PortalAuthService auth,PortalPublicAttemptGuard rate,ApiResponseFactory responses){this.auth=auth;this.rate=rate;this.responses=responses;}
+    private final PortalAuthService auth;private final PortalPublicAttemptGuard rate;private final ApiResponseFactory responses;private final PortalPasswordRecoveryService recovery;
+    public PortalAuthController(PortalAuthService auth,PortalPublicAttemptGuard rate,ApiResponseFactory responses,PortalPasswordRecoveryService recovery){this.auth=auth;this.rate=rate;this.responses=responses;this.recovery=recovery;}
+    @PostMapping("/reset-password") ResponseEntity<ApiResponse<Void>> reset(@Valid @RequestBody PortalPasswordRecoveryService.Reset command,HttpServletRequest request){rate.check(request.getRemoteAddr());recovery.reset(command);return reply(null);}
     @PostMapping("/login") ResponseEntity<ApiResponse<PortalAuthModels.Session>> login(@Valid @RequestBody PortalAuthModels.Login command,HttpServletRequest request){rate.check(request.getRemoteAddr());return reply(auth.login(command));}
     @GetMapping("/me") ResponseEntity<ApiResponse<PortalAuthModels.User>> me(Authentication authentication){return reply(principal(authentication).user());}
     @PostMapping("/logout") ResponseEntity<ApiResponse<Void>> logout(Authentication authentication){auth.logout(principal(authentication));return reply(null);}

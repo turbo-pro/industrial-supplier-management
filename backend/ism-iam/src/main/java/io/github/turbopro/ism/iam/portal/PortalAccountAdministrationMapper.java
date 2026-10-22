@@ -17,6 +17,8 @@ public interface PortalAccountAdministrationMapper extends TenantScopedMapper {
     Account lock(long tenantId,long supplierId,long id);
     @Update("UPDATE iam_portal_account SET status=#{status},version=version+1,token_version=token_version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} AND version=#{version}")
     int change(long tenantId,long supplierId,long id,int version,String status);
+    @Update("UPDATE iam_portal_account SET version=version+1 WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} AND version=#{version}")
+    int advanceVersion(long tenantId,long supplierId,long id,int version);
     @Update("UPDATE iam_portal_session SET revoked_at=UTC_TIMESTAMP(3) WHERE tenant_id=#{tenantId} AND account_id=#{id} AND revoked_at IS NULL")
     int revokeAll(long tenantId,long id);
     @Select("SELECT "+FIELDS+" FROM iam_portal_account a WHERE a.tenant_id=#{tenantId} AND a.supplier_id=#{supplierId} AND a.id>#{afterId} ORDER BY a.id LIMIT 100 FOR UPDATE")

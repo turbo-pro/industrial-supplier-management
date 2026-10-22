@@ -6,6 +6,85 @@ info:
 servers:
   - url: /api
 paths:
+  /suppliers/{supplierId}/portal-accounts/{id}/password-recovery:
+    parameters:
+      - { name: supplierId, in: path, required: true, schema: { type: string } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getPortalPasswordRecovery
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Dedicated supplier:portal:recover permission and live supplier data scope. Latest recovery metadata only; no token or hash. Null means never issued. PENDING may be effectively EXPIRED or INVALIDATED.
+      responses:
+        '200': { description: Latest metadata or null; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalRecoveryStateResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: issuePortalPasswordRecovery
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Default disabled, requires dedicated supplier:portal:recover and supplier scope, active supplier/account and no pending exit. Operator must verify identity via trusted channel. 256-bit token returned ONCE, valid 15 minutes, stored hashed; no email sent. Replaces old pending grant and increments management version only. Existing password/sessions remain valid until redemption; use disable/revoke-sessions for suspected compromise. Audit and issuance atomic. No automatic role grants.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, reason, identityVerified]
+              properties:
+                version: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+                identityVerified: { type: boolean, enum: [true] }
+      responses:
+        '200': { description: Once-only recovery token; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalRecoveryIssuedResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /suppliers/{supplierId}/portal-accounts/{id}/password-recovery/revoke:
+    post:
+      operationId: revokePortalPasswordRecovery
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, reason]
+              properties:
+                version: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200': { description: Pending grant revoked and version advanced; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /portal/auth/reset-password:
+    post:
+      operationId: resetPortalPassword
+      tags: [Supplier Portal]
+      description: Anonymous capability redemption; no tenant/account/email chosen by client. Shared peer rate limit with login/register. Requires deployment recovery and authentication switches. Token binds account management/token versions; expiry, replacement, cancellation, account management, password change or exit invalidate it. Atomically consume token, change password, clear password lock, advance both versions, revoke all sessions and audit. No token returned, login required. Trusted-channel identity verification precedes issuance, not email ownership verification.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recoveryToken, newPassword]
+              properties:
+                recoveryToken: { type: string, pattern: '^[A-Za-z0-9_-]{43}$', writeOnly: true }
+                newPassword: { type: string, minLength: 12, maxLength: 72, writeOnly: true, description: Upper/lower/digit/symbol and at most 72 UTF-8 bytes. Must differ from current password. }
+      responses:
+        '200': { description: Consumed and password reset; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '429': { $ref: '#/components/responses/ApiFailure' }
   /suppliers/{supplierId}/portal-accounts:
     get:
       operationId: listSupplierPortalAccounts
@@ -2384,9 +2463,10 @@ components:
           properties:
             data:
               type: object
-              required: [canManage, accounts]
+              required: [canManage, canRecover, accounts]
               properties:
                 canManage: { type: boolean }
+                canRecover: { type: boolean }
                 accounts:
                   type: object
                   required: [page, size, total, items]
@@ -2395,6 +2475,35 @@ components:
                     size: { type: integer }
                     total: { type: integer, format: int64 }
                     items: { type: array, items: { $ref: '#/components/schemas/PortalManagedAccount' } }
+    PortalRecoveryStateResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              nullable: true
+              required: [id, status, expiresAt, createdAt, createdBy]
+              properties:
+                id: { type: string }
+                status: { type: string, enum: [PENDING, EXPIRED, INVALIDATED, CONSUMED, REPLACED, REVOKED] }
+                expiresAt: { type: string, format: date-time }
+                createdAt: { type: string, format: date-time }
+                createdBy: { type: string }
+    PortalRecoveryIssuedResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [token, expiresAt, accountVersion]
+              properties:
+                token: { type: string, readOnly: true, description: Once-only recovery response; never persisted or returned by metadata reads. }
+                expiresAt: { type: string, format: date-time }
+                accountVersion: { type: integer }
     PortalIdentity:
       type: object
       required: [accountId, tenantId, supplierId, username, displayName]

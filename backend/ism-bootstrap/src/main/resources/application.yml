@@ -64,6 +64,7 @@ ism:
   portal:
     authentication-enabled: ${ISM_PORTAL_AUTHENTICATION_ENABLED:false}
     registration-enabled: ${ISM_PORTAL_REGISTRATION_ENABLED:false}
+    password-recovery-enabled: ${ISM_PORTAL_PASSWORD_RECOVERY_ENABLED:false}
     session-cleanup:
       enabled: ${ISM_PORTAL_SESSION_CLEANUP_ENABLED:false}
       retention-days: ${ISM_PORTAL_SESSION_RETENTION_DAYS:90}

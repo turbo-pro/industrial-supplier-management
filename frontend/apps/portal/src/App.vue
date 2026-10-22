@@ -3,12 +3,12 @@ import { nextTick, onMounted, reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 
 type Identity = components['schemas']['PortalIdentity'];
-const mode = ref<'login' | 'register'>('login');
+const mode = ref<'login' | 'register' | 'reset'>('login');
 const identity = ref<Identity>();
 // Session secrets stay in memory: reload requires login; no shared admin storage.
 let accessToken: string | undefined;
 const client = createIsmClient({ getAccessToken: () => accessToken });
-const form = reactive({ tenantCode: '', username: '', password: '', invitationToken: '', confirmation: '' });
+const form = reactive({ tenantCode: '', username: '', password: '', invitationToken: '', confirmation: '', recoveryToken: '' });
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
@@ -21,8 +21,9 @@ const errorPanel = ref<HTMLElement>();
 async function fail(message: string) { error.value = message; await nextTick(); errorPanel.value?.focus(); }
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login';
-  form.password = ''; form.confirmation = ''; form.invitationToken = ''; error.value = ''; notice.value = '';
+  form.password = ''; form.confirmation = ''; form.invitationToken = ''; form.recoveryToken = ''; error.value = ''; notice.value = '';
 }
+function recoverMode() { switchMode(); mode.value = 'reset'; }
 function responseError(status: number, registration = false): string {
   if (status === 429) return '请求过于频繁，请稍后再试。请勿连续重复提交。';
   if (status === 401) return '登录凭证无效或账号暂不可用，请核对租户编码、用户名和密码。';
@@ -36,14 +37,21 @@ function responseError(status: number, registration = false): string {
 async function submit() {
   if (busy.value) return;
   error.value = ''; notice.value = '';
-  if (!/^[A-Za-z][A-Za-z0-9_.-]{2,63}$/.test(form.username.trim())) return fail('用户名需以英文字母开头，共 3–64 位，只能包含字母、数字、下划线、点和连字符。');
+  const resetting = mode.value === 'reset';
+  if (!resetting && !/^[A-Za-z][A-Za-z0-9_.-]{2,63}$/.test(form.username.trim())) return fail('用户名需以英文字母开头，共 3–64 位，只能包含字母、数字、下划线、点和连字符。');
   if (new TextEncoder().encode(form.password).length > 72) return fail('密码不能超过 72 个 UTF-8 字节。');
   const registering = mode.value === 'register';
+  if (resetting && (!/^[A-Za-z0-9_-]{43}$/.test(form.recoveryToken.trim()) || form.password !== form.confirmation)) return fail('请填写完整的恢复凭证，并确保两次新密码一致。');
   if (registering && (!/^[A-Za-z0-9_-]{43}$/.test(form.invitationToken.trim()) || form.password !== form.confirmation)) return fail('请填写完整的 43 位邀请凭证，并确保两次密码一致。');
-  if (registering && (form.password.length < 12 || !/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/[0-9]/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password))) return fail('密码至少 12 位，需包含大写字母、小写字母、数字和符号。');
+  if ((registering || resetting) && (form.password.length < 12 || !/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/[0-9]/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password))) return fail('密码至少 12 位，需包含大写字母、小写字母、数字和符号。');
   busy.value = true;
   try {
-    if (registering) {
+    if (resetting) {
+      const result = await client.POST('/portal/auth/reset-password', { body: { recoveryToken: form.recoveryToken.trim(), newPassword: form.password } });
+      if (!result.response.ok) return await fail(result.response.status === 429 ? responseError(429) : '恢复未成功：凭证可能失效、已使用，或新密码不符合规则。请联系管理员核查，不要连续提交。');
+      mode.value = 'login'; form.recoveryToken = '';
+      notice.value = '密码恢复成功，所有旧会话已撤销。请使用新密码登录。';
+    } else if (registering) {
       const result = await client.POST('/portal/auth/register', { body: { invitationToken: form.invitationToken.trim(), username: form.username.trim(), password: form.password } });
       if (!result.data) return await fail(responseError(result.response.status, true));
       mode.value = 'login'; form.invitationToken = '';
@@ -56,7 +64,8 @@ async function submit() {
       notice.value = '已登录供应商独立身份域。刷新页面后需重新登录。';
     }
   } catch {
-    await fail(registering ? '网络异常，注册结果未确认。请先尝试登录或联系邀请方核查，勿反复兑换邀请。' : '网络异常，登录结果未确认，请检查连接后重试。');
+    if (resetting) { mode.value = 'login'; form.recoveryToken = ''; }
+    await fail(resetting ? '网络异常，恢复结果未确认。请先使用新密码登录核查，不要重复兑换凭证。' : registering ? '网络异常，注册结果未确认。请先尝试登录或联系邀请方核查，勿反复兑换邀请。' : '网络异常，登录结果未确认，请检查连接后重试。');
   } finally { form.password = ''; form.confirmation = ''; busy.value = false; }
 }
 async function refreshIdentity() {
@@ -135,20 +144,23 @@ onMounted(() => { document.title = '供应商协作门户 · ISM'; });
         </form>
       </template>
       <template v-else>
-        <h2>{{ mode === 'login' ? '账号登录' : '邀请注册' }}</h2>
-        <p class="help">{{ mode === 'login' ? '请输入邀请方提供的租户编码和门户账号。' : '邀请决定租户与供应商归属，不能自行选择或改绑。' }}</p>
+        <h2>{{ mode === 'login' ? '账号登录' : mode === 'reset' ? '凭证恢复密码' : '邀请注册' }}</h2>
+        <p class="help">{{ mode === 'login' ? '请输入邀请方提供的租户编码和门户账号。' : mode === 'reset' ? '先联系邀请方管理员核实身份并获取15分钟有效的一次性恢复凭证；不通过未验证邮箱直接找回。' : '邀请决定租户与供应商归属，不能自行选择或改绑。' }}</p>
         <form @submit.prevent="submit">
           <fieldset :disabled="busy">
             <label v-if="mode === 'login'">租户编码<input v-model="form.tenantCode" required maxlength="64" autocomplete="organization"></label>
-            <label v-else>邀请凭证<input v-model="form.invitationToken" aria-label="邀请凭证" aria-describedby="invitation-help" required minlength="43" maxlength="43" autocomplete="off" spellcheck="false"><span id="invitation-help" class="help">由邀请方安全提供，不会自动发送邮件。请勿分享给他人。</span></label>
-            <label>用户名<input v-model="form.username" required minlength="3" maxlength="64" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+            <label v-else-if="mode === 'register'">邀请凭证<input v-model="form.invitationToken" aria-label="邀请凭证" aria-describedby="invitation-help" required minlength="43" maxlength="43" autocomplete="off" spellcheck="false"><span id="invitation-help" class="help">由邀请方安全提供，不会自动发送邮件。请勿分享给他人。</span></label>
+            <label v-else>恢复凭证<input v-model="form.recoveryToken" required type="password" minlength="43" maxlength="43" autocomplete="off" aria-label="恢复凭证"></label>
+            <label v-if="mode !== 'reset'">用户名<input v-model="form.username" required minlength="3" maxlength="64" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
             <label>密码<input v-model="form.password" aria-label="密码" :aria-describedby="mode === 'register' ? 'password-help' : undefined" required type="password" maxlength="72" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"><span v-if="mode === 'register'" id="password-help" class="help">至少 12 位，包含大小写字母、数字和符号；最多 72 个 UTF-8 字节。</span></label>
-            <label v-if="mode === 'register'">确认密码<input v-model="form.confirmation" required type="password" maxlength="72" autocomplete="new-password"></label>
-            <button class="primary" type="submit">{{ busy ? '正在处理…' : mode === 'login' ? '登录门户' : '创建门户账号' }}</button>
+            <label v-if="mode !== 'login'">确认密码<input v-model="form.confirmation" required type="password" maxlength="72" autocomplete="new-password"></label>
+            <button class="primary" type="submit">{{ busy ? '正在处理…' : mode === 'login' ? '登录门户' : mode === 'reset' ? '设置新密码并撤销旧会话' : '创建门户账号' }}</button>
           </fieldset>
         </form>
-        <button class="switch" :disabled="busy" @click="switchMode">{{ mode === 'login' ? '有邀请凭证？注册账号' : '已有账号？返回登录' }}</button>
-        <p class="help">忘记密码或邀请异常，请联系邀请方管理员。当前未提供在线找回密码。</p>
+        <button v-if="mode !== 'reset'" class="switch" :disabled="busy" @click="switchMode">{{ mode === 'login' ? '有邀请凭证？注册账号' : '已有账号？返回登录' }}</button>
+        <button v-else class="switch" :disabled="busy" @click="switchMode();mode='login'">返回账号登录</button>
+        <button v-if="mode === 'login'" class="switch" :disabled="busy" @click="recoverMode">忘记密码？使用恢复凭证</button>
+        <p class="help">恢复凭证须由邀请方管理员核实身份后提供，不会自动发送邮件。</p>
       </template>
     </section>
     <footer>门户与企业管理后台账号相互独立 · 不保存密码或登录令牌到浏览器存储</footer>

@@ -4,6 +4,60 @@
  */
 
 export interface paths {
+    "/suppliers/{supplierId}/portal-accounts/{id}/password-recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Dedicated supplier:portal:recover permission and live supplier data scope. Latest recovery metadata only; no token or hash. Null means never issued. PENDING may be effectively EXPIRED or INVALIDATED. */
+        get: operations["getPortalPasswordRecovery"];
+        put?: never;
+        /** @description Default disabled, requires dedicated supplier:portal:recover and supplier scope, active supplier/account and no pending exit. Operator must verify identity via trusted channel. 256-bit token returned ONCE, valid 15 minutes, stored hashed; no email sent. Replaces old pending grant and increments management version only. Existing password/sessions remain valid until redemption; use disable/revoke-sessions for suspected compromise. Audit and issuance atomic. No automatic role grants. */
+        post: operations["issuePortalPasswordRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/portal-accounts/{id}/password-recovery/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokePortalPasswordRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Anonymous capability redemption; no tenant/account/email chosen by client. Shared peer rate limit with login/register. Requires deployment recovery and authentication switches. Token binds account management/token versions; expiry, replacement, cancellation, account management, password change or exit invalidate it. Atomically consume token, change password, clear password lock, advance both versions, revoke all sessions and audit. No token returned, login required. Trusted-channel identity verification precedes issuance, not email ownership verification. */
+        post: operations["resetPortalPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/portal-accounts": {
         parameters: {
             query?: never;
@@ -3191,6 +3245,7 @@ export interface components {
         PortalAccountPageResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
                 canManage: boolean;
+                canRecover: boolean;
                 accounts: {
                     page: number;
                     size: number;
@@ -3198,6 +3253,27 @@ export interface components {
                     total: number;
                     items: components["schemas"]["PortalManagedAccount"][];
                 };
+            };
+        };
+        PortalRecoveryStateResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                id: string;
+                /** @enum {string} */
+                status: "PENDING" | "EXPIRED" | "INVALIDATED" | "CONSUMED" | "REPLACED" | "REVOKED";
+                /** Format: date-time */
+                expiresAt: string;
+                /** Format: date-time */
+                createdAt: string;
+                createdBy: string;
+            } | null;
+        };
+        PortalRecoveryIssuedResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** @description Once-only recovery response; never persisted or returned by metadata reads. */
+                readonly token: string;
+                /** Format: date-time */
+                expiresAt: string;
+                accountVersion: number;
             };
         };
         PortalIdentity: {
@@ -6029,6 +6105,132 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getPortalPasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest metadata or null; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalRecoveryStateResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    issuePortalPasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    reason: string;
+                    /** @enum {boolean} */
+                    identityVerified: true;
+                };
+            };
+        };
+        responses: {
+            /** @description Once-only recovery token; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalRecoveryIssuedResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    revokePortalPasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pending grant revoked and version advanced; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    resetPortalPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    recoveryToken: string;
+                    /** @description Upper/lower/digit/symbol and at most 72 UTF-8 bytes. Must differ from current password. */
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Consumed and password reset; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            429: components["responses"]["ApiFailure"];
+        };
+    };
     listSupplierPortalAccounts: {
         parameters: {
             query?: {

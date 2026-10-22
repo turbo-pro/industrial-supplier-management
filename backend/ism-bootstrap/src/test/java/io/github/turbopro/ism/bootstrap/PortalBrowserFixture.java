@@ -31,6 +31,7 @@ class PortalBrowserFixture {
         r.add("spring.datasource.username", MYSQL::getUsername);
         r.add("spring.datasource.password", MYSQL::getPassword);
         r.add("ism.integration.finance.mode",()->Boolean.getBoolean("ism.browser.portal-exit")?"MANUAL":"ERP");
+        r.add("ism.portal.password-recovery-enabled",()->Boolean.getBoolean("ism.browser.portal-recovery"));
     }
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
@@ -51,6 +52,7 @@ class PortalBrowserFixture {
         boolean management=Boolean.getBoolean("ism.browser.portal-management");
         boolean exit=Boolean.getBoolean("ism.browser.portal-exit");
         boolean password=Boolean.getBoolean("ism.browser.portal-password");
+        boolean recovery=Boolean.getBoolean("ism.browser.portal-recovery");
         if(management){
             jdbc.update("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(21001,21004,21004,0)");
             for(int i=0;i<2;i++){
@@ -92,13 +94,22 @@ class PortalBrowserFixture {
         assertThat(Files.exists(control.resolve("finish"))).as("Browser completion signal").isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=21001 AND supplier_id=21005 AND username='browser.user'",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=21001 AND status='ACCEPTED'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(password||!exit&&management?2:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(recovery||password||!exit&&management?2:1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_user WHERE tenant_id=21001",Long.class)).isEqualTo(management?2:0);
         if(!management)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_refresh_token WHERE tenant_id=21001",Long.class)).isZero();
-        if(password){
+        if(recovery){
+            assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(5);
+            assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_password_recovery WHERE tenant_id=21001",Long.class)).isEqualTo(3);
+            for(String state:List.of("REPLACED","REVOKED","CONSUMED"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_password_recovery WHERE tenant_id=21001 AND status=?",Long.class,state)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_RECOVERY_ISSUE' AND operator_id=21006",Long.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_RECOVERY_REVOKE' AND operator_id=21006",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_RECOVERY_RESET' AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class)).isEqualTo(1);
+            assertThat(passwords.matches("Recovered#Pass456",jdbc.queryForObject("SELECT password_hash FROM iam_portal_account WHERE tenant_id=21001",String.class))).isTrue();
+        }else if(password){
             assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_PASSWORD_CHANGE' AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class)).isEqualTo(1);

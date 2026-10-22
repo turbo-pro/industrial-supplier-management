@@ -20,7 +20,7 @@ public class PortalAuthenticationFilter extends OncePerRequestFilter {
     public PortalAuthenticationFilter(PortalAuthService auth,ObjectMapper json,ApiResponseFactory responses){this.auth=auth;this.json=json;this.responses=responses;}
     @Override protected boolean shouldNotFilter(HttpServletRequest request){
         String path=request.getRequestURI();
-        return !path.startsWith("/api/portal/") || ("POST".equals(request.getMethod()) && (path.equals("/api/portal/auth/login") || path.equals("/api/portal/auth/register")));
+        return !path.startsWith("/api/portal/") || ("POST".equals(request.getMethod()) && (path.equals("/api/portal/auth/login") || path.equals("/api/portal/auth/register") || path.equals("/api/portal/auth/reset-password")));
     }
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)throws ServletException,IOException {
         String header=request.getHeader("Authorization");

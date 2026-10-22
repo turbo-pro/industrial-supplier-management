@@ -2,6 +2,7 @@
 import { nextTick, ref } from 'vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import SupplierPortalRecovery from './SupplierPortalRecovery.vue';
 type Account = components['schemas']['PortalManagedAccount'];
 const props = defineProps<{ supplierId: string; supplierStatus: string }>();
 const session = useSessionStore();
@@ -9,6 +10,7 @@ const expanded = ref(false), busy = ref(false), loading = ref(false), error = re
 const errorBox = ref<HTMLElement>();
 const view = ref<components['schemas']['PortalAccountPageResponse']['data']>();
 const page = ref(1);
+const recoveryAccount = ref<Account>();
 const target = ref<{ account: Account; action: 'ENABLE' | 'DISABLE' | 'REVOKE' }>();
 const labels = { ENABLE: '恢复账号', DISABLE: '停用账号', REVOKE: '撤销全部会话' };
 async function fail(message: string) { error.value = message; await nextTick(); errorBox.value?.focus(); }
@@ -21,7 +23,7 @@ async function load(requested = page.value) {
   } catch { view.value = undefined; await fail('门户账号读取失败，请重试；读取失败不代表没有账号。'); }
   finally { loading.value = false; }
 }
-async function open() { expanded.value = !expanded.value; notice.value = ''; target.value = undefined; if (expanded.value) await load(); }
+async function open() { expanded.value = !expanded.value; notice.value = ''; target.value = undefined; recoveryAccount.value = undefined; if (expanded.value) await load(); }
 function select(account: Account, action: 'ENABLE' | 'DISABLE' | 'REVOKE') { target.value = { account, action }; reason.value = ''; error.value = ''; notice.value = ''; }
 async function save() {
   if (!target.value || busy.value || loading.value || !view.value?.canManage) return;
@@ -64,10 +66,12 @@ async function save() {
             <el-button v-else :disabled="busy || loading || !['DRAFT','ACTIVE'].includes(supplierStatus)" @click="select(row,'ENABLE')">恢复账号</el-button>
             <el-button :disabled="busy || loading" @click="select(row,'REVOKE')">撤销全部会话</el-button>
           </template><span v-else>只读</span></template></el-table-column>
+          <el-table-column v-if="view.canRecover" label="密码恢复" min-width="150"><template #default="{row}"><el-button :disabled="busy || loading" @click="recoveryAccount=row;target=undefined">恢复门户密码</el-button></template></el-table-column>
         </el-table></div>
         <p>共 {{ view.accounts.total }} 个账号，第 {{ view.accounts.page }} 页。会话数不代表业务资格；恢复账号不解除密码错误临时锁，不恢复旧会话。</p>
         <el-button :disabled="busy || loading || page <= 1" @click="load(page-1)">上一页账号</el-button>
         <el-button :disabled="busy || loading || page * view.accounts.size >= view.accounts.total" @click="load(page+1)">下一页账号</el-button>
+        <SupplierPortalRecovery v-if="recoveryAccount && view.canRecover" :key="recoveryAccount.id" :supplier-id="supplierId" :account="recoveryAccount" @close="recoveryAccount=undefined;load()" />
         <el-form v-if="target" label-position="top" :disabled="busy || loading" @submit.prevent="save">
           <h4>确认{{ labels[target.action] }}：{{ target.account.username }}</h4>
           <p>{{ target.action === 'DISABLE' ? '此账号将不能登录，全部原有会话失效。' : target.action === 'ENABLE' ? '允许重新登录，但仍须通过租户、供应商和密码锁检查。旧会话不会恢复。' : '全部原有会话立即失效；账号仍可用密码重新登录。如需阻止登录，请使用停用。' }}</p>

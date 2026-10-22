@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"ism.portal.registration-enabled=true","ism.portal.authentication-enabled=true","ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false","ism.integration.finance.mode=MANUAL"})
+@SpringBootTest(properties={"ism.portal.registration-enabled=true","ism.portal.authentication-enabled=true","ism.portal.password-recovery-enabled=true","ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false","ism.integration.finance.mode=MANUAL"})
 @AutoConfigureMockMvc @Testcontainers @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class PortalAuthIT {
     @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.0").withDatabaseName("portal_auth").withUsername("ism").withPassword("ism");
@@ -34,6 +34,7 @@ class PortalAuthIT {
     @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired PortalSessionRetentionService retention;
     @Autowired PortalSessionRetentionMapper retentionMapper;
+    @Autowired PortalPasswordRecoveryService passwordRecovery;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -53,6 +54,89 @@ class PortalAuthIT {
     }
     PortalAuthModels.Session login(Fixture f){return auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Portal#Pass123"));}
     void me(String token,int expected)throws Exception{mvc.perform(get("/api/portal/auth/me").header("Authorization","Bearer "+token)).andExpect(status().is(expected));}
+    AuthorizationContext.Scope recoveryGrants(){return AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:portal:recover"),Map.of("supplier:master",DataScope.all()),Set.of()));}
+    io.github.turbopro.ism.common.infrastructure.portal.PortalPasswordRecoveryAdministration.Issued issueRecovery(Fixture f,int version){
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=recoveryGrants()){return administration.issueRecovery(f.supplier(),f.account(),version,"已通过合同联系人线下核实身份",true);}
+    }
+    @Test void recoveryCapabilityResetsLockedPasswordAndRevokesAllSessions()throws Exception{
+        var f=fixture();String one=login(f).accessToken(),two=login(f).accessToken();var grant=issueRecovery(f,0);
+        assertThat(grant.token()).matches("[A-Za-z0-9_-]{43}");assertThat(grant.toString()).doesNotContain(grant.token());
+        me(one,200); // Issuance alone never claims to revoke sessions or change the password.
+        jdbc.update("UPDATE iam_portal_account SET failed_count=5,locked_until=UTC_TIMESTAMP(3)+INTERVAL 15 MINUTE WHERE id=?",f.account());
+        mvc.perform(post("/api/portal/auth/reset-password").header("X-Tenant-Id","99999").contentType("application/json").content("{\"recoveryToken\":\""+grant.token()+"\",\"newPassword\":\"Recovered#Pass456\"}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        me(one,401);me(two,401);
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT failed_count FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_password_recovery WHERE tenant_id=?",String.class,f.tenant())).isEqualTo("CONSUMED");
+        assertThat(jdbc.queryForObject("SELECT token_hash FROM iam_portal_password_recovery WHERE tenant_id=?",String.class,f.tenant())).hasSize(64).isNotEqualTo(grant.token());
+        assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Another#Pass789"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        me(auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Recovered#Pass456")).accessToken(),200);
+    }
+    @Test void recoveryRequiresDedicatedPermissionScopeVersionAndIdentityVerification(){
+        var f=fixture();var other=fixture();
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+            assertThatThrownBy(()->administration.issueRecovery(f.supplier(),f.account(),0,"确认身份",true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=recoveryGrants()){
+            assertThatThrownBy(()->administration.issueRecovery(other.supplier(),other.account(),0,"确认身份",true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            assertThatThrownBy(()->administration.issueRecovery(f.supplier(),other.account(),0,"确认身份",true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            assertThatThrownBy(()->administration.issueRecovery(f.supplier(),f.account(),0,"尚未核查",false)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        var grant=issueRecovery(f,0);assertThatThrownBy(()->issueRecovery(f,0)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=recoveryGrants()){
+            var state=administration.recoveryState(f.supplier(),f.account());assertThat(state.status()).isEqualTo("PENDING");assertThat(state.toString()).doesNotContain(grant.token());
+        }
+    }
+    @Test void recoveryExpiryReplacementRevocationAndAccountChangesInvalidateGrants(){
+        var f=fixture();var first=issueRecovery(f,0);
+        jdbc.update("UPDATE iam_portal_password_recovery SET expires_at=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE tenant_id=?",f.tenant());
+        assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(first.token(),"Recovered#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        var second=issueRecovery(f,1);assertThat(second.token()).isNotEqualTo(first.token());
+        assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(first.token(),"Recovered#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=recoveryGrants()){administration.revokeRecovery(f.supplier(),f.account(),2,"凭证疑似泄漏");}
+        assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(second.token(),"Recovered#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        var third=issueRecovery(f,3);manage(f,4,io.github.turbopro.ism.common.infrastructure.portal.PortalAccountAdministration.Action.REVOKE_SESSIONS);
+        assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(third.token(),"Recovered#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        login(f);
+    }
+    @Test void recoveryAuditFailureRollsBackConsumptionPasswordAndSessions()throws Exception{
+        var f=fixture();String token=login(f).accessToken();var grant=issueRecovery(f,0);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_RECOVERY_RESET' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected recovery audit failure'; END IF; END");
+        try{assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Recovered#Pass456"))).isInstanceOf(RuntimeException.class).hasStackTraceContaining("injected recovery audit failure");}finally{drop();}
+        me(token,200);login(f);
+        assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_password_recovery WHERE tenant_id=?",String.class,f.tenant())).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(1);
+        passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Recovered#Pass456"));me(token,401);
+    }
+    @Test void recoveryIssuanceAuditFailureRestoresPreviousGrantAndVersion()throws Exception{
+        var f=fixture();var first=issueRecovery(f,0);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_RECOVERY_ISSUE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected recovery issue failure'; END IF; END");
+        try{assertThatThrownBy(()->issueRecovery(f,1)).isInstanceOf(RuntimeException.class).hasStackTraceContaining("injected recovery issue failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_password_recovery WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE id=?",Integer.class,f.account())).isEqualTo(1);
+        passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(first.token(),"Recovered#Pass456"));
+    }
+    @Test void recoveryRejectsWeakSameAndOversizePasswordsWithoutConsumingGrant(){
+        var f=fixture();var grant=issueRecovery(f,0);
+        for(String password:List.of("weak","Portal#Pass123","Aa1!"+"中".repeat(24)))assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),password))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_password_recovery WHERE tenant_id=?",String.class,f.tenant())).isEqualTo("PENDING");
+        passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Recovered#Pass456"));
+    }
+    @Test void concurrentRecoveryRedemptionHasOnlyOneWinner()throws Exception{
+        var f=fixture();var grant=issueRecovery(f,0);var start=new java.util.concurrent.CountDownLatch(1);var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.Callable<Boolean> reset=()->{start.await();try{passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Recovered#Pass456"));return true;}catch(io.github.turbopro.ism.common.api.error.ApiException rejected){return false;}};
+        try{var one=pool.submit(reset);var two=pool.submit(reset);start.countDown();assertThat(List.of(one.get(15,java.util.concurrent.TimeUnit.SECONDS),two.get(15,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(true,false);}
+        finally{start.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_RECOVERY_RESET'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void recoveryCannotBypassPendingOrApprovedExit(){
+        for(boolean approve:List.of(false,true)){
+            var f=fixture();var grant=issueRecovery(f,0);var application=prepareExit(f);if(approve)approveExit(f,application);
+            assertThatThrownBy(()->passwordRecovery.reset(new PortalPasswordRecoveryService.Reset(grant.token(),"Recovered#Pass456"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            assertThatThrownBy(()->issueRecovery(f,1)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+    }
 
     void oldSessions(Fixture f,int count){
         var rows=new ArrayList<Object[]>();
