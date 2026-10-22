@@ -1,8 +1,8 @@
 # 剩余功能跟踪
 
-B3 门户账号列表、停用/恢复、单账号全部会话撤销和管理端原因确认已补；真实 MySQL 权限/版本/审计回滚、模拟页面及真实员工管理→门户失效跨端浏览器通过。新批准退出已联动全部本地账号/有效邀请同事务处置及封存统计，真实员工退出审批→门户失效浏览器闭环已补；审批持锁先行并发及自助改密/全部会话撤销已验收。仍缺其余并发、历史补偿执行、密码找回和会话清理。见 [改密验收](supplier-portal-password-review.md)、[真实退出验收](supplier-exit-portal-browser-review.md)、[本地退出联动](supplier-exit-local-portal-recovery-review.md) 与 [账号维护](supplier-portal-account-management-review.md)。
+B3 门户账号列表、停用/恢复、单账号全部会话撤销和管理端原因确认已补；真实 MySQL 权限/版本/审计回滚、模拟页面及真实员工管理→门户失效跨端浏览器通过。新批准退出已联动全部本地账号/有效邀请同事务处置及封存统计，真实员工退出审批→门户失效浏览器闭环已补；审批持锁先行并发及自助改密/全部会话撤销已验收。过期会话保留与默认关闭的系统批量清理已补，29项定向回归通过，见 [会话保留](supplier-portal-session-retention-review.md)。仍缺其余并发、历史补偿执行、密码找回及清理生产压力/宕机验收。见 [改密验收](supplier-portal-password-review.md)、[真实退出验收](supplier-exit-portal-browser-review.md)、[本地退出联动](supplier-exit-local-portal-recovery-review.md) 与 [账号维护](supplier-portal-account-management-review.md)。
 
-B3 门户认证已补后端专用 login/me/logout/password、独立随机会话、即时状态阻断、当前会话撤销及自助改密全部会话撤销，与员工/Console 域隔离。前端注册登录/身份复核/退出/改密及隔离真实后端浏览器一键验收已补；自助业务、密码找回、会话清理及退出整体回收策略仍缺，见 [改密验收](supplier-portal-password-review.md)、[页面验收](supplier-portal-ui-review.md)、[账号维护](supplier-portal-account-management-review.md) 与 [门户认证](supplier-portal-auth-review.md)。
+B3 门户认证已补后端专用 login/me/logout/password、独立随机会话、即时状态阻断、当前会话撤销及自助改密全部会话撤销，与员工/Console 域隔离。前端注册登录/身份复核/退出/改密及隔离真实后端浏览器一键验收已补，过期会话系统清理已补；自助业务、密码找回及退出整体回收策略仍缺，见 [会话保留](supplier-portal-session-retention-review.md)、[改密验收](supplier-portal-password-review.md)、[页面验收](supplier-portal-ui-review.md)、[账号维护](supplier-portal-account-management-review.md) 与 [门户认证](supplier-portal-auth-review.md)。
 
 B3 门户注册再补后端单次兑换与独立身份：默认关闭的匿名接口、租户/供应商绑定、有效模块复核、共享限流、事务审计；账号与内部用户/角色/会话隔离。仍缺门户认证/实时撤销、注册登录页面、邮箱验证/渠道和自助业务，不可称门户整体完成。见 [注册验收](supplier-portal-registration-review.md)。
 

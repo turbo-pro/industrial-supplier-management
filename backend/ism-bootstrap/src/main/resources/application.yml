@@ -64,6 +64,12 @@ ism:
   portal:
     authentication-enabled: ${ISM_PORTAL_AUTHENTICATION_ENABLED:false}
     registration-enabled: ${ISM_PORTAL_REGISTRATION_ENABLED:false}
+    session-cleanup:
+      enabled: ${ISM_PORTAL_SESSION_CLEANUP_ENABLED:false}
+      retention-days: ${ISM_PORTAL_SESSION_RETENTION_DAYS:90}
+      batch-size: ${ISM_PORTAL_SESSION_CLEANUP_BATCH_SIZE:100}
+      poll-interval: ${ISM_PORTAL_SESSION_CLEANUP_POLL_INTERVAL:3600000}
+      initial-delay: ${ISM_PORTAL_SESSION_CLEANUP_INITIAL_DELAY:3600000}
   subscription-reminders:
     enabled: ${ISM_SUBSCRIPTION_REMINDERS_ENABLED:false}
     poll-interval: ${ISM_SUBSCRIPTION_REMINDERS_POLL_INTERVAL:300000}

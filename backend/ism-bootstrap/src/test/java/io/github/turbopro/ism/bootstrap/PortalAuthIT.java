@@ -32,6 +32,8 @@ class PortalAuthIT {
     @Autowired ExitApplicationService exits;
     @Autowired ExitArchiveService archives;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired PortalSessionRetentionService retention;
+    @Autowired PortalSessionRetentionMapper retentionMapper;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -51,6 +53,76 @@ class PortalAuthIT {
     }
     PortalAuthModels.Session login(Fixture f){return auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Portal#Pass123"));}
     void me(String token,int expected)throws Exception{mvc.perform(get("/api/portal/auth/me").header("Authorization","Bearer "+token)).andExpect(status().is(expected));}
+
+    void oldSessions(Fixture f,int count){
+        var rows=new ArrayList<Object[]>();
+        for(int i=0;i<count;i++){long id=800000000000L+f.supplier()*1000+i;rows.add(new Object[]{id,f.tenant(),f.account(),String.format("%064x",id)});}
+        jdbc.batchUpdate("INSERT INTO iam_portal_session(id,tenant_id,account_id,token_hash,token_version,expires_at,created_at) VALUES(?,?,?,?,0,'2000-01-02','2000-01-01')",rows);
+    }
+    int clean(Fixture f){try(var context=TenantContext.openSystem(f.tenant())){return retention.cleanBatch();}}
+    @Test void retentionUsesStrictCutoffAndRejectsCrossTenantMapperArguments(){
+        var f=fixture();oldSessions(f,4);var cutoff=java.time.LocalDateTime.of(2001,1,1,0,0);
+        var ids=jdbc.queryForList("SELECT id FROM iam_portal_session WHERE tenant_id=? ORDER BY id",Long.class,f.tenant());
+        jdbc.update("UPDATE iam_portal_session SET expires_at=? WHERE id=?",cutoff,ids.get(0));
+        jdbc.update("UPDATE iam_portal_session SET revoked_at=? WHERE id=?",cutoff,ids.get(1));
+        jdbc.update("UPDATE iam_portal_session SET revoked_at=? WHERE id=?",cutoff.minusNanos(1000000),ids.get(2));
+        jdbc.update("UPDATE iam_portal_session SET expires_at=? WHERE id=?",cutoff.minusNanos(1000000),ids.get(3));
+        try(var context=TenantContext.openSystem(f.tenant())){
+            assertThatThrownBy(()->retentionMapper.lockBatch(f.tenant()+1,cutoff,100)).hasStackTraceContaining("Tenant parameter does not match authenticated tenant");
+            new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status->{
+                assertThat(retentionMapper.lockBatch(f.tenant(),cutoff,100)).containsExactlyInAnyOrder(ids.get(2),ids.get(3));
+                // Deletion must repeat the predicate, even if a selected row has changed in this transaction.
+                jdbc.update("UPDATE iam_portal_session SET expires_at=? WHERE id=?",cutoff.plusDays(1),ids.get(2));
+                assertThat(retentionMapper.deleteBatch(f.tenant(),cutoff,List.of(ids.get(2),ids.get(3)))).isEqualTo(1);
+            });
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(3);
+    }
+    @Test void retentionOnlyDeletesOldExpiredSessionsWithinSystemTenant()throws Exception{
+        var f=fixture();var other=fixture();String live=login(f).accessToken();oldSessions(f,5);oldSessions(other,1);
+        var old=jdbc.queryForList("SELECT id FROM iam_portal_session WHERE tenant_id=? AND expires_at<'2001-01-01' ORDER BY id",Long.class,f.tenant());
+        jdbc.update("UPDATE iam_portal_session SET revoked_at='2000-01-03' WHERE id=?",old.get(0));
+        jdbc.update("UPDATE iam_portal_session SET revoked_at=UTC_TIMESTAMP(3) WHERE id=?",old.get(1));
+        jdbc.update("UPDATE iam_portal_session SET expires_at=UTC_TIMESTAMP(3)-INTERVAL 89 DAY WHERE id=?",old.get(2));
+        jdbc.update("UPDATE iam_portal_session SET expires_at=UTC_TIMESTAMP(3)+INTERVAL 1 DAY,revoked_at='2000-01-03' WHERE id=?",old.get(3));
+        assertThat(retention.candidates(0)).contains(f.tenant(),other.tenant());
+        try(var context=TenantContext.open(f.tenant(),9)){
+            assertThatThrownBy(retention::cleanBatch).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(()->retention.candidates(0)).isInstanceOf(IllegalStateException.class);
+        }
+        assertThat(clean(f)).isEqualTo(2);assertThat(clean(f)).isZero();me(live,200);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=?",Long.class,other.tenant())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_SESSION_CLEANUP' AND operator_id=0",Long.class,f.tenant())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE id=?",String.class,f.account())).isEqualTo("ACTIVE");
+        assertThat(TenantContext.current()).isEmpty();
+    }
+    @Test void retentionBatchesSkipRowsLockedByAnotherNode()throws Exception{
+        var f=fixture();oldSessions(f,201);
+        var locked=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+        var pool=java.util.concurrent.Executors.newSingleThreadExecutor();
+        try{
+            var holder=pool.submit(()->new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status->{
+                assertThat(jdbc.queryForList("SELECT id FROM iam_portal_session WHERE tenant_id=? ORDER BY expires_at,id LIMIT 100 FOR UPDATE",Long.class,f.tenant())).hasSize(100);
+                locked.countDown();
+                try{if(!release.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("retention lock timed out");}
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}return true;
+            }));
+            assertThat(locked.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(clean(f)).isEqualTo(100); // Must finish while the first 100 are still locked.
+            release.countDown();assertThat(holder.get(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(clean(f)).isEqualTo(100);assertThat(clean(f)).isEqualTo(1);assertThat(clean(f)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=?",Long.class,f.tenant())).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_SESSION_CLEANUP'",Long.class,f.tenant())).isEqualTo(3);
+        }finally{release.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(20,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+    }
+    @Test void retentionAuditFailureRollsBackDeletionAndAllowsRetry()throws Exception{
+        var f=fixture();oldSessions(f,2);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_SESSION_CLEANUP' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected retention audit failure'; END IF; END");
+        try{assertThatThrownBy(()->clean(f)).isInstanceOf(RuntimeException.class).hasStackTraceContaining("injected retention audit failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_SESSION_CLEANUP'",Long.class,f.tenant())).isZero();
+        assertThat(clean(f)).isEqualTo(2);assertThat(clean(f)).isZero();
+    }
 
     @Test void passwordChangeRevokesEverySessionAndRequiresNewPassword()throws Exception{
         var f=fixture();var first=login(f);var second=login(f);
