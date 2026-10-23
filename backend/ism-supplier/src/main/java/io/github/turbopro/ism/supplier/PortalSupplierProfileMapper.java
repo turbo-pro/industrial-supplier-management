@@ -9,7 +9,7 @@ public interface PortalSupplierProfileMapper extends TenantScopedMapper {
     @Select("""
         SELECT CAST(s.id AS CHAR) id,s.supplier_code code,s.supplier_name name,s.short_name,
             s.unified_social_credit_code,s.supplier_type type,s.industry,s.country_code,s.province,s.city,s.address,
-            s.established_date,s.website,s.status
+            s.established_date,s.website,s.status,s.version
         FROM sup_supplier s WHERE s.tenant_id=#{tenantId} AND s.id=#{supplierId} AND s.deleted=0
             AND s.status IN ('DRAFT','ACTIVE')
             AND NOT EXISTS(SELECT 1 FROM sup_exit_application e WHERE e.tenant_id=s.tenant_id

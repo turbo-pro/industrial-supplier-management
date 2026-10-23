@@ -10,7 +10,9 @@
 
 构建 `corepack pnpm --filter @ism/portal build`。Node >=20.19、pnpm 10.17.1。
 
-登录后自动展示“本企业档案”及有效的已关联采购品类，可刷新及失败重试。企业范围由服务端会话绑定，无法切换到其他供应商；档案状态不代表准入审批结论。页面仅提供企业基础字段，资料更正需联系邀请方。退出或会话失效时清除档案显示。接口及验收边界见 `docs/development/supplier-portal-profile-review.md`。
+登录后自动展示“本企业档案”及有效的已关联采购品类，可刷新及失败重试。企业范围由服务端会话绑定，无法切换到其他供应商；档案状态不代表准入审批结论。退出或会话失效时清除档案显示。接口及验收边界见 `docs/development/supplier-portal-profile-review.md`。
+
+档案下可提交简称、行业、国家省市、地址和网站的资料变更申请，审核批准后才生效；支持查看差异、申请结果及本人撤回。企业名称、信用代码等主体资料仍需联系邀请方。管理员给员工显式分配 `supplier:change:review` 后，可在供应商详情的“资料变更审核”中处理；原档案已修改则拒绝覆盖。真实跨端验收：`node scripts/verify-reminder-e2e.mjs --portal-changes`，详见 `docs/development/supplier-profile-changes-review.md`。
 
 登录后可展开“修改我的密码”，校验原密码并设置新密码；成功后所有设备旧会话撤销，必须重新登录。原密码错误与登录共享 5 次/15 分钟锁定。网络结果未知不自动重试，先使用新密码核查。
 

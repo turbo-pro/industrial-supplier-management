@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 const [control, url, adminUrl, scenario] = process.argv.slice(2);
-if(scenario && !['management','exit','password','recovery'].includes(scenario))throw new Error('Unknown portal browser scenario');
+if(scenario && !['management','exit','password','recovery','changes'].includes(scenario))throw new Error('Unknown portal browser scenario');
 if (adminUrl && !/^http:\/\/127\.0\.0\.1:\d+$/.test(adminUrl)) throw new Error('Loopback admin URL required');
 if (!control || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url ?? '') || !existsSync(join(control, 'ready'))) throw new Error('Active loopback fixture required');
 const token = readFileSync(join(control, 'invitation'), 'utf8').trim();
@@ -27,7 +27,7 @@ try {
   if(scenario==='password')cli(['run-code','--filename','scripts/browser/portal-real-password.js'],true);
   if(adminUrl){
     const managementScript = join(control,'portal-management-flow.js');
-    writeFileSync(managementScript,readFileSync(scenario==='recovery'?'scripts/browser/portal-real-recovery.js':scenario==='exit'?'scripts/browser/portal-real-exit.js':'scripts/browser/portal-real-management.js','utf8').replaceAll('__ADMIN_URL__',adminUrl),{mode:0o600});
+    writeFileSync(managementScript,readFileSync(scenario==='changes'?'scripts/browser/portal-real-changes.js':scenario==='recovery'?'scripts/browser/portal-real-recovery.js':scenario==='exit'?'scripts/browser/portal-real-exit.js':'scripts/browser/portal-real-management.js','utf8').replaceAll('__ADMIN_URL__',adminUrl),{mode:0o600});
     cli(['run-code','--filename',managementScript],true);
   }
   writeFileSync(join(control, 'finish'), 'done');

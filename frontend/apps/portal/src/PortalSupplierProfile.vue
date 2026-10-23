@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type components, type createIsmClient } from '@ism/api-client';
+import PortalProfileChanges from './PortalProfileChanges.vue';
 
 const props = defineProps<{ client: ReturnType<typeof createIsmClient> }>();
 const emit = defineEmits<{ unauthorized: [] }>();
@@ -40,7 +41,7 @@ onUnmounted(() => { disposed = true; request?.abort(); profile.value = undefined
 <template>
   <section class="profile-section" aria-labelledby="supplier-profile-title" :aria-busy="busy">
     <div class="profile-heading"><h2 id="supplier-profile-title">本企业档案</h2><button class="secondary" :disabled="busy" @click="load">{{ busy ? '正在读取…' : '刷新企业档案' }}</button></div>
-    <p class="help">企业信息由邀请方维护。如需更正，请联系邀请方；档案状态不代表准入审批结论。</p>
+    <p class="help">企业资料更正可在下方提交申请，批准后生效；档案状态不代表准入审批结论。</p>
     <p v-if="busy" role="status">正在读取本企业档案…</p>
     <div v-if="error" ref="errorPanel" class="error" role="alert" tabindex="-1">{{ error }}</div>
     <template v-if="profile">
@@ -61,6 +62,7 @@ onUnmounted(() => { disposed = true; request?.abort(); profile.value = undefined
       <h3>已关联采购品类</h3>
       <ul v-if="profile.purchaseCategories.length" class="profile-categories"><li v-for="category in profile.purchaseCategories" :key="category.code">{{ category.name }} <span class="help">（{{ category.code }}）</span></li></ul>
       <p v-else class="help">暂无有效的已关联采购品类，请联系邀请方维护。</p>
+      <PortalProfileChanges :client="client" :supplier="profile.supplier" @unauthorized="emit('unauthorized')" />
     </template>
   </section>
 </template>

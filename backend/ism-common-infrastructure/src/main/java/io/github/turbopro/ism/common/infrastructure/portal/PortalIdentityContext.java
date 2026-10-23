@@ -9,9 +9,12 @@ public final class PortalIdentityContext {
     private PortalIdentityContext() {}
 
     public static Scope open(long tenantId,long accountId,long supplierId) {
+        return open(tenantId,accountId,supplierId,0);
+    }
+    public static Scope open(long tenantId,long accountId,long supplierId,long sessionId) {
         if(tenantId<=0||accountId<=0||supplierId<=0)throw new IllegalArgumentException("Positive portal identity IDs required");
         Identity previous=CURRENT.get();
-        CURRENT.set(new Identity(tenantId,accountId,supplierId));
+        CURRENT.set(new Identity(tenantId,accountId,supplierId,sessionId));
         return new Scope(previous);
     }
 
@@ -22,7 +25,7 @@ public final class PortalIdentityContext {
         return identity;
     }
 
-    public record Identity(long tenantId,long accountId,long supplierId) {}
+    public record Identity(long tenantId,long accountId,long supplierId,long sessionId) {}
     public static final class Scope implements AutoCloseable {
         private final Identity previous;private boolean closed;
         private Scope(Identity previous){this.previous=previous;}

@@ -30,7 +30,7 @@ public class PortalAuthenticationFilter extends OncePerRequestFilter {
         catch(ApiException e){response.setStatus(e.errorCode().httpStatus());response.setCharacterEncoding("UTF-8");response.setContentType("application/json");json.writeValue(response.getOutputStream(),responses.failure(e.errorCode(),e.getMessage()));return;}
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(principal,null,List.of()));
         try(var tenant=TenantContext.open(principal.tenantId(),principal.accountId());
-            var portal=io.github.turbopro.ism.common.infrastructure.portal.PortalIdentityContext.open(principal.tenantId(),principal.accountId(),principal.supplierId());
+            var portal=io.github.turbopro.ism.common.infrastructure.portal.PortalIdentityContext.open(principal.tenantId(),principal.accountId(),principal.supplierId(),principal.sessionId());
             var grants=AuthorizationContext.open(PermissionSnapshot.denyAll())){chain.doFilter(request,response);}
         finally{SecurityContextHolder.clearContext();}
     }

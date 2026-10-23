@@ -181,6 +181,83 @@ paths:
         '200': { description: Bound identity; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalIdentityResponse' } } } }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/profile-changes:
+    get:
+      operationId: listOwnPortalProfileChanges
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { in: query, name: size, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Own enterprise requests; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileChangePageResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: submitOwnPortalProfileChange
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      description: One pending request per bound supplier. Request key provides exact-content replay; reuse with different content conflicts. Does not change the master until an employee approves. Session and binding are rechecked under locks in the same write transaction.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SubmitProfileChange' } } }
+      responses:
+        '200': { description: Submitted or exact replay; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileChangeResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/profile-changes/{id}/cancel:
+    post:
+      operationId: cancelOwnPortalProfileChange
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } } } }
+      responses:
+        '200': { description: Creator withdrew pending request; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileChangeResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /suppliers/{supplierId}/profile-changes:
+    get:
+      operationId: listSupplierProfileChanges
+      tags: [Supplier Master]
+      description: Employee supplier:master:view plus supplier data scope. Portal credentials cannot access this realm.
+      parameters:
+        - { in: path, name: supplierId, required: true, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { in: query, name: size, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Requests and review capability, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileChangePageResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /suppliers/{supplierId}/profile-changes/{id}/review:
+    post:
+      operationId: reviewSupplierProfileChange
+      tags: [Supplier Master]
+      description: Separate supplier:change:review permission and current supplier scope. Approval rechecks supplier base version and exact prior fields, blocks pending exit/unavailable supplier, and atomically writes the allowlist, request result and audit. Stale master must be rejected and resubmitted. Rejection does not change the master.
+      parameters:
+        - { in: path, name: supplierId, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, comment, version]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                comment: { type: string, minLength: 1, maxLength: 1000 }
+                version: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Reviewed request, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileChangeResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /portal/supplier-profile:
     get:
       operationId: getCurrentPortalSupplierProfile
@@ -2514,6 +2591,64 @@ components:
                 token: { type: string, readOnly: true, description: Once-only recovery response; never persisted or returned by metadata reads. }
                 expiresAt: { type: string, format: date-time }
                 accountVersion: { type: integer }
+    ProfileChangeFields:
+      type: object
+      additionalProperties: false
+      required: [countryCode]
+      properties:
+        shortName: { type: string, maxLength: 100 }
+        industry: { type: string, maxLength: 100 }
+        countryCode: { type: string, pattern: '^[A-Z]{2}$' }
+        province: { type: string, maxLength: 100 }
+        city: { type: string, maxLength: 100 }
+        address: { type: string, maxLength: 300 }
+        website: { type: string, maxLength: 300, description: Empty or valid http/https URL without user info. }
+    SubmitProfileChange:
+      type: object
+      additionalProperties: false
+      required: [requestKey, baseVersion, fields, reason]
+      properties:
+        requestKey: { type: string, format: uuid }
+        baseVersion: { type: integer, minimum: 0 }
+        fields: { $ref: '#/components/schemas/ProfileChangeFields' }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    ProfileChange:
+      type: object
+      required: [id, requestKey, baseVersion, before, requested, reason, status, createdAt, version, canCancel]
+      properties:
+        id: { type: string }
+        requestKey: { type: string }
+        baseVersion: { type: integer }
+        before: { $ref: '#/components/schemas/ProfileChangeFields' }
+        requested: { $ref: '#/components/schemas/ProfileChangeFields' }
+        reason: { type: string }
+        status: { type: string, enum: [SUBMITTED, APPROVED, REJECTED, CANCELLED] }
+        createdAt: { type: string, format: date-time }
+        reviewedAt: { type: string, format: date-time, nullable: true }
+        reviewComment: { type: string, nullable: true }
+        version: { type: integer }
+        canCancel: { type: boolean }
+    ProfileChangeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ProfileChange' } }
+    ProfileChangePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [total, page, size, canReview, items]
+              properties:
+                total: { type: integer, format: int64 }
+                page: { type: integer }
+                size: { type: integer }
+                canReview: { type: boolean }
+                items: { type: array, items: { $ref: '#/components/schemas/ProfileChange' } }
     PortalSupplierProfile:
       type: object
       required: [supplier, purchaseCategories]
@@ -2521,7 +2656,7 @@ components:
         supplier:
           type: object
           additionalProperties: false
-          required: [id, code, name, type, status]
+          required: [id, code, name, type, status, version]
           properties:
             id: { type: string }
             code: { type: string }
@@ -2537,6 +2672,7 @@ components:
             establishedDate: { type: string, format: date, nullable: true }
             website: { type: string, nullable: true }
             status: { type: string, enum: [DRAFT, ACTIVE] }
+            version: { type: integer, minimum: 0, description: Optimistic precondition for a portal profile change. }
         purchaseCategories:
           type: array
           items:

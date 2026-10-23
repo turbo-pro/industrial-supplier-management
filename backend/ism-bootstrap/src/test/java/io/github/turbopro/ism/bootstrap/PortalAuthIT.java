@@ -36,6 +36,8 @@ class PortalAuthIT {
     @Autowired PortalSessionRetentionMapper retentionMapper;
     @Autowired PortalPasswordRecoveryService passwordRecovery;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
+    @Autowired ProfileChangeService changes;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper profileJson;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
     Fixture fixture(){
@@ -72,7 +74,7 @@ class PortalAuthIT {
             assertThat(response).doesNotContain("PRIVATE_","riskLevel","remark","contacts","legalRepresentative","organizationId","createdBy","password","token");
             var data=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("data");
             var fields=new HashSet<String>();data.get("supplier").fieldNames().forEachRemaining(fields::add);
-            assertThat(fields).containsExactlyInAnyOrder("id","code","name","shortName","unifiedSocialCreditCode","type","industry","countryCode","province","city","address","establishedDate","website","status");
+            assertThat(fields).containsExactlyInAnyOrder("id","code","name","shortName","unifiedSocialCreditCode","type","industry","countryCode","province","city","address","establishedDate","website","status","version");
         }
         try(var tenant=TenantContext.open(f.tenant(),f.account())){
             assertThatThrownBy(io.github.turbopro.ism.common.infrastructure.portal.PortalIdentityContext::require).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
@@ -106,6 +108,117 @@ class PortalAuthIT {
     }
     void profileStatus(String token,int expected)throws Exception{
         mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().is(expected));
+    }
+    ProfileChangeModels.Submit changeCommand(int version,String shortName){return new ProfileChangeModels.Submit(UUID.randomUUID().toString(),version,new ProfileChangeModels.Fields(shortName,"化工制造","CN","浙江","杭州","工业园二号","https://supplier.example.test"),"企业地址及业务信息更新");}
+    <T> T portalAction(PortalAuthModels.Principal p,java.util.function.Supplier<T> action){
+        try(var tenant=TenantContext.open(p.tenantId(),p.accountId());var portal=io.github.turbopro.ism.common.infrastructure.portal.PortalIdentityContext.open(p.tenantId(),p.accountId(),p.supplierId(),p.sessionId())){return action.get();}
+    }
+    ProfileChangeModels.View submitChange(String token,ProfileChangeModels.Submit command){return portalAction(auth.authenticate(token),()->changes.submit(command));}
+    AuthorizationContext.Scope changeGrants(boolean review,DataScope scope){return AuthorizationContext.open(new PermissionSnapshot(review?Set.of("supplier:master:view","supplier:change:review"):Set.of("supplier:master:view"),Map.of("supplier:master",scope),Set.of()));}
+    ProfileChangeModels.View reviewChange(Fixture f,ProfileChangeModels.View request,ProfileChangeModels.Decision decision){try(var tenant=TenantContext.open(f.tenant(),10);var grants=changeGrants(true,DataScope.all())){return changes.review(f.supplier(),Long.parseLong(request.id()),new ProfileChangeModels.Review(decision,"独立审核说明",request.version()));}}
+    @Test void profileChangeHttpSubmissionIsIdempotentAndDoesNotEditTheMaster()throws Exception{
+        var f=fixture();String token=login(f).accessToken();var command=changeCommand(0,"门户申请简称");String payload=profileJson.writeValueAsString(command);
+        String first=mvc.perform(post("/api/portal/profile-changes").header("Authorization","Bearer "+token).header("X-Tenant-Id","999").contentType("application/json").content(payload))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.status").value("SUBMITTED")).andReturn().getResponse().getContentAsString();
+        String id=profileJson.readTree(first).get("data").get("id").asText();
+        var missingVersion=(com.fasterxml.jackson.databind.node.ObjectNode)profileJson.readTree(payload);missingVersion.remove("baseVersion");
+        mvc.perform(post("/api/portal/profile-changes").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(missingVersion))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/portal/profile-changes/"+id+"/cancel").header("Authorization","Bearer "+token).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/portal/profile-changes").header("Authorization","Bearer "+token).contentType("application/json").content(payload)).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(id));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_profile_change WHERE tenant_id=?",Long.class,f.tenant())).isOne();
+        assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=?",Integer.class,f.supplier())).isZero();
+        assertThat(jdbc.queryForObject("SELECT short_name FROM sup_supplier WHERE id=?",String.class,f.supplier())).isNull();
+        var different=new ProfileChangeModels.Submit(command.requestKey(),0,command.fields(),"不同内容");
+        mvc.perform(post("/api/portal/profile-changes").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(different))).andExpect(status().isConflict());
+        mvc.perform(get("/api/portal/profile-changes").header("Authorization","Bearer "+token).param("supplierId","999")).andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.items[0].canCancel").value(true));
+        mvc.perform(post("/api/portal/profile-changes").contentType("application/json").content(payload)).andExpect(status().isUnauthorized());
+    }
+    @Test void profileChangeApprovalHasIndependentPermissionScopeAndAtomicAllowlistUpdate()throws Exception{
+        var f=fixture();var foreign=fixture();String token=login(f).accessToken();
+        jdbc.update("UPDATE sup_supplier SET remark='PRIVATE_NOTE',risk_level='HIGH' WHERE id=?",f.supplier());
+        var request=submitChange(token,changeCommand(0,"已批准简称"));
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=changeGrants(false,DataScope.all())){
+            assertThat(changes.employeeList(f.supplier(),0,20).canReview()).isFalse();
+            assertThatThrownBy(()->changes.review(f.supplier(),Long.parseLong(request.id()),new ProfileChangeModels.Review(ProfileChangeModels.Decision.APPROVE,"无权限",0))).isInstanceOfSatisfying(io.github.turbopro.ism.common.api.error.ApiException.class,e->assertThat(e.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.FORBIDDEN));
+        }
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=changeGrants(true,DataScope.none())){assertThatThrownBy(()->changes.review(f.supplier(),Long.parseLong(request.id()),new ProfileChangeModels.Review(ProfileChangeModels.Decision.APPROVE,"范围外",0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        try(var tenant=TenantContext.open(foreign.tenant(),10);var grants=changeGrants(true,DataScope.all())){assertThatThrownBy(()->changes.employeeList(f.supplier(),0,20)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        assertThat(reviewChange(f,request,ProfileChangeModels.Decision.APPROVE).status()).isEqualTo("APPROVED");
+        mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.supplier.shortName").value("已批准简称")).andExpect(jsonPath("$.data.supplier.version").value(1));
+        assertThat(jdbc.queryForObject("SELECT remark FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("PRIVATE_NOTE");
+        assertThat(jdbc.queryForObject("SELECT risk_level FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("HIGH");
+        assertThatThrownBy(()->reviewChange(f,request,ProfileChangeModels.Decision.APPROVE)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PROFILE_CHANGE_APPROVE'",Long.class,f.tenant())).isOne();
+    }
+    @Test void staleMasterCannotBeOverwrittenAndRejectedRequestCanBeResubmittedAndCancelled(){
+        var f=fixture();String token=login(f).accessToken();var request=submitChange(token,changeCommand(0,"待审简称"));
+        jdbc.update("UPDATE sup_supplier SET short_name='内部更新',version=version+1 WHERE id=?",f.supplier());
+        assertThatThrownBy(()->reviewChange(f,request,ProfileChangeModels.Decision.APPROVE)).isInstanceOfSatisfying(io.github.turbopro.ism.common.api.error.ApiException.class,e->assertThat(e.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.CONFLICT));
+        assertThat(jdbc.queryForObject("SELECT short_name FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("内部更新");
+        assertThat(reviewChange(f,request,ProfileChangeModels.Decision.REJECT).status()).isEqualTo("REJECTED");
+        var fresh=submitChange(token,changeCommand(1,"重新申请"));var p=auth.authenticate(token);
+        assertThat(portalAction(p,()->changes.cancel(Long.parseLong(fresh.id()),fresh.version())).status()).isEqualTo("CANCELLED");
+        assertThatThrownBy(()->portalAction(p,()->changes.cancel(Long.parseLong(fresh.id()),0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT short_name FROM sup_supplier WHERE id=?",String.class,f.supplier())).isEqualTo("内部更新");
+    }
+    @Test void profileChangeCancellationRequiresTheCreatorAndCorrectEnterprise(){
+        var f=fixture();String token=login(f).accessToken();var request=submitChange(token,changeCommand(0,"申请"));
+        registrations.register(new PortalRegistrationModels.Register(pendingInvite(f),"Another.User","Portal#Pass123"));
+        String other=auth.login(new PortalAuthModels.Login(f.code(),"Another.User","Portal#Pass123")).accessToken();
+        var p=auth.authenticate(other);
+        assertThat(portalAction(p,()->changes.portalList(0,20)).items().get(0).canCancel()).isFalse();
+        assertThatThrownBy(()->portalAction(p,()->changes.cancel(Long.parseLong(request.id()),0))).isInstanceOfSatisfying(io.github.turbopro.ism.common.api.error.ApiException.class,e->assertThat(e.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.FORBIDDEN));
+        var foreign=fixture();var stranger=auth.authenticate(login(foreign).accessToken());
+        assertThat(portalAction(stranger,()->changes.portalList(0,20)).total()).isZero();
+        assertThatThrownBy(()->portalAction(stranger,()->changes.cancel(Long.parseLong(request.id()),0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+    }
+    @Test void portalChangeWriteRechecksRevocationAfterFilterAuthentication(){
+        var f=fixture();var p=auth.authenticate(login(f).accessToken());auth.logout(p);
+        assertThatThrownBy(()->portalAction(p,()->changes.submit(changeCommand(0,"撤销后提交")))).isInstanceOfSatisfying(io.github.turbopro.ism.common.api.error.ApiException.class,e->assertThat(e.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.UNAUTHENTICATED));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_profile_change WHERE tenant_id=?",Long.class,f.tenant())).isZero();
+    }
+    @Test void profileChangeAuditFailureRollsBackSubmissionAndApproval()throws Exception{
+        var f=fixture();String token=login(f).accessToken();var command=changeCommand(0,"事务回滚验证");
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='SUPPLIER_PROFILE_CHANGE_SUBMIT' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='profile audit failure'; END IF; END");
+        try{assertThatThrownBy(()->submitChange(token,command)).isInstanceOf(RuntimeException.class);}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_profile_change WHERE tenant_id=?",Long.class,f.tenant())).isZero();
+        var request=submitChange(token,command);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='SUPPLIER_PROFILE_CHANGE_APPROVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='profile audit failure'; END IF; END");
+        try{assertThatThrownBy(()->reviewChange(f,request,ProfileChangeModels.Decision.APPROVE)).isInstanceOf(RuntimeException.class);}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=?",Integer.class,f.supplier())).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM sup_profile_change WHERE id=?",String.class,Long.parseLong(request.id()))).isEqualTo("SUBMITTED");
+        assertThat(reviewChange(f,request,ProfileChangeModels.Decision.APPROVE).status()).isEqualTo("APPROVED");
+    }
+    @Test void concurrentPortalChangesLeaveExactlyOnePendingRequest()throws Exception{
+        var f=fixture();var p=auth.authenticate(login(f).accessToken());var pool=java.util.concurrent.Executors.newFixedThreadPool(2);var start=new java.util.concurrent.CountDownLatch(1);
+        try{
+            var jobs=new ArrayList<java.util.concurrent.Future<Boolean>>();
+            for(int n=0;n<2;n++){var command=changeCommand(0,"并发简称"+n);jobs.add(pool.submit(()->{start.await();try{portalAction(p,()->changes.submit(command));return true;}catch(io.github.turbopro.ism.common.api.error.ApiException e){assertThat(e.errorCode()).isEqualTo(io.github.turbopro.ism.common.api.error.CommonErrorCode.CONFLICT);return false;}}));}
+            start.countDown();assertThat(List.of(jobs.get(0).get(20,java.util.concurrent.TimeUnit.SECONDS),jobs.get(1).get(20,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(true,false);
+        }finally{start.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_profile_change WHERE tenant_id=? AND status='SUBMITTED'",Long.class,f.tenant())).isOne();
+    }
+    @Test void concurrentExactRequestReplayReturnsOneApplicationWithoutDuplicateAudit()throws Exception{
+        var f=fixture();var p=auth.authenticate(login(f).accessToken());var command=changeCommand(0,"并发同键");
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(2);var start=new java.util.concurrent.CountDownLatch(1);
+        try{
+            java.util.concurrent.Callable<String> submit=()->{start.await();return portalAction(p,()->changes.submit(command)).id();};
+            var first=pool.submit(submit);var second=pool.submit(submit);start.countDown();
+            assertThat(first.get(20,java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(second.get(20,java.util.concurrent.TimeUnit.SECONDS));
+        }finally{start.countDown();pool.shutdownNow();assertThat(pool.awaitTermination(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_profile_change WHERE tenant_id=?",Long.class,f.tenant())).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='SUPPLIER_PROFILE_CHANGE_SUBMIT'",Long.class,f.tenant())).isOne();
+    }
+    @Test void invalidWebsitesNoopAndPendingExitDoNotChangeEnterprise(){
+        var f=fixture();String token=login(f).accessToken();
+        for(String website:List.of("javascript:alert(1)","relative-path","https://user:password@example.test")){
+            var command=new ProfileChangeModels.Submit(UUID.randomUUID().toString(),0,new ProfileChangeModels.Fields("新简称","","CN","","","",website),"更正");
+            assertThatThrownBy(()->submitChange(token,command)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        assertThatThrownBy(()->submitChange(token,new ProfileChangeModels.Submit(UUID.randomUUID().toString(),0,new ProfileChangeModels.Fields("","","CN","","","",""),"无变化"))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        var request=submitChange(token,changeCommand(0,"待审"));prepareExit(f);
+        assertThatThrownBy(()->reviewChange(f,request,ProfileChangeModels.Decision.APPROVE)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(reviewChange(f,request,ProfileChangeModels.Decision.REJECT).status()).isEqualTo("REJECTED");
     }
     AuthorizationContext.Scope recoveryGrants(){return AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:portal:recover"),Map.of("supplier:master",DataScope.all()),Set.of()));}
     io.github.turbopro.ism.common.infrastructure.portal.PortalPasswordRecoveryAdministration.Issued issueRecovery(Fixture f,int version){

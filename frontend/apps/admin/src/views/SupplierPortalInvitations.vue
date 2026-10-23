@@ -3,6 +3,8 @@ import { nextTick, ref } from 'vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
 import SupplierPortalAccounts from './SupplierPortalAccounts.vue';
+import SupplierProfileChanges from './SupplierProfileChanges.vue';
+const emit = defineEmits<{ changed: [] }>();
 const props = defineProps<{ supplierId: string; supplierStatus: string }>();
 const session = useSessionStore();
 const expanded = ref(false), busy = ref(false), loading = ref(false), error = ref(''), token = ref('');
@@ -76,6 +78,7 @@ async function revoke() {
       <el-button :disabled="busy || loading" @click="load">刷新邀请记录</el-button>
     </template>
     <SupplierPortalAccounts :key="supplierId" :supplier-id="supplierId" :supplier-status="supplierStatus" />
+    <SupplierProfileChanges :key="'changes-' + supplierId" :supplier-id="supplierId" @changed="emit('changed')" />
   </section>
 </template>
 <style scoped>

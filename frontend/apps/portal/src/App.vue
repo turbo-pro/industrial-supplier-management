@@ -133,7 +133,7 @@ onMounted(() => { document.title = '供应商协作门户 · ISM'; });
       <template v-if="identity">
         <h2>当前登录身份</h2><p>欢迎，{{ identity.displayName || identity.username }}</p>
         <dl><dt>用户名</dt><dd>{{ identity.username }}</dd><dt>账号 ID</dt><dd>{{ identity.accountId }}</dd><dt>租户 ID</dt><dd>{{ identity.tenantId }}</dd><dt>供应商 ID</dt><dd>{{ identity.supplierId }}</dd></dl>
-        <p class="help">当前账号仅可查看绑定企业的档案。资料变更提交及其他业务协同尚未开放。</p>
+        <p class="help">当前账号可查看绑定企业档案并提交资料变更申请，由邀请方审核后生效。</p>
         <div class="actions"><button :disabled="busy" @click="refreshIdentity">重新确认身份</button><button class="secondary" :disabled="busy" @click="logout">退出当前会话</button></div>
         <button class="switch" :disabled="busy" :aria-expanded="changingPassword" aria-controls="password-settings" @click="togglePasswordForm">{{ changingPassword ? '取消修改密码' : '修改我的密码' }}</button>
         <form v-if="changingPassword" id="password-settings" @submit.prevent="changePassword">

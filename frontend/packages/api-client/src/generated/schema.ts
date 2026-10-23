@@ -143,6 +143,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/profile-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOwnPortalProfileChanges"];
+        put?: never;
+        /** @description One pending request per bound supplier. Request key provides exact-content replay; reuse with different content conflicts. Does not change the master until an employee approves. Session and binding are rechecked under locks in the same write transaction. */
+        post: operations["submitOwnPortalProfileChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/profile-changes/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelOwnPortalProfileChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/profile-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Employee supplier:master:view plus supplier data scope. Portal credentials cannot access this realm. */
+        get: operations["listSupplierProfileChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suppliers/{supplierId}/profile-changes/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Separate supplier:change:review permission and current supplier scope. Approval rechecks supplier base version and exact prior fields, blocks pending exit/unavailable supplier, and atomically writes the allowlist, request result and audit. Stale master must be rejected and resubmitted. Rejection does not change the master. */
+        post: operations["reviewSupplierProfileChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/supplier-profile": {
         parameters: {
             query?: never;
@@ -3293,6 +3360,53 @@ export interface components {
                 accountVersion: number;
             };
         };
+        ProfileChangeFields: {
+            shortName?: string;
+            industry?: string;
+            countryCode: string;
+            province?: string;
+            city?: string;
+            address?: string;
+            /** @description Empty or valid http/https URL without user info. */
+            website?: string;
+        };
+        SubmitProfileChange: {
+            /** Format: uuid */
+            requestKey: string;
+            baseVersion: number;
+            fields: components["schemas"]["ProfileChangeFields"];
+            reason: string;
+        };
+        ProfileChange: {
+            id: string;
+            requestKey: string;
+            baseVersion: number;
+            before: components["schemas"]["ProfileChangeFields"];
+            requested: components["schemas"]["ProfileChangeFields"];
+            reason: string;
+            /** @enum {string} */
+            status: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            reviewedAt?: string | null;
+            reviewComment?: string | null;
+            version: number;
+            canCancel: boolean;
+        };
+        ProfileChangeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["ProfileChange"];
+        };
+        ProfileChangePageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                canReview: boolean;
+                items: components["schemas"]["ProfileChange"][];
+            };
+        };
         PortalSupplierProfile: {
             supplier: {
                 id: string;
@@ -3312,6 +3426,8 @@ export interface components {
                 website?: string | null;
                 /** @enum {string} */
                 status: "DRAFT" | "ACTIVE";
+                /** @description Optimistic precondition for a portal profile change. */
+                version: number;
             };
             purchaseCategories: {
                 code: string;
@@ -6423,6 +6539,152 @@ export interface operations {
                 };
             };
             401: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnPortalProfileChanges: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own enterprise requests; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileChangePageResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+        };
+    };
+    submitOwnPortalProfileChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitProfileChange"];
+            };
+        };
+        responses: {
+            /** @description Submitted or exact replay; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileChangeResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    cancelOwnPortalProfileChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Creator withdrew pending request; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileChangeResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupplierProfileChanges: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requests and review capability */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileChangePageResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    reviewSupplierProfileChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "APPROVE" | "REJECT";
+                    comment: string;
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Reviewed request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileChangeResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };
     };
