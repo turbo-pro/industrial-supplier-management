@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
+import PortalSupplierProfile from './PortalSupplierProfile.vue';
 
 type Identity = components['schemas']['PortalIdentity'];
 const mode = ref<'login' | 'register' | 'reset'>('login');
@@ -19,6 +20,10 @@ function clearPasswordForm() { passwordForm.currentPassword = ''; passwordForm.n
 function togglePasswordForm() { clearPasswordForm(); changingPassword.value = !changingPassword.value; error.value = ''; notice.value = ''; }
 const errorPanel = ref<HTMLElement>();
 async function fail(message: string) { error.value = message; await nextTick(); errorPanel.value?.focus(); }
+function expireProfileSession() {
+  accessToken = undefined; identity.value = undefined; changingPassword.value = false; clearPasswordForm(); notice.value = '';
+  void fail('会话已失效，请重新登录。');
+}
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login';
   form.password = ''; form.confirmation = ''; form.invitationToken = ''; form.recoveryToken = ''; error.value = ''; notice.value = '';
@@ -128,7 +133,7 @@ onMounted(() => { document.title = '供应商协作门户 · ISM'; });
       <template v-if="identity">
         <h2>当前登录身份</h2><p>欢迎，{{ identity.displayName || identity.username }}</p>
         <dl><dt>用户名</dt><dd>{{ identity.username }}</dd><dt>账号 ID</dt><dd>{{ identity.accountId }}</dd><dt>租户 ID</dt><dd>{{ identity.tenantId }}</dd><dt>供应商 ID</dt><dd>{{ identity.supplierId }}</dd></dl>
-        <p class="help">此页仅确认账号绑定，不代表准入审批通过。资料提交及业务协同尚未开放。</p>
+        <p class="help">当前账号仅可查看绑定企业的档案。资料变更提交及其他业务协同尚未开放。</p>
         <div class="actions"><button :disabled="busy" @click="refreshIdentity">重新确认身份</button><button class="secondary" :disabled="busy" @click="logout">退出当前会话</button></div>
         <button class="switch" :disabled="busy" :aria-expanded="changingPassword" aria-controls="password-settings" @click="togglePasswordForm">{{ changingPassword ? '取消修改密码' : '修改我的密码' }}</button>
         <form v-if="changingPassword" id="password-settings" @submit.prevent="changePassword">
@@ -142,6 +147,7 @@ onMounted(() => { document.title = '供应商协作门户 · ISM'; });
             <button class="primary" type="submit">{{ busy ? '正在处理…' : '确认修改并退出所有会话' }}</button>
           </fieldset>
         </form>
+        <PortalSupplierProfile :key="identity.tenantId + ':' + identity.accountId" :client="client" @unauthorized="expireProfileSession" />
       </template>
       <template v-else>
         <h2>{{ mode === 'login' ? '账号登录' : mode === 'reset' ? '凭证恢复密码' : '邀请注册' }}</h2>

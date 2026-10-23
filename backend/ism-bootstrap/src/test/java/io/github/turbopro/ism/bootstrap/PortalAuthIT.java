@@ -54,6 +54,59 @@ class PortalAuthIT {
     }
     PortalAuthModels.Session login(Fixture f){return auth.login(new PortalAuthModels.Login(f.code(),"Portal.User","Portal#Pass123"));}
     void me(String token,int expected)throws Exception{mvc.perform(get("/api/portal/auth/me").header("Authorization","Bearer "+token)).andExpect(status().is(expected));}
+    @Test void profileReturnsOnlyBoundEnterpriseAndAllowlistedFields()throws Exception{
+        var f=fixture();var foreign=fixture();long other=f.supplier()+20;
+        jdbc.update("UPDATE sup_supplier SET supplier_name='本企业制造',industry='化工',address='工业园区一号',risk_level='HIGH',remark='PRIVATE_RISK_NOTE',legal_representative='PRIVATE_PERSON' WHERE id=?",f.supplier());
+        jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,'OTHER','PRIVATE_OTHER_SUPPLIER','TRADER',9,9)",other,f.tenant(),f.supplier()+1);
+        jdbc.update("INSERT INTO sup_purchase_category(id,tenant_id,category_code,category_name,status) VALUES(?,?,'CHEMICAL','化工原料','ACTIVE'),(?,?,'OLD','PRIVATE_INACTIVE','INACTIVE'),(?,?,'OTHER','PRIVATE_UNASSIGNED','ACTIVE'),(?,?,'CHEMICAL','PRIVATE_FOREIGN','ACTIVE')",f.supplier()+60,f.tenant(),f.supplier()+61,f.tenant(),f.supplier()+62,f.tenant(),foreign.supplier()+60,foreign.tenant());
+        jdbc.update("INSERT INTO sup_supplier_purchase_category(tenant_id,supplier_id,category_id) VALUES(?,?,?),(?,?,?),(?,?,?),(?,?,?)",f.tenant(),f.supplier(),f.supplier()+60,f.tenant(),f.supplier(),f.supplier()+61,f.tenant(),other,f.supplier()+62,foreign.tenant(),foreign.supplier(),foreign.supplier()+60);
+        String token=login(f).accessToken();
+        for(long selected:List.of(other,foreign.supplier())){
+            var response=mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token).header("X-Tenant-Id",foreign.tenant())
+                .param("supplierId",Long.toString(selected)).param("tenantId",Long.toString(foreign.tenant())))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
+                .andExpect(jsonPath("$.data.supplier.id").value(Long.toString(f.supplier())))
+                .andExpect(jsonPath("$.data.supplier.name").value("本企业制造"))
+                .andExpect(jsonPath("$.data.purchaseCategories.length()").value(1))
+                .andExpect(jsonPath("$.data.purchaseCategories[0].name").value("化工原料")).andReturn().getResponse().getContentAsString();
+            assertThat(response).doesNotContain("PRIVATE_","riskLevel","remark","contacts","legalRepresentative","organizationId","createdBy","password","token");
+            var data=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("data");
+            var fields=new HashSet<String>();data.get("supplier").fieldNames().forEachRemaining(fields::add);
+            assertThat(fields).containsExactlyInAnyOrder("id","code","name","shortName","unifiedSocialCreditCode","type","industry","countryCode","province","city","address","establishedDate","website","status");
+        }
+        try(var tenant=TenantContext.open(f.tenant(),f.account())){
+            assertThatThrownBy(io.github.turbopro.ism.common.infrastructure.portal.PortalIdentityContext::require).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+    }
+    @Test void profileRequiresLivePortalSessionAndRejectsEmployeeRealm()throws Exception{
+        var f=fixture();String token=login(f).accessToken();
+        mvc.perform(get("/api/portal/supplier-profile")).andExpect(status().isUnauthorized());
+        String employee=internalTokens.createAccessToken(new AuthModels.AuthUser(9,f.tenant(),"employee","内部员工","unused","ACTIVE",false,null,false,0,0,null),"not-a-portal-session");
+        mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+employee)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.purchaseCategories.length()").value(0));
+        mvc.perform(post("/api/portal/auth/logout").header("Authorization","Bearer "+token)).andExpect(status().isOk());
+        mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().isUnauthorized());
+    }
+    @Test void profileRechecksAccountTenantSupplierAndPendingExitEveryRequest()throws Exception{
+        var f=fixture();String token=login(f).accessToken();
+        jdbc.update("UPDATE iam_portal_account SET status='DISABLED' WHERE id=?",f.account());profileStatus(token,401);
+        jdbc.update("UPDATE iam_portal_account SET status='ACTIVE' WHERE id=?",f.account());
+        jdbc.update("UPDATE plt_tenant SET status='SUSPENDED' WHERE id=?",f.tenant());profileStatus(token,401);
+        jdbc.update("UPDATE plt_tenant SET status='ACTIVE' WHERE id=?",f.tenant());
+        jdbc.update("UPDATE sup_supplier SET status='SUSPENDED' WHERE id=?",f.supplier());profileStatus(token,401);
+        jdbc.update("UPDATE sup_supplier SET status='ACTIVE' WHERE id=?",f.supplier());profileStatus(token,200);
+        jdbc.update("UPDATE sup_supplier SET deleted=1 WHERE id=?",f.supplier());profileStatus(token,401);
+        jdbc.update("UPDATE sup_supplier SET deleted=0 WHERE id=?",f.supplier());
+        var application=prepareExit(f);profileStatus(token,401);
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){
+            exits.cancel(f.supplier(),Long.parseLong(application.id()),new ExitModels.Version(application.version()));
+        }
+        profileStatus(token,200);
+    }
+    void profileStatus(String token,int expected)throws Exception{
+        mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().is(expected));
+    }
     AuthorizationContext.Scope recoveryGrants(){return AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:portal:recover"),Map.of("supplier:master",DataScope.all()),Set.of()));}
     io.github.turbopro.ism.common.infrastructure.portal.PortalPasswordRecoveryAdministration.Issued issueRecovery(Fixture f,int version){
         try(var tenant=TenantContext.open(f.tenant(),9);var grants=recoveryGrants()){return administration.issueRecovery(f.supplier(),f.account(),version,"已通过合同联系人线下核实身份",true);}

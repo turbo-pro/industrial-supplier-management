@@ -181,6 +181,16 @@ paths:
         '200': { description: Bound identity; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalIdentityResponse' } } } }
         '401': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/supplier-profile:
+    get:
+      operationId: getCurrentPortalSupplierProfile
+      tags: [Supplier Portal]
+      description: Read-only field allowlist for the supplier bound to the live portal session. No tenant/supplier selector is accepted; headers and query parameters cannot change the binding. Returns active assigned purchase categories only. Internal risk, notes, contacts, legal representative, financial and employee/organization data are excluded. No-store. Draft/enabled archive state is not an admission decision.
+      security: [{ portalBearer: [] }]
+      responses:
+        '200': { description: Own supplier profile; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalSupplierProfileResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /portal/auth/logout:
     post:
       operationId: logoutSupplierPortal
@@ -2504,6 +2514,45 @@ components:
                 token: { type: string, readOnly: true, description: Once-only recovery response; never persisted or returned by metadata reads. }
                 expiresAt: { type: string, format: date-time }
                 accountVersion: { type: integer }
+    PortalSupplierProfile:
+      type: object
+      required: [supplier, purchaseCategories]
+      properties:
+        supplier:
+          type: object
+          additionalProperties: false
+          required: [id, code, name, type, status]
+          properties:
+            id: { type: string }
+            code: { type: string }
+            name: { type: string }
+            shortName: { type: string, nullable: true }
+            unifiedSocialCreditCode: { type: string, nullable: true }
+            type: { type: string, enum: [MANUFACTURER, TRADER, SERVICE_PROVIDER, CONTRACTOR, OTHER] }
+            industry: { type: string, nullable: true }
+            countryCode: { type: string, nullable: true }
+            province: { type: string, nullable: true }
+            city: { type: string, nullable: true }
+            address: { type: string, nullable: true }
+            establishedDate: { type: string, format: date, nullable: true }
+            website: { type: string, nullable: true }
+            status: { type: string, enum: [DRAFT, ACTIVE] }
+        purchaseCategories:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, name]
+            properties:
+              code: { type: string }
+              name: { type: string }
+    PortalSupplierProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/PortalSupplierProfile' }
     PortalIdentity:
       type: object
       required: [accountId, tenantId, supplierId, username, displayName]

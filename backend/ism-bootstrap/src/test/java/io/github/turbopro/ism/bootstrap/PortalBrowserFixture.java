@@ -49,6 +49,10 @@ class PortalBrowserFixture {
         jdbc.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,initialization_status,package_version_id) VALUES(21001,'PORTAL-BROWSER','门户浏览器租户','ACTIVE','READY',21003)");
         jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(21004,21001,'HQ','总部','HEADQUARTERS','ACTIVE')");
         jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(21005,21001,21004,'SUP','浏览器供应商','MANUFACTURER',9,9)");
+        jdbc.update("UPDATE sup_supplier SET industry='化工制造',address='示例工业园区一号',remark='PRIVATE_INTERNAL_NOTE' WHERE id=21005");
+        jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(21020,21001,21004,'OTHER','PRIVATE_OTHER_ENTERPRISE','TRADER',9,9)");
+        jdbc.update("INSERT INTO sup_purchase_category(id,tenant_id,category_code,category_name,status) VALUES(21021,21001,'CHEMICAL','化工原料','ACTIVE'),(21022,21001,'OLD','PRIVATE_OLD_CATEGORY','INACTIVE')");
+        jdbc.update("INSERT INTO sup_supplier_purchase_category(tenant_id,supplier_id,category_id) VALUES(21001,21005,21021),(21001,21005,21022)");
         boolean management=Boolean.getBoolean("ism.browser.portal-management");
         boolean exit=Boolean.getBoolean("ism.browser.portal-exit");
         boolean password=Boolean.getBoolean("ism.browser.portal-password");

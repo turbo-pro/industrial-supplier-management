@@ -143,6 +143,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/supplier-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read-only field allowlist for the supplier bound to the live portal session. No tenant/supplier selector is accepted; headers and query parameters cannot change the binding. Returns active assigned purchase categories only. Internal risk, notes, contacts, legal representative, financial and employee/organization data are excluded. No-store. Draft/enabled archive state is not an admission decision. */
+        get: operations["getCurrentPortalSupplierProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/auth/logout": {
         parameters: {
             query?: never;
@@ -3276,6 +3293,34 @@ export interface components {
                 accountVersion: number;
             };
         };
+        PortalSupplierProfile: {
+            supplier: {
+                id: string;
+                code: string;
+                name: string;
+                shortName?: string | null;
+                unifiedSocialCreditCode?: string | null;
+                /** @enum {string} */
+                type: "MANUFACTURER" | "TRADER" | "SERVICE_PROVIDER" | "CONTRACTOR" | "OTHER";
+                industry?: string | null;
+                countryCode?: string | null;
+                province?: string | null;
+                city?: string | null;
+                address?: string | null;
+                /** Format: date */
+                establishedDate?: string | null;
+                website?: string | null;
+                /** @enum {string} */
+                status: "DRAFT" | "ACTIVE";
+            };
+            purchaseCategories: {
+                code: string;
+                name: string;
+            }[];
+        };
+        PortalSupplierProfileResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalSupplierProfile"];
+        };
         PortalIdentity: {
             accountId: string;
             tenantId: string;
@@ -6379,6 +6424,28 @@ export interface operations {
             };
             401: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    getCurrentPortalSupplierProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own supplier profile; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSupplierProfileResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     logoutSupplierPortal: {

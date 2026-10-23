@@ -10,6 +10,8 @@
 
 构建 `corepack pnpm --filter @ism/portal build`。Node >=20.19、pnpm 10.17.1。
 
+登录后自动展示“本企业档案”及有效的已关联采购品类，可刷新及失败重试。企业范围由服务端会话绑定，无法切换到其他供应商；档案状态不代表准入审批结论。页面仅提供企业基础字段，资料更正需联系邀请方。退出或会话失效时清除档案显示。接口及验收边界见 `docs/development/supplier-portal-profile-review.md`。
+
 登录后可展开“修改我的密码”，校验原密码并设置新密码；成功后所有设备旧会话撤销，必须重新登录。原密码错误与登录共享 5 次/15 分钟锁定。网络结果未知不自动重试，先使用新密码核查。
 
 忘记密码使用“恢复凭证”：部署方显式启用 `ISM_PORTAL_PASSWORD_RECOVERY_ENABLED=true`（同时须启用认证），给管理员分配独立 `supplier:portal:recover` 权限。管理员核实本人身份并填写原因后签发 15 分钟有效、只显示一次的凭证，由可信渠道交付，用户自行设置新密码。支持替换与撤销，不自动邮件找回，也不让管理员直接设置用户新密码。签发不撤销会话；兑换成功才撤销全部旧会话。真实跨端验收 `node scripts/verify-reminder-e2e.mjs --portal-recovery`，详见 `docs/development/supplier-portal-password-recovery-review.md`。
