@@ -210,6 +210,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/qualifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Published certificates of the enterprise bound to the live portal session; requires the current QUALIFICATION entitlement. Employee drafts and rejected drafts are not published. Ignores client tenant/supplier selectors. Expiry computed with the database business date as for the internal register. No-store. */
+        get: operations["listOwnPortalQualifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/qualifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Published certificate field allowlist. No file/storage identifiers, reviewer/organization identifiers or internal verification/revocation comments. Foreign, draft and nonexistent ids all return 404. No-store. */
+        get: operations["getOwnPortalQualification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/qualifications/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Attachment-only octet stream via the authorized certificate, not a file-id endpoint. Rechecks live session inside transaction, requires current entitlement and active file, and audits successful authorization/open (not proof of complete receipt). Historical revoked/superseded originals may be downloaded for reference, not qualification validity. No-store and nosniff. No public storage URL. */
+        get: operations["downloadOwnPortalQualification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/supplier-profile": {
         parameters: {
             query?: never;
@@ -3405,6 +3456,38 @@ export interface components {
                 size: number;
                 canReview: boolean;
                 items: components["schemas"]["ProfileChange"][];
+            };
+        };
+        PortalQualification: {
+            id: string;
+            typeCode: string;
+            typeName: string;
+            certificateNo: string;
+            issuingAuthority?: string | null;
+            /** Format: date */
+            issueDate?: string | null;
+            /** Format: date */
+            effectiveDate?: string | null;
+            /** Format: date */
+            expiryDate?: string | null;
+            permanent: boolean;
+            /** @enum {string} */
+            status: "VALID" | "EXPIRING" | "EXPIRED" | "REVOKED" | "SUPERSEDED";
+            /** @description Null for permanent or undated certificates; negative for expired dates. Not itself proof of business admission. */
+            daysUntilExpiry?: number | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PortalQualificationResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalQualification"];
+        };
+        PortalQualificationPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                /** Format: int64 */
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["PortalQualification"][];
             };
         };
         PortalSupplierProfile: {
@@ -6686,6 +6769,88 @@ export interface operations {
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnPortalQualifications: {
+        parameters: {
+            query?: {
+                keyword?: string;
+                status?: "" | "VALID" | "EXPIRING" | "EXPIRED" | "REVOKED" | "SUPERSEDED";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bound enterprise published certificates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalQualificationPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    getOwnPortalQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Certificate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalQualificationResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    downloadOwnPortalQualification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Original certificate attachment */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "no-store";
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            503: components["responses"]["ApiFailure"];
         };
     };
     getCurrentPortalSupplierProfile: {

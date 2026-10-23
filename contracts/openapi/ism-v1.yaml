@@ -258,6 +258,55 @@ paths:
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/qualifications:
+    get:
+      operationId: listOwnPortalQualifications
+      tags: [Supplier Portal]
+      description: Published certificates of the enterprise bound to the live portal session; requires the current QUALIFICATION entitlement. Employee drafts and rejected drafts are not published. Ignores client tenant/supplier selectors. Expiry computed with the database business date as for the internal register. No-store.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100, default: '' } }
+        - { name: status, in: query, schema: { type: string, enum: ['', VALID, EXPIRING, EXPIRED, REVOKED, SUPERSEDED], default: '' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        '200': { description: Bound enterprise published certificates, content: { application/json: { schema: { $ref: '#/components/schemas/PortalQualificationPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+  /portal/qualifications/{id}:
+    get:
+      operationId: getOwnPortalQualification
+      tags: [Supplier Portal]
+      description: Published certificate field allowlist. No file/storage identifiers, reviewer/organization identifiers or internal verification/revocation comments. Foreign, draft and nonexistent ids all return 404. No-store.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Certificate, content: { application/json: { schema: { $ref: '#/components/schemas/PortalQualificationResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /portal/qualifications/{id}/content:
+    get:
+      operationId: downloadOwnPortalQualification
+      tags: [Supplier Portal]
+      description: Attachment-only octet stream via the authorized certificate, not a file-id endpoint. Rechecks live session inside transaction, requires current entitlement and active file, and audits successful authorization/open (not proof of complete receipt). Historical revoked/superseded originals may be downloaded for reference, not qualification validity. No-store and nosniff. No public storage URL.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Original certificate attachment
+          headers:
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Content-Type-Options: { schema: { type: string, enum: [nosniff] } }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '503': { $ref: '#/components/responses/ApiFailure' }
   /portal/supplier-profile:
     get:
       operationId: getCurrentPortalSupplierProfile
@@ -2649,6 +2698,44 @@ components:
                 size: { type: integer }
                 canReview: { type: boolean }
                 items: { type: array, items: { $ref: '#/components/schemas/ProfileChange' } }
+    PortalQualification:
+      type: object
+      additionalProperties: false
+      required: [id, typeCode, typeName, certificateNo, permanent, status, updatedAt]
+      properties:
+        id: { type: string }
+        typeCode: { type: string }
+        typeName: { type: string }
+        certificateNo: { type: string }
+        issuingAuthority: { type: string, nullable: true }
+        issueDate: { type: string, format: date, nullable: true }
+        effectiveDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        permanent: { type: boolean }
+        status: { type: string, enum: [VALID, EXPIRING, EXPIRED, REVOKED, SUPERSEDED] }
+        daysUntilExpiry: { type: integer, nullable: true, description: Null for permanent or undated certificates; negative for expired dates. Not itself proof of business admission. }
+        updatedAt: { type: string, format: date-time }
+    PortalQualificationResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/PortalQualification' }
+    PortalQualificationPageResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [total, page, size, items]
+              properties:
+                total: { type: integer, format: int64 }
+                page: { type: integer }
+                size: { type: integer }
+                items: { type: array, items: { $ref: '#/components/schemas/PortalQualification' } }
     PortalSupplierProfile:
       type: object
       required: [supplier, purchaseCategories]

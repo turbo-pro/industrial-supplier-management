@@ -32,12 +32,14 @@ class PortalBrowserFixture {
         r.add("spring.datasource.password", MYSQL::getPassword);
         r.add("ism.integration.finance.mode",()->Boolean.getBoolean("ism.browser.portal-exit")?"MANUAL":"ERP");
         r.add("ism.portal.password-recovery-enabled",()->Boolean.getBoolean("ism.browser.portal-recovery"));
+        r.add("ism.storage.local-root",()->Path.of(System.getProperty("ism.browser.fixture-dir")).resolve("storage").toString());
     }
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
     @Autowired PortalInvitationService invites;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder passwords;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
+    @Autowired io.github.turbopro.ism.resource.file.FileService certificateFiles;
 
     @Test void serveUntilBrowserFinishesThenVerifyPersistentEffects() throws Exception {
         Path control = Path.of(Objects.requireNonNull(System.getProperty("ism.browser.fixture-dir"))).toRealPath();
@@ -58,6 +60,19 @@ class PortalBrowserFixture {
         boolean password=Boolean.getBoolean("ism.browser.portal-password");
         boolean recovery=Boolean.getBoolean("ism.browser.portal-recovery");
         boolean changes=Boolean.getBoolean("ism.browser.portal-changes");
+        boolean certificates=Boolean.getBoolean("ism.browser.portal-certificates");
+        if(certificates){
+            jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT 21003,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='QUALIFICATION'");
+            jdbc.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(21080,21001,'SAFETY','安全生产许可证','CHEMICAL',9,9)");
+            try(var tenant=TenantContext.open(21001,9)){
+                for(int index=0;index<12;index++){
+                    var file=certificateFiles.createGenerated("证照原件-"+index+".pdf","application/pdf",("BROWSER-CERTIFICATE-"+index).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    jdbc.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,issuing_authority,expiry_date,file_id,status,verification_comment,created_by,updated_by) VALUES(?,21001,21004,21005,21080,?,'应急管理部门',DATE_ADD(CURRENT_DATE,INTERVAL ? DAY),?,'VALID','PRIVATE_CERTIFICATE_REVIEW',9,9)",21100+index,"CERT-BROWSER-"+index,index%2==0?60:-2,Long.parseLong(file.id()));
+                }
+                var foreignFile=certificateFiles.createGenerated("internal-only.txt","text/plain","PRIVATE_FILE".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                jdbc.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,file_id,status,created_by,updated_by) VALUES(21120,21001,21004,21020,21080,'PRIVATE_FOREIGN_CERT',?,'VALID',9,9)",Long.parseLong(foreignFile.id()));
+            }
+        }
         if(management){
             jdbc.update("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(21001,21004,21004,0)");
             for(int i=0;i<2;i++){
@@ -99,12 +114,17 @@ class PortalBrowserFixture {
         assertThat(Files.exists(control.resolve("finish"))).as("Browser completion signal").isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=21001 AND supplier_id=21005 AND username='browser.user'",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=21001 AND status='ACCEPTED'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(changes?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(changes?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(changes?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(recovery||password||!exit&&management?2:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(certificates||recovery||password||!exit&&management?2:1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_user WHERE tenant_id=21001",Long.class)).isEqualTo(management?2:0);
         if(!management)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_refresh_token WHERE tenant_id=21001",Long.class)).isZero();
+        if(certificates){
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND supplier_id=21005 AND version=0 AND status='VALID'",Long.class)).isEqualTo(12);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' AND object_id=21111 AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' AND object_id=21120",Long.class)).isZero();
+        }
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT address FROM sup_supplier WHERE id=21005",String.class)).isEqualTo("批准后的工业园地址");

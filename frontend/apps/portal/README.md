@@ -14,6 +14,8 @@
 
 档案下可提交简称、行业、国家省市、地址和网站的资料变更申请，审核批准后才生效；支持查看差异、申请结果及本人撤回。企业名称、信用代码等主体资料仍需联系邀请方。管理员给员工显式分配 `supplier:change:review` 后，可在供应商详情的“资料变更审核”中处理；原档案已修改则拒绝覆盖。真实跨端验收：`node scripts/verify-reminder-e2e.mjs --portal-changes`，详见 `docs/development/supplier-profile-changes-review.md`。
 
+档案下可展开“本企业资质证照”，按证书编号/类型关键词及到期状态筛选、分页查看详情、下载该证照关联的原件。租户须开通 QUALIFICATION 模块；内部草稿不发布，过期/撤销/已换证证照仅供留档，下载不代表准入有效。原件不暴露文件ID或存储链接；暂不支持门户上传/换证申请。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-certificates`，详见 `docs/development/supplier-portal-certificates-review.md`。
+
 登录后可展开“修改我的密码”，校验原密码并设置新密码；成功后所有设备旧会话撤销，必须重新登录。原密码错误与登录共享 5 次/15 分钟锁定。网络结果未知不自动重试，先使用新密码核查。
 
 忘记密码使用“恢复凭证”：部署方显式启用 `ISM_PORTAL_PASSWORD_RECOVERY_ENABLED=true`（同时须启用认证），给管理员分配独立 `supplier:portal:recover` 权限。管理员核实本人身份并填写原因后签发 15 分钟有效、只显示一次的凭证，由可信渠道交付，用户自行设置新密码。支持替换与撤销，不自动邮件找回，也不让管理员直接设置用户新密码。签发不撤销会话；兑换成功才撤销全部旧会话。真实跨端验收 `node scripts/verify-reminder-e2e.mjs --portal-recovery`，详见 `docs/development/supplier-portal-password-recovery-review.md`。

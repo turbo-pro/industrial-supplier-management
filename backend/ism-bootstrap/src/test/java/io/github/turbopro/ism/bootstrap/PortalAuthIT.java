@@ -24,8 +24,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties={"ism.portal.registration-enabled=true","ism.portal.authentication-enabled=true","ism.portal.password-recovery-enabled=true","ism.print.worker-enabled=false","ism.subscription-reminders.enabled=false","ism.integration.finance.mode=MANUAL"})
 @AutoConfigureMockMvc @Testcontainers @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class PortalAuthIT {
+    static final java.nio.file.Path CERTIFICATE_STORAGE=certificateStorage();
+    static java.nio.file.Path certificateStorage(){try{return java.nio.file.Files.createTempDirectory("ism-portal-certificates-");}catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}}
+    @org.junit.jupiter.api.AfterAll static void cleanCertificateStorage()throws Exception{try(var paths=java.nio.file.Files.walk(CERTIFICATE_STORAGE)){for(var path:paths.sorted(java.util.Comparator.reverseOrder()).toList())java.nio.file.Files.delete(path);}}
     @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.0").withDatabaseName("portal_auth").withUsername("ism").withPassword("ism");
-    @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("spring.datasource.url",MYSQL::getJdbcUrl);r.add("spring.datasource.username",MYSQL::getUsername);r.add("spring.datasource.password",MYSQL::getPassword);}
+    @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("spring.datasource.url",MYSQL::getJdbcUrl);r.add("spring.datasource.username",MYSQL::getUsername);r.add("spring.datasource.password",MYSQL::getPassword);r.add("ism.storage.local-root",()->CERTIFICATE_STORAGE.toString());}
     @Autowired JdbcTemplate jdbc;@Autowired PortalInvitationService invites;@Autowired PortalRegistrationService registrations;
     @Autowired PortalAuthService auth;@Autowired MockMvc mvc;@Autowired JwtTokenService internalTokens;
     @Autowired PortalAccountManagementService administration;
@@ -37,6 +40,8 @@ class PortalAuthIT {
     @Autowired PortalPasswordRecoveryService passwordRecovery;
     @Autowired io.github.turbopro.ism.integration.finance.ManualClearanceMapper finance;
     @Autowired ProfileChangeService changes;
+    @Autowired io.github.turbopro.ism.resource.file.FileService certificateFiles;
+    @Autowired io.github.turbopro.ism.qualification.PortalQualificationService portalCertificates;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper profileJson;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -108,6 +113,80 @@ class PortalAuthIT {
     }
     void profileStatus(String token,int expected)throws Exception{
         mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().is(expected));
+    }
+    void enableCertificates(Fixture f){jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT ?,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='QUALIFICATION'",f.supplier()+3);}
+    long certificate(Fixture f,int offset,String status,int days,boolean permanent){
+        long id=f.supplier()+offset,type=f.supplier()+80;
+        jdbc.update("INSERT IGNORE INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(?,?,'SAFETY','安全生产许可证','CHEMICAL',9,9)",type,f.tenant());
+        String fileId;
+        try(var tenant=TenantContext.open(f.tenant(),9)){fileId=certificateFiles.createGenerated("证照原件-"+id+".pdf","application/pdf",("CERTIFICATE-BYTES-"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8)).id();}
+        jdbc.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,issuing_authority,effective_date,expiry_date,permanent_flag,warning_days,file_id,status,verification_comment,revoked_reason,created_by,updated_by) VALUES(?,?,?,?,?,?,?,DATE_SUB(CURRENT_DATE,INTERVAL 1 DAY),IF(?=1,NULL,DATE_ADD(CURRENT_DATE,INTERVAL ? DAY)),?,30,?,?, 'PRIVATE_REVIEW_NOTE','PRIVATE_REVOCATION_NOTE',9,9)",id,f.tenant(),f.supplier()+1,f.supplier(),type,"CERT_%_"+id,"应急管理部门",permanent,days,permanent,Long.parseLong(fileId),status);
+        return id;
+    }
+    @Test void portalCertificatesOnlyExposePublishedOwnRecordsAndWhitelistedFields()throws Exception{
+        var f=fixture();enableCertificates(f);var foreign=fixture();long own=certificate(f,81,"VALID",60,false),draft=certificate(f,82,"DRAFT",60,false),rejected=certificate(f,83,"REJECTED",60,false),other=certificate(foreign,81,"VALID",60,false);
+        long sibling=f.supplier()+20; jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,'SIBLING','其他企业','TRADER',9,9)",sibling,f.tenant(),f.supplier()+1);
+        long siblingCert=certificate(f,84,"VALID",60,false);jdbc.update("UPDATE qua_supplier_qualification SET supplier_id=? WHERE id=?",sibling,siblingCert);
+        String token=login(f).accessToken();
+        var response=mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).header("X-Tenant-Id",foreign.tenant()).param("tenantId",Long.toString(foreign.tenant())).param("supplierId",Long.toString(sibling)))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.items[0].id").value(Long.toString(own))).andReturn().getResponse().getContentAsString();
+        assertThat(response).doesNotContain("PRIVATE_","fileId","objectKey","verificationComment","revokedReason","createdBy","organizationId","verifiedBy");
+        var fields=new HashSet<String>();profileJson.readTree(response).get("data").get("items").get(0).fieldNames().forEachRemaining(fields::add);
+        assertThat(fields).containsExactlyInAnyOrder("id","typeCode","typeName","certificateNo","issuingAuthority","issueDate","effectiveDate","expiryDate","permanent","status","daysUntilExpiry","updatedAt");
+        mvc.perform(get("/api/portal/qualifications/"+own).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.typeCode").value("SAFETY"));
+        for(long hidden:List.of(draft,rejected,other,siblingCert,Long.MAX_VALUE))for(String suffix:List.of("","/content"))mvc.perform(get("/api/portal/qualifications/"+hidden+suffix).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+    }
+    @Test void portalCertificatesShareExpiryRulesAndSupportLiteralSearchAndPagination()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);certificate(f,82,"VALID",30,false);certificate(f,83,"VALID",0,false);certificate(f,84,"VALID",-1,false);certificate(f,85,"VALID",0,true);certificate(f,86,"REVOKED",-1,false);certificate(f,87,"SUPERSEDED",-1,false);
+        jdbc.update("UPDATE qua_supplier_qualification SET certificate_no='PLAIN' WHERE id=?",f.supplier()+87);
+        String token=login(f).accessToken();
+        for(var entry:Map.of("VALID",2,"EXPIRING",2,"EXPIRED",1,"REVOKED",1,"SUPERSEDED",1).entrySet())mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).param("status",entry.getKey())).andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(entry.getValue()));
+        var first=profileJson.readTree(mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).param("size","2")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("data");
+        var second=profileJson.readTree(mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).param("size","2").param("page","1")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("data");
+        assertThat(first.get("total").asInt()).isEqualTo(7);assertThat(first.get("items").get(0).get("id").asText()).isNotEqualTo(second.get("items").get(0).get("id").asText());
+        mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).param("keyword","%")).andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(6));
+        mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token).param("keyword","CERT_%_missing")).andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/api/portal/qualifications/"+(f.supplier()+85)).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.daysUntilExpiry").isEmpty());
+        mvc.perform(get("/api/portal/qualifications/"+(f.supplier()+84)).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.daysUntilExpiry").value(-1));
+        for(var params:List.of(Map.of("page","-1"),Map.of("page","10001"),Map.of("size","101"),Map.of("size","0"),Map.of("status","DRAFT"),Map.of("keyword","x".repeat(101)))){var request=get("/api/portal/qualifications").header("Authorization","Bearer "+token);params.forEach(request::param);mvc.perform(request).andExpect(status().isBadRequest());}
+    }
+    @Test void portalCertificateDownloadsAreAttachmentOnlyAuditedAndDoNotGrantGenericFiles()throws Exception{
+        var f=fixture();enableCertificates(f);long id=certificate(f,81,"REVOKED",-2,false);String token=login(f).accessToken();
+        mvc.perform(get("/api/portal/qualifications/"+id+"/content").header("Authorization","Bearer "+token))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff")).andExpect(header().string("Content-Type","application/octet-stream"))
+            .andExpect(header().string("Content-Disposition",org.hamcrest.Matchers.startsWith("attachment; filename*=UTF-8''")))
+            .andExpect(content().bytes(("CERTIFICATE-BYTES-"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND operator_id=? AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN'",Long.class,f.tenant(),f.account())).isEqualTo(1);
+        long fileId=jdbc.queryForObject("SELECT file_id FROM qua_supplier_qualification WHERE id=?",Long.class,id);
+        mvc.perform(get("/api/files/"+fileId+"/content").header("Authorization","Bearer "+token)).andExpect(status().isUnauthorized());
+        jdbc.update("UPDATE res_file_object SET object_key='missing-certificate-original' WHERE id=?",fileId);
+        mvc.perform(get("/api/portal/qualifications/"+id+"/content").header("Authorization","Bearer "+token)).andExpect(status().isServiceUnavailable());
+        jdbc.update("UPDATE res_file_object SET status='DELETED' WHERE id=?",fileId);
+        mvc.perform(get("/api/portal/qualifications/"+id+"/content").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void portalCertificatesEnforceLiveModuleAndAuthenticationRealms()throws Exception{
+        var f=fixture();long id=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();
+        String employee=internalTokens.createAccessToken(new AuthModels.AuthUser(9,f.tenant(),"employee","内部员工","unused","ACTIVE",false,null,false,0,0,null),"not-a-portal-session");
+        for(String path:List.of("/api/portal/qualifications","/api/portal/qualifications/"+id,"/api/portal/qualifications/"+id+"/content")){
+            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mvc.perform(get(path).header("Authorization","Bearer "+employee)).andExpect(status().isUnauthorized());
+            mvc.perform(get(path).header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
+        }
+        enableCertificates(f);
+        mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token)).andExpect(status().isOk());
+        jdbc.update("UPDATE plt_package_module pm JOIN plt_module m ON m.id=pm.module_id SET pm.enabled=0 WHERE pm.package_version_id=? AND m.module_code='QUALIFICATION'",f.supplier()+3);
+        mvc.perform(get("/api/portal/qualifications/"+id+"/content").header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
+        jdbc.update("UPDATE iam_portal_account SET status='DISABLED' WHERE id=?",f.account());
+        mvc.perform(get("/api/portal/qualifications").header("Authorization","Bearer "+token)).andExpect(status().isUnauthorized());
+    }
+    @Test void portalCertificateDownloadRejectsSessionRevokedAfterAuthenticationAndRollsBackAuditFailure()throws Exception{
+        var f=fixture();enableCertificates(f);long id=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();var principal=auth.authenticate(token);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='certificate audit failure'; END IF; END");
+        try{assertThatThrownBy(()->portalAction(principal,()->portalCertificates.download(id))).isInstanceOf(RuntimeException.class).hasStackTraceContaining("certificate audit failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN'",Long.class,f.tenant())).isZero();
+        auth.logout(principal);
+        assertThatThrownBy(()->portalAction(principal,()->portalCertificates.download(id))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
     }
     ProfileChangeModels.Submit changeCommand(int version,String shortName){return new ProfileChangeModels.Submit(UUID.randomUUID().toString(),version,new ProfileChangeModels.Fields(shortName,"化工制造","CN","浙江","杭州","工业园二号","https://supplier.example.test"),"企业地址及业务信息更新");}
     <T> T portalAction(PortalAuthModels.Principal p,java.util.function.Supplier<T> action){
