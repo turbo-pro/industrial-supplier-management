@@ -16,7 +16,9 @@
 
 档案下可展开“本企业资质证照”，按证书编号/类型关键词及到期状态筛选、分页查看详情、下载该证照关联的原件。租户须开通 QUALIFICATION 模块；内部草稿不发布，过期/撤销/已换证证照仅供留档，下载不代表准入有效。原件不暴露文件ID或存储链接。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-certificates`，详见 `docs/development/supplier-portal-certificates-review.md`。
 
-下方“新增证照申请”可上传PDF/PNG/JPEG原件（最多10MiB及租户上限，1MiB分片、24小时有效，账号/企业滚动24小时最多10/50次初始化），本页可暂停/续传，刷新不保留文件与标识。填写类型、编号及有效期并明确确认后进入管理端资质台账；有核验权限的员工通过/拒绝后，门户刷新申请记录查看结果，通过后可在证照区查阅原件。暂不支持换证/补正/撤回，拒绝原因需联系邀请方；内部核验意见不会外发。提交结果未知时仅可核查或重试原申请，不应换标识重复提交。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-submissions`，详见 `docs/development/supplier-portal-certificate-submissions-review.md`。
+下方“新增证照申请”可上传PDF/PNG/JPEG原件（最多10MiB及租户上限，1MiB分片、24小时有效，账号/企业滚动24小时最多10/50次初始化），本页可暂停/续传，刷新不保留文件与标识。填写类型、编号及有效期并明确确认后进入管理端资质台账；有核验权限的员工通过/拒绝后，门户刷新申请记录查看结果，通过后可在证照区查阅原件。补正/撤回未接入，拒绝原因需联系邀请方；内部核验意见不会外发。提交结果未知时仅可核查或重试原申请，不应换标识重复提交。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-submissions`，详见 `docs/development/supplier-portal-certificate-submissions-review.md`。
+
+证照详情“申请该证照换证”绑定原证及版本，类型不可改变，允许同编号续证；同一原证最多一条待核验申请。提交或拒绝不会替代旧证，批准时才原子替代，新证须已生效且未过期。原证变更需拒绝后重提；组织调整后，批准人须同时覆盖新旧组织资格范围。请勿将门户策略与管理端既有提前替代的换证入口混同。上述真实验收命令已扩展换证拒绝/重提/批准、新旧原件及版本断言，详见 `docs/development/supplier-portal-certificate-renewal-review.md`。
 
 登录后可展开“修改我的密码”，校验原密码并设置新密码；成功后所有设备旧会话撤销，必须重新登录。原密码错误与登录共享 5 次/15 分钟锁定。网络结果未知不自动重试，先使用新密码核查。
 

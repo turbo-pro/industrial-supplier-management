@@ -43,6 +43,7 @@ class PortalAuthIT {
     @Autowired io.github.turbopro.ism.resource.file.FileService certificateFiles;
     @Autowired io.github.turbopro.ism.qualification.PortalQualificationService portalCertificates;
     @Autowired io.github.turbopro.ism.qualification.QualificationService qualificationService;
+    @Autowired io.github.turbopro.ism.qualification.QualificationMapper qualificationMapper;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper profileJson;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -232,6 +233,108 @@ class PortalAuthIT {
         submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"duplicate-active"),"SAME-CERT-NUMBER"),409);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=? AND certificate_no='SAME-CERT-NUMBER' AND status='VALID'",Long.class,f.tenant())).isEqualTo(1);
     }
+    io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit renewalCommand(Fixture f,String upload,long parent,int version,String no){
+        var c=certificateCommand(f,upload,no);return new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit(c.requestKey(),c.typeId(),c.certificateNo(),c.issuingAuthority(),c.issueDate(),c.effectiveDate(),c.expiryDate(),c.permanent(),c.uploadId(),Long.toString(parent),version);
+    }
+    String submitRenewal(String token,io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit command)throws Exception{return profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();}
+    void assertCertificateState(long id,String state,int version){var result=jdbc.queryForMap("SELECT status,version FROM qua_supplier_qualification WHERE id=?",id);assertThat(result.get("status")).isEqualTo(state);assertThat(((Number)result.get("version")).intValue()).isEqualTo(version);}
+    @Test void portalRenewalPreservesOriginalUntilApprovalAndAllowsSameNumberResubmissionAfterRejection()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",-1,false);String token=login(f).accessToken(),no="CERT_%_"+parent;
+        var c=renewalCommand(f,readyPortalUpload(token,"renew-reject"),parent,0,no);String rejected=submitRenewal(token,c);
+        assertThat(submitRenewal(token,c)).isEqualTo(rejected);assertCertificateState(parent,"VALID",0);
+        assertThat(jdbc.queryForObject("SELECT parent_qualification_id FROM qua_supplier_qualification WHERE id=?",Long.class,Long.parseLong(rejected))).isEqualTo(parent);
+        var unused=readyPortalUpload(token,"renew-approve");submitCertificate(token,renewalCommand(f,unused,parent,0,no),409);
+        reviewPortalCertificate(f,rejected,false);assertCertificateState(parent,"VALID",0);
+        String replacement=submitRenewal(token,renewalCommand(f,unused,parent,0,no));reviewPortalCertificate(f,replacement,true);
+        assertCertificateState(parent,"SUPERSEDED",1);assertCertificateState(Long.parseLong(replacement),"VALID",1);
+        mvc.perform(get("/api/portal/qualifications/"+parent).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SUPERSEDED"));
+        mvc.perform(get("/api/portal/qualifications/"+replacement).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.version").value(1));
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].parentQualificationId").value(Long.toString(parent)));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=? AND state='APPROVED'",Long.class,f.tenant())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=? AND state='REJECTED'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void portalRenewalScopesOriginalAndRejectsVersionTypePairAndFutureDateErrors()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),upload=readyPortalUpload(token,"renew-invalid");var foreign=fixture();long foreignParent=certificate(foreign,81,"VALID",60,false);
+        submitCertificate(token,renewalCommand(f,upload,foreignParent,0,"FOREIGN"),404);
+        long sibling=f.supplier()+20;jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,'SIBLING','另一企业','TRADER',9,9)",sibling,f.tenant(),f.supplier()+1);
+        long siblingParent=certificate(f,82,"VALID",60,false);jdbc.update("UPDATE qua_supplier_qualification SET supplier_id=? WHERE id=?",sibling,siblingParent);submitCertificate(token,renewalCommand(f,upload,siblingParent,0,"SIBLING"),404);
+        submitCertificate(token,renewalCommand(f,upload,parent,1,"STALE"),409);
+        var c=renewalCommand(f,upload,parent,0,"NEW");
+        var json=(com.fasterxml.jackson.databind.node.ObjectNode)profileJson.valueToTree(c);json.remove("renewalParentVersion");
+        mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(json))).andExpect(status().isBadRequest());
+        json=(com.fasterxml.jackson.databind.node.ObjectNode)profileJson.valueToTree(c);json.put("effectiveDate",java.time.LocalDate.now().plusDays(1).toString());
+        mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(json))).andExpect(status().isBadRequest());
+        jdbc.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(?,?,'OTHER','其他证照','OTHER',9,9)",f.supplier()+90,f.tenant());
+        json=(com.fasterxml.jackson.databind.node.ObjectNode)profileJson.valueToTree(c);json.put("typeId",Long.toString(f.supplier()+90));
+        mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(json))).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=?",Long.class,f.tenant())).isZero();assertCertificateState(parent,"VALID",0);
+    }
+    @Test void portalRenewalAuditAndChildVersionFailureRollBackBothCertificatesAndThePendingSlot()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String child=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"renew-rollback"),parent,0,"CERT_%_"+parent));
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of(),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+            assertThatThrownBy(()->qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE,"错误子版本",1))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"DRAFT",0);
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='QUALIFICATION_VERIFY' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='renewal final audit failure'; END IF; END");
+        try{assertThatThrownBy(()->reviewPortalCertificate(f,child,true)).isInstanceOf(RuntimeException.class).hasStackTraceContaining("renewal final audit failure");}finally{drop();}
+        assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"DRAFT",0);
+        assertThat(jdbc.queryForObject("SELECT state FROM qua_portal_renewal WHERE qualification_id=?",String.class,Long.parseLong(child))).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_RENEWAL_APPROVE'",Long.class,f.tenant())).isZero();
+        reviewPortalCertificate(f,child,true);assertCertificateState(parent,"SUPERSEDED",1);
+    }
+    @Test void portalRenewalCannotOverrideChangedOriginalButRejectionCanResolveIt()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String child=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"renew-stale"),parent,0,"CHANGED-ORIGINAL"));
+        jdbc.update("UPDATE qua_supplier_qualification SET status='REVOKED',version=version+1 WHERE id=?",parent);
+        assertThatThrownBy(()->reviewPortalCertificate(f,child,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(parent,"REVOKED",1);
+        var exit=prepareExit(f);reviewPortalCertificate(f,child,false);assertCertificateState(Long.parseLong(child),"REJECTED",1);
+        assertThat(jdbc.queryForObject("SELECT state FROM qua_portal_renewal WHERE qualification_id=?",String.class,Long.parseLong(child))).isEqualTo("REJECTED");
+    }
+    @Test void portalRenewalConcurrentSubmissionsAndApprovalOnlyConsumeOneOriginal()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();var a=renewalCommand(f,readyPortalUpload(token,"renew-concurrent-a"),parent,0,"NEXT-A");var b=renewalCommand(f,readyPortalUpload(token,"renew-concurrent-b"),parent,0,"NEXT-B");
+        java.util.function.Function<io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit,Integer> call=c->{try{return mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(c))).andReturn().getResponse().getStatus();}catch(Exception e){throw new RuntimeException(e);}};
+        var first=java.util.concurrent.CompletableFuture.supplyAsync(()->call.apply(a));var second=java.util.concurrent.CompletableFuture.supplyAsync(()->call.apply(b));
+        assertThat(List.of(first.get(30,java.util.concurrent.TimeUnit.SECONDS),second.get(30,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(200,409);
+        long child=jdbc.queryForObject("SELECT qualification_id FROM qua_portal_renewal WHERE tenant_id=? AND state='PENDING'",Long.class,f.tenant());assertCertificateState(parent,"VALID",0);
+        java.util.function.Supplier<String> approve=()->{try{reviewPortalCertificate(f,Long.toString(child),true);return "OK";}catch(io.github.turbopro.ism.common.api.error.ApiException expected){return expected.errorCode().code();}};
+        var one=java.util.concurrent.CompletableFuture.supplyAsync(approve);var two=java.util.concurrent.CompletableFuture.supplyAsync(approve);
+        assertThat(List.of(one.get(30,java.util.concurrent.TimeUnit.SECONDS),two.get(30,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder("OK","COMMON_STATE_CONFLICT");
+        assertCertificateState(parent,"SUPERSEDED",1);assertCertificateState(child,"VALID",1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_RENEWAL_APPROVE'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void portalRenewalRechecksReplacementDatesAtApproval()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String child=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"renew-date"),parent,0,"NEW-DATE"));
+        jdbc.update("UPDATE qua_supplier_qualification SET effective_date=DATE_ADD(CURRENT_DATE,INTERVAL 3 DAY) WHERE id=?",Long.parseLong(child));
+        assertThatThrownBy(()->reviewPortalCertificate(f,child,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(parent,"VALID",0);
+        jdbc.update("UPDATE qua_supplier_qualification SET effective_date=NULL,expiry_date=DATE_SUB(CURRENT_DATE,INTERVAL 1 DAY) WHERE id=?",Long.parseLong(child));
+        assertThatThrownBy(()->reviewPortalCertificate(f,child,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(parent,"VALID",0);
+        reviewPortalCertificate(f,child,false);
+    }
+    @Test void portalRenewalApprovalRequiresScopeOverBothOriginalAndReplacementAfterOrganizationTransfer()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false),organization=f.supplier()+40;
+        jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,'NEW-FACTORY','新工厂','FACTORY','ACTIVE')",organization,f.tenant());
+        jdbc.update("UPDATE sup_supplier SET organization_id=? WHERE id=?",organization,f.supplier());
+        String token=login(f).accessToken();String child=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"renew-organization"),parent,0,"NEW-ORG-CERT"));
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.organizations(Set.of(organization))),Set.of()))){
+            assertThat(qualificationService.get(Long.parseLong(child)).organizationId()).isEqualTo(Long.toString(organization));
+            assertThatThrownBy(()->qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE,"只拥有新工厂范围",0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"DRAFT",0);
+            qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"退回至拥有双范围的复核人处理",0));
+        }
+        assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"REJECTED",1);
+    }
+    @Test void supplierOrganizationCurrentReadBypassesEarlierSnapshot()throws Exception{
+        var f=fixture();long organization=f.supplier()+40;
+        jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,'CURRENT-ORG','当前组织','FACTORY','ACTIVE')",organization,f.tenant());
+        var transaction=new org.springframework.transaction.support.TransactionTemplate(transactionManager);transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        try(var tenant=TenantContext.open(f.tenant(),9)){
+            Long current=transaction.execute(status->{
+                assertThat(jdbc.queryForObject("SELECT organization_id FROM sup_supplier WHERE id=?",Long.class,f.supplier())).isEqualTo(f.supplier()+1);
+                try{java.util.concurrent.CompletableFuture.runAsync(()->jdbc.update("UPDATE sup_supplier SET organization_id=? WHERE id=?",organization,f.supplier())).get(10,java.util.concurrent.TimeUnit.SECONDS);}catch(Exception e){throw new RuntimeException(e);}
+                return qualificationMapper.supplierOrganization(f.tenant(),f.supplier());
+            });
+            assertThat(current).isEqualTo(organization);
+        }
+    }
     long certificate(Fixture f,int offset,String status,int days,boolean permanent){
         long id=f.supplier()+offset,type=f.supplier()+80;
         jdbc.update("INSERT IGNORE INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(?,?,'SAFETY','安全生产许可证','CHEMICAL',9,9)",type,f.tenant());
@@ -249,7 +352,7 @@ class PortalAuthIT {
             .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.items[0].id").value(Long.toString(own))).andReturn().getResponse().getContentAsString();
         assertThat(response).doesNotContain("PRIVATE_","fileId","objectKey","verificationComment","revokedReason","createdBy","organizationId","verifiedBy");
         var fields=new HashSet<String>();profileJson.readTree(response).get("data").get("items").get(0).fieldNames().forEachRemaining(fields::add);
-        assertThat(fields).containsExactlyInAnyOrder("id","typeCode","typeName","certificateNo","issuingAuthority","issueDate","effectiveDate","expiryDate","permanent","status","daysUntilExpiry","updatedAt");
+        assertThat(fields).containsExactlyInAnyOrder("id","typeCode","typeName","certificateNo","issuingAuthority","issueDate","effectiveDate","expiryDate","permanent","status","daysUntilExpiry","updatedAt","version");
         mvc.perform(get("/api/portal/qualifications/"+own).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.typeCode").value("SAFETY"));
         for(long hidden:List.of(draft,rejected,other,siblingCert,Long.MAX_VALUE))for(String suffix:List.of("","/content"))mvc.perform(get("/api/portal/qualifications/"+hidden+suffix).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
     }

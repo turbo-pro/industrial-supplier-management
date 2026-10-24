@@ -24,15 +24,30 @@ public class QualificationService {
     @Transactional public QualificationModels.View update(long id,QualificationModels.SaveQualification c){var before=requireAllowed(id);if(!before.status().equals("DRAFT"))throw validation("只有待核验的证照可以编辑");if(before.supplierId()!=parseId(c.supplierId(),"供应商 ID 无效")||before.qualificationTypeId()!=parseId(c.typeId(),"资质类型 ID 无效"))throw validation("供应商和资质类型不可修改");validate(c,mapper.type(TenantContext.require().tenantId(),before.qualificationTypeId()));long fileId=requireFile(c.fileId());var i=TenantContext.require();try{if(mapper.update(i.tenantId(),i.actorId(),id,c.certificateNo().trim(),blank(c.issuingAuthority()),c.issueDate(),c.effectiveDate(),c.permanent()?null:c.expiryDate(),c.permanent(),warning(c,before.qualificationTypeId()),fileId,c.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);}catch(DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号已存在");}audit.append(new AuditService.AuditCommand("QUALIFICATION_UPDATE","QUALIFICATION",id,null,Map.of("version",before.version()),Map.of("version",before.version()+1,"fileId",c.fileId()),null,null));return view(mapper.find(i.tenantId(),id));}
     @Transactional public QualificationModels.View verify(long id,QualificationModels.VerifyCommand c){
         var before=requireAllowed(id);var i=TenantContext.require();String next=c.decision()==QualificationModels.Decision.APPROVE?"VALID":"REJECTED";
+        boolean portal=mapper.portalSubmission(i.tenantId(),id)>0;
+        if(portal)portalSuppliers.lockForResolution(before.supplierId());
+        var renewal=portal?mapper.lockRenewal(i.tenantId(),id):null;
+        if(renewal!=null&&!renewal.state().equals("PENDING"))throw new ApiException(CommonErrorCode.CONFLICT,"换证申请已处理");
         if(c.decision()==QualificationModels.Decision.APPROVE){
             if(!files.active(before.fileId()))throw validation("证照文件不存在或不可用");
-            if(mapper.portalSubmission(i.tenantId(),id)>0){
+            if(portal){
                 try{portalSuppliers.lockAvailable(before.supplierId());}catch(ApiException unavailable){throw new ApiException(CommonErrorCode.RULE_BLOCKED,"企业不可用或正在退出，不能批准门户证照");}
                 var type=mapper.typeForReview(i.tenantId(),before.qualificationTypeId());
                 if(type==null||!type.status().equals("ACTIVE")||type.validityRequired()&&!before.permanent()&&before.expiryDate()==null)throw validation("资质类型或有效期规则已变更，请拒绝后重新提交");
             }
+            if(renewal!=null){
+                var parent=mapper.lockRenewalParent(i.tenantId(),before.supplierId(),renewal.parentId());
+                if(parent==null||parent.typeId()!=before.qualificationTypeId()||before.parentQualificationId()==null||before.parentQualificationId()!=parent.id()||!parent.status().equals("VALID")||parent.version()!=renewal.parentVersion())throw new ApiException(CommonErrorCode.CONFLICT,"原证照已变更，请拒绝后重新申请");
+                if(!scope().allows(new DataTarget(parent.organizationId(),null,parent.createdBy(),parent.createdBy()),i.actorId()))throw new ApiException(CommonErrorCode.NOT_FOUND);
+                if(before.effectiveDate()!=null&&before.effectiveDate().isAfter(LocalDate.now())||before.expiryDate()!=null&&before.expiryDate().isBefore(LocalDate.now()))throw validation("换证新证尚未生效或已过期，不能替代原证");
+                if(mapper.supersede(i.tenantId(),i.actorId(),parent.id(),parent.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT,"原证照已变更");
+            }
         }
         try{if(mapper.verify(i.tenantId(),i.actorId(),id,next,c.comment().trim(),c.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);}catch(DuplicateKeyException duplicate){throw new ApiException(CommonErrorCode.CONFLICT,"相同类型和编号已有核验证照，请刷新后核查");}
+        if(renewal!=null){
+            if(mapper.finishRenewal(i.tenantId(),id,c.decision()==QualificationModels.Decision.APPROVE?"APPROVED":"REJECTED")!=1)throw new ApiException(CommonErrorCode.CONFLICT,"换证申请已处理");
+            audit("PORTAL_CERTIFICATE_RENEWAL_"+c.decision(),id,"DRAFT",next,"原证照 "+renewal.parentId());
+        }
         audit("QUALIFICATION_VERIFY",id,before.status(),next,c.comment());return view(mapper.find(i.tenantId(),id));
     }
     @Transactional public QualificationModels.View revoke(long id,QualificationModels.RevokeCommand c){var before=requireAllowed(id);var i=TenantContext.require();if(mapper.revoke(i.tenantId(),i.actorId(),id,c.reason().trim(),c.version())!=1)throw validation("只有已生效资质可以撤销，或数据版本已变化");audit("QUALIFICATION_REVOKE",id,before.status(),"REVOKED",c.reason());return view(mapper.find(i.tenantId(),id));}

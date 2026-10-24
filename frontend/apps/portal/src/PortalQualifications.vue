@@ -3,7 +3,7 @@ import { nextTick, onUnmounted, ref } from 'vue';
 import { type components, type createIsmClient } from '@ism/api-client';
 
 const props = defineProps<{ client: ReturnType<typeof createIsmClient> }>();
-const emit = defineEmits<{ unauthorized: [] }>();
+const emit = defineEmits<{ unauthorized: []; renew: [certificate: components['schemas']['PortalQualification']] }>();
 type Certificate = components['schemas']['PortalQualification'];
 const labels = { VALID: '有效', EXPIRING: '即将到期', EXPIRED: '已过期', REVOKED: '已撤销', SUPERSEDED: '已换证' };
 const opened = ref(false), busy = ref(false), detailBusy = ref(false), downloading = ref(false);
@@ -76,7 +76,7 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); urls.forE
 <template>
   <section class="qualifications" aria-labelledby="portal-qualifications-title" :aria-busy="busy || detailBusy || downloading">
     <div class="heading"><h2 id="portal-qualifications-title">本企业资质证照</h2><button class="secondary" :disabled="busy || detailBusy || downloading" @click="load(history?.page ?? 0)">{{ opened ? '刷新证照列表' : '查看本企业证照' }}</button></div>
-    <p class="help">查阅已核验及历史证照，待核验和被驳回的内部草稿不展示。过期、撤销、已换证原件仅供留档；实际准入及业务放行以邀请方审核为准。新增证照可在下方申请，暂不支持换证申请。</p>
+    <p class="help">查阅已核验及历史证照，待核验和被驳回的内部草稿不展示。过期、撤销、已换证原件仅供留档；实际准入及业务放行以邀请方审核为准。换证请先查看原证详情；新证核验通过后才替代旧证。</p>
     <template v-if="opened">
       <form class="filters" @submit.prevent="load(0, true)">
         <label>证照关键词<input v-model="keyword" maxlength="100" placeholder="类型名称、编码或证书编号" :disabled="busy || detailBusy || downloading" /></label>
@@ -95,6 +95,7 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); urls.forE
         <h3 id="certificate-detail-title">证照详情</h3>
         <dl><dt>资质类型</dt><dd>{{ selected.typeName }}（{{ selected.typeCode }}）</dd><dt>证书编号</dt><dd>{{ selected.certificateNo }}</dd><dt>发证机关</dt><dd>{{ selected.issuingAuthority || '未填写' }}</dd><dt>签发日期</dt><dd>{{ selected.issueDate || '未填写' }}</dd><dt>生效日期</dt><dd>{{ selected.effectiveDate || '未填写' }}</dd><dt>到期日期</dt><dd>{{ selected.permanent ? '长期有效' : selected.expiryDate || '未填写' }}</dd><dt>证照状态</dt><dd>{{ labels[selected.status] }}</dd><dt>距到期天数</dt><dd>{{ selected.daysUntilExpiry == null ? '不适用' : selected.daysUntilExpiry < 0 ? '已过期 ' + (-selected.daysUntilExpiry) + ' 天' : selected.daysUntilExpiry + ' 天' }}</dd></dl>
         <button :disabled="downloading" @click="download">{{ downloading ? '正在下载原件…' : '下载证照原件' }}</button>
+        <button v-if="['VALID','EXPIRING','EXPIRED'].includes(selected.status)" class="secondary" :disabled="downloading || busy || detailBusy" @click="emit('renew', selected)">申请该证照换证</button>
         <p class="help">仅下载当前证照关联的原件，不提供公开存储链接；原件不可用时请联系邀请方。</p>
       </section>
     </template>

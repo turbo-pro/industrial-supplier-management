@@ -353,7 +353,7 @@ paths:
     post:
       operationId: submitOwnPortalCertificate
       tags: [Supplier Portal]
-      description: Creates an immutable new-certificate DRAFT for employee qualification verification. Only a completed unexpired upload owned by the current portal account can be referenced, once. Same request key/account/normalized command replay; other reuse conflicts. Type and supplier/session eligibility rechecked; qualification, origin record and audit atomic. Not renewal or withdrawal. Internal comments are not exposed; rejection reasons must be confirmed with the inviting enterprise.
+      description: Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. No withdrawal or public internal review comments.
       security: [{ portalBearer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmit' } } } }
       responses:
@@ -2848,6 +2848,8 @@ components:
         expiryDate: { type: string, format: date, nullable: true }
         permanent: { type: boolean, default: false }
         uploadId: { type: string }
+        renewalParentId: { type: string, nullable: true, description: Own original certificate; must accompany renewalParentVersion. }
+        renewalParentVersion: { type: integer, minimum: 0, nullable: true, description: Original version captured when renewal starts; must accompany renewalParentId. }
     PortalCertificateTypesResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -2875,6 +2877,8 @@ components:
         status: { type: string, enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED] }
         fileName: { type: string }
         submittedAt: { type: string, format: date-time }
+        parentQualificationId: { type: string, nullable: true }
+        parentCertificateNo: { type: string, nullable: true }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -2898,7 +2902,7 @@ components:
     PortalQualification:
       type: object
       additionalProperties: false
-      required: [id, typeCode, typeName, certificateNo, permanent, status, updatedAt]
+      required: [id, typeCode, typeName, certificateNo, permanent, status, updatedAt, version]
       properties:
         id: { type: string }
         typeCode: { type: string }
@@ -2912,6 +2916,7 @@ components:
         status: { type: string, enum: [VALID, EXPIRING, EXPIRED, REVOKED, SUPERSEDED] }
         daysUntilExpiry: { type: integer, nullable: true, description: Null for permanent or undated certificates; negative for expired dates. Not itself proof of business admission. }
         updatedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 0, description: Optimistic precondition for renewal of this certificate. }
     PortalQualificationResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }

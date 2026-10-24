@@ -303,7 +303,7 @@ export interface paths {
         /** @description Enterprise-bound portal-origin requests only, including pending/rejected ones; never internal review comments or employee drafts. Review outcome is not a current admission decision. */
         get: operations["listOwnPortalCertificateSubmissions"];
         put?: never;
-        /** @description Creates an immutable new-certificate DRAFT for employee qualification verification. Only a completed unexpired upload owned by the current portal account can be referenced, once. Same request key/account/normalized command replay; other reuse conflicts. Type and supplier/session eligibility rechecked; qualification, origin record and audit atomic. Not renewal or withdrawal. Internal comments are not exposed; rejection reasons must be confirmed with the inviting enterprise. */
+        /** @description Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. No withdrawal or public internal review comments. */
         post: operations["submitOwnPortalCertificate"];
         delete?: never;
         options?: never;
@@ -3599,6 +3599,10 @@ export interface components {
             /** @default false */
             permanent: boolean;
             uploadId: string;
+            /** @description Own original certificate; must accompany renewalParentVersion. */
+            renewalParentId?: string | null;
+            /** @description Original version captured when renewal starts; must accompany renewalParentId. */
+            renewalParentVersion?: number | null;
         };
         PortalCertificateTypesResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
@@ -3618,6 +3622,8 @@ export interface components {
             fileName: string;
             /** Format: date-time */
             submittedAt: string;
+            parentQualificationId?: string | null;
+            parentCertificateNo?: string | null;
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -3649,6 +3655,8 @@ export interface components {
             daysUntilExpiry?: number | null;
             /** Format: date-time */
             updatedAt: string;
+            /** @description Optimistic precondition for renewal of this certificate. */
+            version: number;
         };
         PortalQualificationResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalQualification"];

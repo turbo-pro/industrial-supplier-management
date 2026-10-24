@@ -8,6 +8,7 @@ import PortalCertificateSubmission from './PortalCertificateSubmission.vue';
 const props = defineProps<{ client: ReturnType<typeof createIsmClient> }>();
 const emit = defineEmits<{ unauthorized: [] }>();
 const profile = ref<components['schemas']['PortalSupplierProfile']>();
+const submission = ref<InstanceType<typeof PortalCertificateSubmission>>();
 const busy = ref(false);
 const error = ref('');
 const errorPanel = ref<HTMLElement>();
@@ -65,8 +66,8 @@ onUnmounted(() => { disposed = true; request?.abort(); profile.value = undefined
       <ul v-if="profile.purchaseCategories.length" class="profile-categories"><li v-for="category in profile.purchaseCategories" :key="category.code">{{ category.name }} <span class="help">（{{ category.code }}）</span></li></ul>
       <p v-else class="help">暂无有效的已关联采购品类，请联系邀请方维护。</p>
       <PortalProfileChanges :client="client" :supplier="profile.supplier" @unauthorized="emit('unauthorized')" />
-      <PortalQualifications :client="client" @unauthorized="emit('unauthorized')" />
-      <PortalCertificateSubmission :client="client" @unauthorized="emit('unauthorized')" />
+      <PortalQualifications :client="client" @unauthorized="emit('unauthorized')" @renew="submission?.beginRenewal($event)" />
+      <PortalCertificateSubmission ref="submission" :client="client" @unauthorized="emit('unauthorized')" />
     </template>
   </section>
 </template>

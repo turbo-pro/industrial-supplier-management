@@ -17,4 +17,6 @@ public class PortalSupplierAccessGateImpl implements PortalSupplierAccessGate {
         if(supplier==null || !Set.of("DRAFT","ACTIVE").contains(supplier.status()) || !mapper.currentPendingExits(tenant,supplierId).isEmpty())
             throw new ApiException(CommonErrorCode.UNAUTHENTICATED,"门户身份当前不可用");
     }
+    @Override @Transactional(propagation=Propagation.MANDATORY)
+    public void lockForResolution(long supplierId){if(mapper.findForNewBusiness(TenantContext.require().tenantId(),supplierId)==null)throw new ApiException(CommonErrorCode.NOT_FOUND);}
 }

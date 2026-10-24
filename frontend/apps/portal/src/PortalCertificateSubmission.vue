@@ -12,6 +12,8 @@ const file = ref<File>(), upload = ref<Upload>(), progress = ref(0), phase = ref
 const errorPanel = ref<HTMLElement>();
 const form = reactive({ typeId: '', certificateNo: '', issuingAuthority: '', issueDate: '', effectiveDate: '', expiryDate: '', permanent: false, confirmed: false });
 const pending = ref<Submit>();
+const renewal = ref<components['schemas']['PortalQualification']>();
+const formPanel = ref<HTMLElement>();
 let uploadKey = '', disposed = false;
 const requests = new Set<AbortController>();
 const labels = { DRAFT: '待员工核验', VALID: '核验通过', REJECTED: '核验拒绝，请联系邀请方核查原因', EXPIRING: '即将到期', EXPIRED: '已过期', REVOKED: '已撤销', SUPERSEDED: '已换证' };
@@ -20,7 +22,7 @@ function take<T>(result: { data?: { data: T }; response: Response }): T {
   if (result.data) return result.data.data;
   const code = result.response.status;
   if (code === 401) emit('unauthorized');
-  throw new Error(code === 403 ? '当前租户未开通资质模块，请联系邀请方。' : code === 410 ? '上传已过期，请重新选择原件并上传。' : code === 429 ? '24小时上传额度已用完，请稍后再试。' : code === 409 ? '数据冲突：请刷新记录核查，原件可能已被使用或证书编号重复。' : code === 400 || code === 422 ? '提交内容不符合要求，请检查原件格式、必填项及日期。' : '服务暂不可用，请重试；不要更换标识重复提交。');
+  throw new Error(code === 403 ? '当前租户未开通资质模块，请联系邀请方。' : code === 410 ? '上传已过期，请重新选择原件并上传。' : code === 429 ? '24小时上传额度已用完，请稍后再试。' : code === 409 ? '数据冲突：请刷新记录和原证照；可能已有待核验换证、原证已变化，或原件/证书编号重复。' : code === 400 || code === 422 ? '提交内容不符合要求，请检查原件格式、必填项及日期。' : '服务暂不可用，请重试；不要更换标识重复提交。');
 }
 async function load(page = 0) {
   if (historyBusy.value || busy.value || disposed) return;
@@ -34,6 +36,21 @@ async function load(page = 0) {
   } catch (e) { if (!disposed) await fail(e instanceof Error ? e.message : '申请记录加载失败，请重试。'); }
   finally { requests.delete(request); if (!disposed) historyBusy.value = false; }
 }
+function clearForm() {
+  if (busy.value || historyBusy.value || pending.value) return;
+  renewal.value = undefined; file.value = undefined; upload.value = undefined; progress.value = 0; phase.value = ''; uploadKey = ''; error.value = ''; notice.value = '';
+  Object.assign(form, { typeId: '', certificateNo: '', issuingAuthority: '', issueDate: '', effectiveDate: '', expiryDate: '', permanent: false, confirmed: false });
+}
+async function beginRenewal(certificate: components['schemas']['PortalQualification']) {
+  if (disposed) return;
+  if (busy.value || historyBusy.value || pending.value || file.value || Object.values(form).some(value => Boolean(value))) return fail('请先完成或清空当前填写，再选择原证照；不会覆盖尚未提交的内容。');
+  await load(); if (disposed || error.value) return;
+  const type = types.value.find(t => t.code === certificate.typeCode);
+  if (!type) return fail('原证类型已停用或不可用，请联系邀请方。');
+  renewal.value = certificate; Object.assign(form, { typeId: type.id, certificateNo: certificate.certificateNo, issuingAuthority: certificate.issuingAuthority ?? '', issueDate: '', effectiveDate: '', expiryDate: '', permanent: false, confirmed: false });
+  await nextTick(); formPanel.value?.focus();
+}
+defineExpose({ beginRenewal });
 function choose(event: Event) {
   if (busy.value || pending.value) return;
   if (typeof crypto.randomUUID !== 'function' || !crypto.subtle) { void fail('当前地址无法安全上传，请使用HTTPS或本机地址访问。'); return; }
@@ -81,6 +98,7 @@ async function submit() {
     const type = types.value.find(t => t.id === form.typeId);
     if (!form.permanent && type?.validityRequired && !form.expiryDate) return fail('该类型要求填写到期日期。');
     pending.value = { requestKey: crypto.randomUUID(), typeId: form.typeId, certificateNo: form.certificateNo.trim(), issuingAuthority: form.issuingAuthority.trim(), issueDate: form.issueDate || null, effectiveDate: form.effectiveDate || null, expiryDate: form.permanent ? null : form.expiryDate || null, permanent: form.permanent, uploadId: upload.value.id };
+    if (renewal.value) { pending.value.renewalParentId = renewal.value.id; pending.value.renewalParentVersion = renewal.value.version; }
   }
   busy.value = true; error.value = ''; notice.value = '';
   const request = new AbortController(); requests.add(request); let succeeded = false;
@@ -89,9 +107,9 @@ async function submit() {
     if (disposed) return;
     if (!result.data && [400, 403, 404, 409, 410, 422].includes(result.response.status)) pending.value = undefined;
     const record = take(result); succeeded = true;
-    notice.value = `证照申请已提交：${record.certificateNo}。${labels[record.status]}，不代表准入通过。`;
+    notice.value = `${renewal.value ? '换证' : '证照'}申请已提交：${record.certificateNo}。${labels[record.status]}，不代表准入通过。`;
     pending.value = undefined; file.value = undefined; upload.value = undefined; phase.value = ''; progress.value = 0;
-    form.certificateNo = ''; form.confirmed = false; emit('changed');
+    renewal.value = undefined; Object.assign(form, { typeId: '', certificateNo: '', issuingAuthority: '', issueDate: '', effectiveDate: '', expiryDate: '', permanent: false, confirmed: false }); emit('changed');
   } catch (e) { if (!disposed) await fail((e instanceof Error ? e.message : '提交中断。') + (pending.value ? ' 结果未知，表单已锁定；可刷新记录核查，或重试同一申请。' : ' 请核查记录后更正。')); }
   finally { requests.delete(request); if (!disposed) busy.value = false; }
   if (succeeded && !disposed) await load();
@@ -100,14 +118,15 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); file.valu
 </script>
 <template>
   <section class="submissions" aria-labelledby="certificate-submit-title" :aria-busy="busy || historyBusy">
-    <div class="heading"><h2 id="certificate-submit-title">新增证照申请</h2><button class="secondary" :disabled="busy || historyBusy" @click="load()">{{ opened ? '刷新证照申请' : '填写证照申请' }}</button></div>
-    <p class="help">上传不等于提交，提交后进入管理端资质台账，由员工核验。已提交内容不可直接修改或撤回，拒绝后须重新上传并申请；换证、补正及公开审核说明尚未接入。</p>
+    <div class="heading"><h2 id="certificate-submit-title">{{ renewal ? '证照换证申请' : '新增证照申请' }}</h2><button class="secondary" :disabled="busy || historyBusy" @click="load()">{{ opened ? '刷新证照申请' : '填写证照申请' }}</button></div>
+    <p class="help">上传不等于提交，提交后由员工核验。换证提交或拒绝不改变旧证，批准才替代；新证须已生效且未过期。已提交内容不可直接修改或撤回，拒绝后须重新上传并申请；补正及公开审核说明尚未接入。</p>
+    <p v-if="renewal" class="help">原证：{{ renewal.certificateNo }}（{{ renewal.typeName }}），版本 {{ renewal.version }}。类型不可改变；请填写新证日期和原件。</p>
     <div v-if="error" ref="errorPanel" class="error" role="alert" tabindex="-1">{{ error }}</div><p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="historyBusy" role="status">正在读取类型及证照申请…</p>
     <template v-if="opened && types.length">
-      <form @submit.prevent="submit">
+      <form ref="formPanel" tabindex="-1" aria-label="证照申请填写" @submit.prevent="submit">
         <fieldset :disabled="busy || historyBusy || !!pending"><legend>证照信息及原件</legend>
-          <label>申请资质类型<select v-model="form.typeId" required><option value="">请选择</option><option v-for="t in types" :key="t.id" :value="t.id">{{ t.name }}（{{ t.code }}）</option></select></label>
+          <label>申请资质类型<select v-model="form.typeId" required :disabled="!!renewal"><option value="">请选择</option><option v-for="t in types" :key="t.id" :value="t.id">{{ t.name }}（{{ t.code }}）</option></select></label>
           <label>申请证书编号<input v-model="form.certificateNo" maxlength="100" required /></label><label>申请发证机关<input v-model="form.issuingAuthority" maxlength="200" /></label>
           <label>申请签发日期<input v-model="form.issueDate" type="date" /></label><label>申请生效日期<input v-model="form.effectiveDate" type="date" /></label>
           <label class="check"><input v-model="form.permanent" type="checkbox" />长期有效</label><label>申请到期日期<input v-model="form.expiryDate" type="date" :disabled="form.permanent" /></label>
@@ -120,10 +139,11 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); file.valu
         <p v-if="phase" role="status">{{ phase }}</p><progress v-if="file || progress" :value="progress" max="100" aria-label="原件上传进度">{{ progress }}%</progress>
         <button v-if="busy && file && !pending" type="button" class="secondary" @click="paused = true">暂停上传</button>
         <button :disabled="busy || historyBusy || (!pending && upload?.status !== 'COMPLETED')">{{ pending ? '重试同一证照申请' : '确认提交证照申请' }}</button>
+        <button type="button" class="secondary" :disabled="busy || historyBusy || !!pending" @click="clearForm">清空当前填写</button>
       </form>
     </template>
     <p v-else-if="opened && !historyBusy && !error" class="help">暂无可申请的有效资质类型，请联系邀请方。</p>
-    <template v-if="history"><h3>本企业证照申请记录</h3><p v-if="!history.items.length" class="help">暂无门户提交记录。</p><article v-for="item in history.items" :key="item.id" class="request"><h4>{{ item.certificateNo }} · {{ labels[item.status] }}</h4><p>{{ item.typeName }} · 原件：{{ item.fileName }}</p></article><div class="heading"><button class="secondary" :disabled="busy || historyBusy || history.page === 0" @click="load(history.page - 1)">上一页申请</button><span>第 {{ history.page + 1 }} 页，共 {{ history.total }} 条申请</span><button class="secondary" :disabled="busy || historyBusy || (history.page + 1) * history.size >= history.total" @click="load(history.page + 1)">下一页申请</button></div></template>
+    <template v-if="history"><h3>本企业证照申请记录</h3><p v-if="!history.items.length" class="help">暂无门户提交记录。</p><article v-for="item in history.items" :key="item.id" class="request"><h4>{{ item.certificateNo }} · {{ labels[item.status] }}</h4><p>{{ item.typeName }} · 原件：{{ item.fileName }}</p><p v-if="item.parentQualificationId">换证原证：{{ item.parentCertificateNo }}（{{ item.parentQualificationId }}）</p></article><div class="heading"><button class="secondary" :disabled="busy || historyBusy || history.page === 0" @click="load(history.page - 1)">上一页申请</button><span>第 {{ history.page + 1 }} 页，共 {{ history.total }} 条申请</span><button class="secondary" :disabled="busy || historyBusy || (history.page + 1) * history.size >= history.total" @click="load(history.page + 1)">下一页申请</button></div></template>
   </section>
 </template>
 <style scoped>
