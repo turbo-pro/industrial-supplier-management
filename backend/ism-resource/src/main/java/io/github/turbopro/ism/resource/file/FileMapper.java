@@ -12,6 +12,8 @@ public interface FileMapper extends TenantScopedMapper {
     String tenantSetting(long tenantId,String key);
     @Select("SELECT id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status,created_at FROM res_file_object WHERE tenant_id=#{tenantId} AND file_sha256=#{sha256} AND file_size=#{size} AND status='ACTIVE'")
     FileModels.FileRow fileByHash(long tenantId,String sha256,long size);
+    @Select("SELECT id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status,created_at FROM res_file_object WHERE tenant_id=#{tenantId} AND file_sha256=#{sha256} AND file_size=#{size} AND status='ACTIVE' FOR UPDATE")
+    FileModels.FileRow fileByHashCurrent(long tenantId,String sha256,long size);
     @Select("SELECT id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status,created_at FROM res_file_object WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE'")
     FileModels.FileRow file(long tenantId,long id);
     @Select("SELECT id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status,created_at FROM res_file_object WHERE tenant_id=#{tenantId} AND status='ACTIVE' ORDER BY created_at DESC,id DESC")

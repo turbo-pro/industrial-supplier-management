@@ -1,0 +1,42 @@
+package io.github.turbopro.ism.qualification;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.turbopro.ism.common.api.error.*;
+import io.github.turbopro.ism.common.infrastructure.portal.*;
+import io.github.turbopro.ism.operation.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDate;
+import java.util.*;
+
+@Service
+public class PortalCertificateSubmissionService {
+    private final PortalCertificateSubmissionMapper mapper;private final QualificationMapper qualifications;
+    private final PortalWriteGuard guard;private final PortalModuleAccessGate modules;private final PortalQualificationUploadReference uploads;
+    private final OperationIdGenerator ids;private final AuditService audit;private final ObjectMapper json;
+    public PortalCertificateSubmissionService(PortalCertificateSubmissionMapper mapper,QualificationMapper qualifications,PortalWriteGuard guard,PortalModuleAccessGate modules,PortalQualificationUploadReference uploads,OperationIdGenerator ids,AuditService audit,ObjectMapper json){this.mapper=mapper;this.qualifications=qualifications;this.guard=guard;this.modules=modules;this.uploads=uploads;this.ids=ids;this.audit=audit;this.json=json;}
+    @Transactional(readOnly=true) public List<PortalCertificateSubmissionModels.Type> types(){var i=identity();return qualifications.types(i.tenantId()).stream().filter(t->t.status().equals("ACTIVE")).map(t->new PortalCertificateSubmissionModels.Type(Long.toString(t.id()),t.typeCode(),t.typeName(),t.validityRequired())).toList();}
+    @Transactional(readOnly=true) public PortalCertificateSubmissionModels.Page list(int page,int size){var i=identity();if(page<0||page>10000||size<1||size>100)throw invalid("分页参数无效");return new PortalCertificateSubmissionModels.Page(mapper.count(i.tenantId(),i.supplierId()),page,size,mapper.list(i.tenantId(),i.supplierId(),page*size,size));}
+    @Transactional public PortalCertificateSubmissionModels.View submit(PortalCertificateSubmissionModels.Submit command){
+        guard.lockCurrent();var i=identity();String request=write(command);var previous=mapper.byKey(i.tenantId(),i.supplierId(),command.requestKey());
+        if(previous!=null){if(previous.accountId()!=i.accountId()||!same(previous.requestJson(),command))throw new ApiException(CommonErrorCode.CONFLICT,"提交标识已用于其他内容");return mapper.find(i.tenantId(),i.supplierId(),previous.qualificationId());}
+        var type=qualifications.typeForReview(i.tenantId(),id(command.typeId()));
+        if(type==null||!type.status().equals("ACTIVE"))throw invalid("资质类型不可用，请刷新后选择");
+        if(qualifications.currentVerifiedCertificate(i.tenantId(),type.id(),command.certificateNo())!=null)throw new ApiException(CommonErrorCode.CONFLICT,"该编号已有核验证照，请联系邀请方办理换证");
+        if(command.permanent()&&command.expiryDate()!=null||!command.permanent()&&type.validityRequired()&&command.expiryDate()==null)throw invalid("请按资质类型填写有效期");
+        if(command.issueDate()!=null&&command.issueDate().isAfter(LocalDate.now())||command.effectiveDate()!=null&&command.expiryDate()!=null&&command.effectiveDate().isAfter(command.expiryDate()))throw invalid("签发或有效期日期无效");
+        var file=uploads.requireReady(id(command.uploadId()));long qualificationId=ids.nextId();
+        Long organization=qualifications.supplierOrganization(i.tenantId(),i.supplierId());if(organization==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        try{
+            qualifications.insert(qualificationId,i.tenantId(),i.accountId(),organization,i.supplierId(),type.id(),null,command.certificateNo(),command.issuingAuthority(),command.issueDate(),command.effectiveDate(),command.permanent()?null:command.expiryDate(),command.permanent(),type.defaultWarningDays(),file.fileId());
+            mapper.insert(qualificationId,i.tenantId(),i.supplierId(),i.accountId(),command.requestKey(),id(command.uploadId()),request,file.fileName());
+        }catch(org.springframework.dao.DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号重复或原件已用于其他申请");}
+        audit.append(new AuditService.AuditCommand("PORTAL_CERTIFICATE_SUBMIT","QUALIFICATION",qualificationId,null,Map.of(),Map.of("supplierId",i.supplierId()),null,null));
+        return mapper.find(i.tenantId(),i.supplierId(),qualificationId);
+    }
+    private PortalIdentityContext.Identity identity(){var i=PortalIdentityContext.require();modules.requireAvailable("QUALIFICATION");return i;}
+    private long id(String value){try{return Long.parseLong(value);}catch(NumberFormatException e){throw invalid("标识无效");}}
+    private String write(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
+    private boolean same(String value,PortalCertificateSubmissionModels.Submit command){try{return json.readValue(value,PortalCertificateSubmissionModels.Submit.class).equals(command);}catch(Exception e){throw new IllegalStateException(e);}}
+    private ApiException invalid(String text){return new ApiException(CommonErrorCode.VALIDATION_FAILED,text);}
+}

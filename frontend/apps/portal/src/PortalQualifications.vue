@@ -76,7 +76,7 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); urls.forE
 <template>
   <section class="qualifications" aria-labelledby="portal-qualifications-title" :aria-busy="busy || detailBusy || downloading">
     <div class="heading"><h2 id="portal-qualifications-title">本企业资质证照</h2><button class="secondary" :disabled="busy || detailBusy || downloading" @click="load(history?.page ?? 0)">{{ opened ? '刷新证照列表' : '查看本企业证照' }}</button></div>
-    <p class="help">查阅已核验及历史证照，待核验和被驳回的内部草稿不展示。过期、撤销、已换证原件仅供留档；实际准入及业务放行以邀请方审核为准。暂不支持门户上传和换证申请。</p>
+    <p class="help">查阅已核验及历史证照，待核验和被驳回的内部草稿不展示。过期、撤销、已换证原件仅供留档；实际准入及业务放行以邀请方审核为准。新增证照可在下方申请，暂不支持换证申请。</p>
     <template v-if="opened">
       <form class="filters" @submit.prevent="load(0, true)">
         <label>证照关键词<input v-model="keyword" maxlength="100" placeholder="类型名称、编码或证书编号" :disabled="busy || detailBusy || downloading" /></label>

@@ -258,6 +258,113 @@ paths:
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-uploads:
+    post:
+      operationId: initializeOwnPortalCertificateUpload
+      tags: [Supplier Portal]
+      description: Own account/enterprise only. PDF/PNG/JPEG, 8 bytes to 10MiB and tenant maximum, 1MiB chunks, 24h expiry. Max 10 initializations/account and 50/enterprise per rolling 24h. Same request key and metadata replay the same upload; changed content conflicts. No hash-only instant upload, file id, storage key or other file metadata.
+      security: [{ portalBearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateUploadInitialize' } } } }
+      responses:
+        '200': { description: Owned upload; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateUploadResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '413': { $ref: '#/components/responses/ApiFailure' }
+        '429': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-uploads/{id}:
+    get:
+      operationId: getOwnPortalCertificateUpload
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Own upload progress; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateUploadResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-uploads/{id}/chunks/{index}:
+    put:
+      operationId: putOwnPortalCertificateChunk
+      tags: [Supplier Portal]
+      description: Checks account binding, session, expiry, chunk size/hash and first-chunk magic bytes. Same bytes may be retried explicitly. Completed uploads cannot be changed.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: index, in: path, required: true, schema: { type: integer } }
+        - { name: X-Chunk-SHA256, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses:
+        '200': { description: Recorded progress; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateUploadResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '410': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '503': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-uploads/{id}/complete:
+    post:
+      operationId: completeOwnPortalCertificateUpload
+      tags: [Supplier Portal]
+      description: Always verifies full content size/SHA256 before any tenant-local deduplication. Records audit atomically; rollback retains retryable chunks. Same completed upload replays completion while unexpired. No file id returned.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } } } }
+      responses:
+        '200': { description: Owned completed upload; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateUploadResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '410': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '503': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-submissions/types:
+    get:
+      operationId: listOwnPortalCertificateTypes
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      responses:
+        '200': { description: Active qualification types; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateTypesResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-submissions:
+    get:
+      operationId: listOwnPortalCertificateSubmissions
+      tags: [Supplier Portal]
+      description: Enterprise-bound portal-origin requests only, including pending/rejected ones; never internal review comments or employee drafts. Review outcome is not a current admission decision.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        '200': { description: Own enterprise requests; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmissionPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: submitOwnPortalCertificate
+      tags: [Supplier Portal]
+      description: Creates an immutable new-certificate DRAFT for employee qualification verification. Only a completed unexpired upload owned by the current portal account can be referenced, once. Same request key/account/normalized command replay; other reuse conflicts. Type and supplier/session eligibility rechecked; qualification, origin record and audit atomic. Not renewal or withdrawal. Internal comments are not exposed; rejection reasons must be confirmed with the inviting enterprise.
+      security: [{ portalBearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmit' } } } }
+      responses:
+        '200': { description: Submitted/replayed request; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmissionResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '410': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /portal/qualifications:
     get:
       operationId: listOwnPortalQualifications
@@ -2698,6 +2805,96 @@ components:
                 size: { type: integer }
                 canReview: { type: boolean }
                 items: { type: array, items: { $ref: '#/components/schemas/ProfileChange' } }
+    PortalCertificateUploadInitialize:
+      type: object
+      required: [requestKey, fileName, contentType, totalSize, sha256]
+      properties:
+        requestKey: { type: string, pattern: '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' }
+        fileName: { type: string, minLength: 1, maxLength: 255 }
+        contentType: { type: string, enum: [application/pdf, image/png, image/jpeg] }
+        totalSize: { type: integer, minimum: 8, maximum: 10485760 }
+        sha256: { type: string, pattern: '^[a-fA-F0-9]{64}$' }
+    PortalCertificateUpload:
+      type: object
+      required: [id, fileName, contentType, totalSize, sha256, chunkSize, totalChunks, uploadedChunks, status, expiresAt, version]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        totalSize: { type: integer }
+        sha256: { type: string }
+        chunkSize: { type: integer }
+        totalChunks: { type: integer }
+        uploadedChunks: { type: array, items: { type: integer } }
+        status: { type: string, enum: [UPLOADING, COMPLETED] }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer }
+    PortalCertificateUploadResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/PortalCertificateUpload' } }
+    PortalCertificateSubmit:
+      type: object
+      required: [requestKey, typeId, certificateNo, uploadId]
+      properties:
+        requestKey: { type: string, pattern: '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' }
+        typeId: { type: string }
+        certificateNo: { type: string, minLength: 1, maxLength: 100 }
+        issuingAuthority: { type: string, maxLength: 200 }
+        issueDate: { type: string, format: date, nullable: true }
+        effectiveDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        permanent: { type: boolean, default: false }
+        uploadId: { type: string }
+    PortalCertificateTypesResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                required: [id, code, name, validityRequired]
+                properties:
+                  id: { type: string }
+                  code: { type: string }
+                  name: { type: string }
+                  validityRequired: { type: boolean }
+    PortalCertificateSubmission:
+      type: object
+      required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt]
+      properties:
+        id: { type: string }
+        requestKey: { type: string }
+        typeName: { type: string }
+        certificateNo: { type: string }
+        status: { type: string, enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED] }
+        fileName: { type: string }
+        submittedAt: { type: string, format: date-time }
+    PortalCertificateSubmissionResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/PortalCertificateSubmission' } }
+    PortalCertificateSubmissionPageResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [total, page, size, items]
+              properties:
+                total: { type: integer }
+                page: { type: integer }
+                size: { type: integer }
+                items: { type: array, items: { $ref: '#/components/schemas/PortalCertificateSubmission' } }
     PortalQualification:
       type: object
       additionalProperties: false

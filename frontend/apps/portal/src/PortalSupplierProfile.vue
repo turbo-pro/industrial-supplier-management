@@ -3,6 +3,7 @@ import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type components, type createIsmClient } from '@ism/api-client';
 import PortalProfileChanges from './PortalProfileChanges.vue';
 import PortalQualifications from './PortalQualifications.vue';
+import PortalCertificateSubmission from './PortalCertificateSubmission.vue';
 
 const props = defineProps<{ client: ReturnType<typeof createIsmClient> }>();
 const emit = defineEmits<{ unauthorized: [] }>();
@@ -65,6 +66,7 @@ onUnmounted(() => { disposed = true; request?.abort(); profile.value = undefined
       <p v-else class="help">暂无有效的已关联采购品类，请联系邀请方维护。</p>
       <PortalProfileChanges :client="client" :supplier="profile.supplier" @unauthorized="emit('unauthorized')" />
       <PortalQualifications :client="client" @unauthorized="emit('unauthorized')" />
+      <PortalCertificateSubmission :client="client" @unauthorized="emit('unauthorized')" />
     </template>
   </section>
 </template>

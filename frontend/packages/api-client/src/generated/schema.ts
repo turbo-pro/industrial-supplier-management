@@ -210,6 +210,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/certificate-uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Own account/enterprise only. PDF/PNG/JPEG, 8 bytes to 10MiB and tenant maximum, 1MiB chunks, 24h expiry. Max 10 initializations/account and 50/enterprise per rolling 24h. Same request key and metadata replay the same upload; changed content conflicts. No hash-only instant upload, file id, storage key or other file metadata. */
+        post: operations["initializeOwnPortalCertificateUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOwnPortalCertificateUpload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-uploads/{id}/chunks/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Checks account binding, session, expiry, chunk size/hash and first-chunk magic bytes. Same bytes may be retried explicitly. Completed uploads cannot be changed. */
+        put: operations["putOwnPortalCertificateChunk"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-uploads/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Always verifies full content size/SHA256 before any tenant-local deduplication. Records audit atomically; rollback retains retryable chunks. Same completed upload replays completion while unexpired. No file id returned. */
+        post: operations["completeOwnPortalCertificateUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-submissions/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOwnPortalCertificateTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Enterprise-bound portal-origin requests only, including pending/rejected ones; never internal review comments or employee drafts. Review outcome is not a current admission decision. */
+        get: operations["listOwnPortalCertificateSubmissions"];
+        put?: never;
+        /** @description Creates an immutable new-certificate DRAFT for employee qualification verification. Only a completed unexpired upload owned by the current portal account can be referenced, once. Same request key/account/normalized command replay; other reuse conflicts. Type and supplier/session eligibility rechecked; qualification, origin record and audit atomic. Not renewal or withdrawal. Internal comments are not exposed; rejection reasons must be confirmed with the inviting enterprise. */
+        post: operations["submitOwnPortalCertificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/qualifications": {
         parameters: {
             query?: never;
@@ -3456,6 +3557,77 @@ export interface components {
                 size: number;
                 canReview: boolean;
                 items: components["schemas"]["ProfileChange"][];
+            };
+        };
+        PortalCertificateUploadInitialize: {
+            requestKey: string;
+            fileName: string;
+            /** @enum {string} */
+            contentType: "application/pdf" | "image/png" | "image/jpeg";
+            totalSize: number;
+            sha256: string;
+        };
+        PortalCertificateUpload: {
+            id: string;
+            fileName: string;
+            contentType: string;
+            totalSize: number;
+            sha256: string;
+            chunkSize: number;
+            totalChunks: number;
+            uploadedChunks: number[];
+            /** @enum {string} */
+            status: "UPLOADING" | "COMPLETED";
+            /** Format: date-time */
+            expiresAt: string;
+            version: number;
+        };
+        PortalCertificateUploadResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalCertificateUpload"];
+        };
+        PortalCertificateSubmit: {
+            requestKey: string;
+            typeId: string;
+            certificateNo: string;
+            issuingAuthority?: string;
+            /** Format: date */
+            issueDate?: string | null;
+            /** Format: date */
+            effectiveDate?: string | null;
+            /** Format: date */
+            expiryDate?: string | null;
+            /** @default false */
+            permanent: boolean;
+            uploadId: string;
+        };
+        PortalCertificateTypesResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                id: string;
+                code: string;
+                name: string;
+                validityRequired: boolean;
+            }[];
+        };
+        PortalCertificateSubmission: {
+            id: string;
+            requestKey: string;
+            typeName: string;
+            certificateNo: string;
+            /** @enum {string} */
+            status: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED";
+            fileName: string;
+            /** Format: date-time */
+            submittedAt: string;
+        };
+        PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PortalCertificateSubmission"];
+        };
+        PortalCertificateSubmissionPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["PortalCertificateSubmission"][];
             };
         };
         PortalQualification: {
@@ -6768,6 +6940,213 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    initializeOwnPortalCertificateUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalCertificateUploadInitialize"];
+            };
+        };
+        responses: {
+            /** @description Owned upload; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateUploadResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            413: components["responses"]["ApiFailure"];
+            429: components["responses"]["ApiFailure"];
+        };
+    };
+    getOwnPortalCertificateUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own upload progress; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateUploadResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    putOwnPortalCertificateChunk: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Chunk-SHA256": string;
+            };
+            path: {
+                id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Recorded progress; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateUploadResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            410: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            503: components["responses"]["ApiFailure"];
+        };
+    };
+    completeOwnPortalCertificateUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Owned completed upload; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateUploadResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            410: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            503: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnPortalCertificateTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active qualification types; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateTypesResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnPortalCertificateSubmissions: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own enterprise requests; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateSubmissionPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    submitOwnPortalCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalCertificateSubmit"];
+            };
+        };
+        responses: {
+            /** @description Submitted/replayed request; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateSubmissionResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            410: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };
     };

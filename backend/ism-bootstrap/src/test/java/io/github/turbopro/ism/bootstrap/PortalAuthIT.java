@@ -42,6 +42,7 @@ class PortalAuthIT {
     @Autowired ProfileChangeService changes;
     @Autowired io.github.turbopro.ism.resource.file.FileService certificateFiles;
     @Autowired io.github.turbopro.ism.qualification.PortalQualificationService portalCertificates;
+    @Autowired io.github.turbopro.ism.qualification.QualificationService qualificationService;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper profileJson;
     static final AtomicLong IDS=new AtomicLong(20900);
     record Fixture(long tenant,long supplier,long account) {String code(){return "AUTH-"+tenant;}}
@@ -115,6 +116,122 @@ class PortalAuthIT {
         mvc.perform(get("/api/portal/supplier-profile").header("Authorization","Bearer "+token)).andExpect(status().is(expected));
     }
     void enableCertificates(Fixture f){jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT ?,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='QUALIFICATION'",f.supplier()+3);}
+    byte[] original(String suffix){return ("%PDF-1.7\nPORTAL-ORIGINAL-"+suffix).getBytes(java.nio.charset.StandardCharsets.UTF_8);}
+    String digest(byte[] bytes)throws Exception{return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));}
+    String initializePortalUpload(String token,String key,String name,byte[] bytes,String hash)throws Exception{
+        return profileJson.readTree(mvc.perform(post("/api/portal/certificate-uploads").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(Map.of("requestKey",key,"fileName",name,"contentType","application/pdf","totalSize",bytes.length,"sha256",hash))))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.status").value("UPLOADING")).andExpect(jsonPath("$.data.fileId").doesNotExist()).andReturn().getResponse().getContentAsString()).get("data").get("id").asText();
+    }
+    void portalChunk(String token,String id,byte[] bytes)throws Exception{mvc.perform(put("/api/portal/certificate-uploads/"+id+"/chunks/0").header("Authorization","Bearer "+token).header("X-Chunk-SHA256",digest(bytes)).contentType("application/octet-stream").content(bytes)).andExpect(status().isOk());}
+    String readyPortalUpload(String token,String suffix)throws Exception{var bytes=original(suffix);String id=initializePortalUpload(token,UUID.randomUUID().toString(),"own-"+suffix+".pdf",bytes,digest(bytes));portalChunk(token,id,bytes);completePortalUpload(token,id,200);return id;}
+    void completePortalUpload(String token,String id,int expected)throws Exception{mvc.perform(post("/api/portal/certificate-uploads/"+id+"/complete").header("Authorization","Bearer "+token).contentType("application/json").content("{\"version\":0}")).andExpect(status().is(expected));}
+    io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit certificateCommand(Fixture f,String upload,String no){return new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit(UUID.randomUUID().toString(),Long.toString(f.supplier()+80),no,"发证机关",java.time.LocalDate.now().minusDays(1),java.time.LocalDate.now(),java.time.LocalDate.now().plusYears(1),false,upload);}
+    String submitCertificate(String token,io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit command,int expected)throws Exception{
+        return mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(command))).andExpect(status().is(expected)).andReturn().getResponse().getContentAsString();
+    }
+    @Test void portalUploadRequiresFullBytesAndScopesProgressToTheCreatingAccount()throws Exception{
+        var f=fixture();enableCertificates(f);String token=login(f).accessToken();byte[] bytes=original("isolation");String key=UUID.randomUUID().toString();
+        try(var tenant=TenantContext.open(f.tenant(),9)){certificateFiles.createGenerated("PRIVATE_ORIGINAL_NAME.pdf","application/pdf",bytes);}
+        String id=initializePortalUpload(token,key,"own.pdf",bytes,digest(bytes));assertThat(initializePortalUpload(token,key,"own.pdf",bytes,digest(bytes))).isEqualTo(id);
+        mvc.perform(post("/api/portal/certificate-uploads").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(Map.of("requestKey",key,"fileName","changed.pdf","contentType","application/pdf","totalSize",bytes.length,"sha256",digest(bytes))))).andExpect(status().isConflict());
+        var foreign=fixture();enableCertificates(foreign);String foreignToken=login(foreign).accessToken();
+        mvc.perform(get("/api/portal/certificate-uploads/"+id).header("Authorization","Bearer "+foreignToken)).andExpect(status().isNotFound());
+        var invite=issueForRegistration(f);var second=registrations.register(new PortalRegistrationModels.Register(invite.token(),"Other.Upload","Portal#Pass123"));String otherToken=auth.login(new PortalAuthModels.Login(f.code(),"Other.Upload","Portal#Pass123")).accessToken();
+        mvc.perform(get("/api/portal/certificate-uploads/"+id).header("Authorization","Bearer "+otherToken)).andExpect(status().isNotFound());
+        completePortalUpload(token,id,409);portalChunk(token,id,bytes);portalChunk(token,id,bytes);completePortalUpload(token,id,200);completePortalUpload(token,id,200);
+        String response=mvc.perform(get("/api/portal/certificate-uploads/"+id).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED")).andReturn().getResponse().getContentAsString();
+        assertThat(response).doesNotContain("fileId","PRIVATE_","provider","objectKey");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_UPLOAD_COMPLETE'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    PortalInvitationModels.Issued issueForRegistration(Fixture f){try(var tenant=TenantContext.open(f.tenant(),9);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:master:update"),Map.of("supplier:master",DataScope.all()),Set.of()))){return invites.issue(f.supplier(),new PortalInvitationModels.Issue(1,"另一联系人","other-upload@example.test",24));}}
+    @Test void portalUploadCannotClaimAnotherFilesHashUsingDifferentBytes()throws Exception{
+        var f=fixture();enableCertificates(f);String token=login(f).accessToken();byte[] bytes=original("AAAA"),wrong=original("BBBB");
+        try(var tenant=TenantContext.open(f.tenant(),9)){certificateFiles.createGenerated("PRIVATE_EXISTING.pdf","application/pdf",bytes);}
+        String id=initializePortalUpload(token,UUID.randomUUID().toString(),"own.pdf",wrong,digest(bytes));portalChunk(token,id,wrong);completePortalUpload(token,id,422);
+        assertThat(jdbc.queryForObject("SELECT status FROM res_upload_session WHERE id=?",String.class,Long.parseLong(id))).isEqualTo("UPLOADING");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_UPLOAD_COMPLETE'",Long.class,f.tenant())).isZero();
+    }
+    @Test void portalUploadAuditRollbackRetainsPhysicalChunksAndAllowsTheSameCompletionRetry()throws Exception{
+        var f=fixture();enableCertificates(f);String token=login(f).accessToken();byte[] bytes=original("rollback");String id=initializePortalUpload(token,UUID.randomUUID().toString(),"own.pdf",bytes,digest(bytes));portalChunk(token,id,bytes);
+        var chunk=CERTIFICATE_STORAGE.resolve("uploads/"+f.tenant()+"/"+id+"/0.part");
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_UPLOAD_COMPLETE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='portal upload audit failure'; END IF; END");
+        try{completePortalUpload(token,id,500);}finally{drop();}
+        assertThat(java.nio.file.Files.exists(chunk)).isTrue();assertThat(jdbc.queryForObject("SELECT status FROM res_upload_session WHERE id=?",String.class,Long.parseLong(id))).isEqualTo("UPLOADING");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_file_object WHERE tenant_id=? AND file_sha256=?",Long.class,f.tenant(),digest(bytes))).isZero();
+        completePortalUpload(token,id,200);assertThat(java.nio.file.Files.exists(chunk)).isFalse();
+    }
+    @Test void portalCertificateSubmitCreatesImmutableDraftThenEmployeeVerificationPublishesIt()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String upload=readyPortalUpload(token,"approved");var command=certificateCommand(f,upload,"PORTAL-NEW-CERT");
+        String response=submitCertificate(token,command,200),id=profileJson.readTree(response).get("data").get("id").asText();
+        assertThat(profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText()).isEqualTo(id);
+        mvc.perform(get("/api/portal/qualifications/"+id).header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].status").value("DRAFT"));
+        long fileId=jdbc.queryForObject("SELECT file_id FROM qua_supplier_qualification WHERE id=?",Long.class,Long.parseLong(id));
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+            var edit=new io.github.turbopro.ism.qualification.QualificationModels.SaveQualification(Long.toString(f.supplier()),command.typeId(),"MUTATED",null,null,null,command.expiryDate(),false,30,Long.toString(fileId),0);
+            assertThatThrownBy(()->qualificationService.update(Long.parseLong(id),edit)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+            qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE,"PRIVATE_EMPLOYEE_REVIEW",0));
+        }
+        mvc.perform(get("/api/portal/qualifications/"+id).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.certificateNo").value("PORTAL-NEW-CERT"));
+        String published=mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].status").value("VALID")).andReturn().getResponse().getContentAsString();assertThat(published).doesNotContain("PRIVATE_","fileId","verifiedBy");
+        mvc.perform(get("/api/portal/qualifications/"+id+"/content").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(content().bytes(original("approved")));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_SUBMIT'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void portalCertificateSubmitAuditFailureRollsBackAndUploadCanOnlyBeConsumedOnce()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String upload=readyPortalUpload(token,"submit-rollback");var command=certificateCommand(f,upload,"NEW-ROLLBACK");
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CERTIFICATE_SUBMIT' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='portal submit audit failure'; END IF; END");
+        try{submitCertificate(token,command,500);}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=?",Long.class,f.tenant())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=? AND certificate_no='NEW-ROLLBACK'",Long.class,f.tenant())).isZero();
+        submitCertificate(token,command,200);submitCertificate(token,certificateCommand(f,upload,"REUSED-ORIGINAL"),409);
+        var changed=new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit(command.requestKey(),command.typeId(),"DIFFERENT",command.issuingAuthority(),command.issueDate(),command.effectiveDate(),command.expiryDate(),false,command.uploadId());submitCertificate(token,changed,409);
+    }
+    @Test void portalUploadAndCertificateSubmitRespectExpiryModuleFormatAndOwner()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String ready=readyPortalUpload(token,"expired");
+        jdbc.update("UPDATE res_upload_session SET expires_at=DATE_SUB(UTC_TIMESTAMP,INTERVAL 1 DAY) WHERE id=?",Long.parseLong(ready));submitCertificate(token,certificateCommand(f,ready,"EXPIRED-UPLOAD"),410);
+        String incomplete=initializePortalUpload(token,UUID.randomUUID().toString(),"own.pdf",original("pending"),digest(original("pending")));submitCertificate(token,certificateCommand(f,incomplete,"INCOMPLETE"),422);
+        mvc.perform(put("/api/portal/certificate-uploads/"+incomplete+"/chunks/0").header("Authorization","Bearer "+token).header("X-Chunk-SHA256",digest("NOT-A-PDF-FILE".getBytes())).contentType("application/octet-stream").content("NOT-A-PDF-FILE")).andExpect(status().isBadRequest());
+        var foreign=fixture();enableCertificates(foreign);String otherToken=login(foreign).accessToken();String other=readyPortalUpload(otherToken,"other");submitCertificate(token,certificateCommand(f,other,"FOREIGN-UPLOAD"),404);
+        jdbc.update("UPDATE plt_package_module pm JOIN plt_module m ON m.id=pm.module_id SET pm.enabled=0 WHERE pm.package_version_id=? AND m.module_code='QUALIFICATION'",f.supplier()+3);
+        mvc.perform(get("/api/portal/certificate-submissions/types").header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/portal/certificate-uploads/"+ready).header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
+    }
+    void reviewPortalCertificate(Fixture f,String id,boolean approve){try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(approve?io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE:io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"独立员工核验",0));}}
+    @Test void portalCertificateApprovalRechecksExitAndAuditFailureDoesNotPublish()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String upload=readyPortalUpload(token,"review-rollback");var command=certificateCommand(f,upload,"REVIEW-ROLLBACK");String id=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='QUALIFICATION_VERIFY' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='portal approval audit failure'; END IF; END");
+        try{assertThatThrownBy(()->reviewPortalCertificate(f,id,true)).isInstanceOf(RuntimeException.class).hasStackTraceContaining("portal approval audit failure");}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT status FROM qua_supplier_qualification WHERE id=?",String.class,Long.parseLong(id))).isEqualTo("DRAFT");
+        jdbc.update("UPDATE qua_qualification_type SET status='DISABLED' WHERE id=?",f.supplier()+80);
+        assertThatThrownBy(()->reviewPortalCertificate(f,id,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        jdbc.update("UPDATE qua_qualification_type SET status='ACTIVE' WHERE id=?",f.supplier()+80);
+        var exit=prepareExit(f);assertThatThrownBy(()->reviewPortalCertificate(f,id,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        reviewPortalCertificate(f,id,false);
+        try(var tenant=TenantContext.open(f.tenant(),9);var grants=exitGrants()){exits.cancel(f.supplier(),Long.parseLong(exit.id()),new ExitModels.Version(exit.version()));}
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].status").value("REJECTED"));
+    }
+    @Test void portalUploadBudgetCannotBeBypassedWithFreshRequestKeysAndConcurrentCompletionIsIdempotent()throws Exception{
+        var f=fixture();enableCertificates(f);String token=login(f).accessToken();byte[] bytes=original("concurrent");String first=null,firstKey=null;
+        for(int n=0;n<10;n++){String key=UUID.randomUUID().toString();String id=initializePortalUpload(token,key,"own.pdf",bytes,digest(bytes));if(n==0){first=id;firstKey=key;}}
+        assertThat(initializePortalUpload(token,firstKey,"own.pdf",bytes,digest(bytes))).isEqualTo(first);
+        mvc.perform(post("/api/portal/certificate-uploads").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(Map.of("requestKey",UUID.randomUUID().toString(),"fileName","own.pdf","contentType","application/pdf","totalSize",bytes.length,"sha256",digest(bytes))))).andExpect(status().isTooManyRequests());
+        String id=first;portalChunk(token,id,bytes);
+        var one=java.util.concurrent.CompletableFuture.runAsync(()->{try{completePortalUpload(token,id,200);}catch(Exception e){throw new RuntimeException(e);}});
+        var two=java.util.concurrent.CompletableFuture.runAsync(()->{try{completePortalUpload(token,id,200);}catch(Exception e){throw new RuntimeException(e);}});
+        java.util.concurrent.CompletableFuture.allOf(one,two).get(30,java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_UPLOAD_COMPLETE'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void portalCertificateCanBeResubmittedWithSameNumberAfterRepeatedRejectionButNotAsVerifiedDuplicate()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();
+        for(int n=0;n<2;n++){
+            String upload=readyPortalUpload(token,"repeat-reject-"+n);var command=certificateCommand(f,upload,"SAME-CERT-NUMBER");
+            String id=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();reviewPortalCertificate(f,id,false);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=? AND certificate_no='SAME-CERT-NUMBER' AND status='REJECTED'",Long.class,f.tenant())).isEqualTo(2);
+        String upload=readyPortalUpload(token,"repeat-approved");String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,upload,"SAME-CERT-NUMBER"),200)).get("data").get("id").asText();reviewPortalCertificate(f,id,true);
+        submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"duplicate-active"),"SAME-CERT-NUMBER"),409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=? AND certificate_no='SAME-CERT-NUMBER' AND status='VALID'",Long.class,f.tenant())).isEqualTo(1);
+    }
     long certificate(Fixture f,int offset,String status,int days,boolean permanent){
         long id=f.supplier()+offset,type=f.supplier()+80;
         jdbc.update("INSERT IGNORE INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(?,?,'SAFETY','安全生产许可证','CHEMICAL',9,9)",type,f.tenant());

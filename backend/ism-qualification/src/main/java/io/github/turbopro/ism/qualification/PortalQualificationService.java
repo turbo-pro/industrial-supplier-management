@@ -42,7 +42,8 @@ public class PortalQualificationService {
         try{
             // Means authorization/open succeeded, not proof the remote client received every byte.
             audit.append(new AuditService.AuditCommand("PORTAL_QUALIFICATION_DOWNLOAD_OPEN","QUALIFICATION",id,null,Map.of(),Map.of("supplierId",identity.supplierId()),null,null));
-            return result;
+            String ownName=mapper.portalFileName(identity.tenantId(),identity.supplierId(),id);
+            return ownName==null?result:new QualificationFileContent.Download(ownName,result.size(),result.stream());
         }catch(RuntimeException e){try{result.stream().close();}catch(IOException close){e.addSuppressed(close);}throw e;}
     }
     private PortalIdentityContext.Identity identity(){var identity=PortalIdentityContext.require();modules.requireAvailable("QUALIFICATION");return identity;}

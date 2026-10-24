@@ -61,6 +61,11 @@ class PortalBrowserFixture {
         boolean recovery=Boolean.getBoolean("ism.browser.portal-recovery");
         boolean changes=Boolean.getBoolean("ism.browser.portal-changes");
         boolean certificates=Boolean.getBoolean("ism.browser.portal-certificates");
+        boolean submissions=Boolean.getBoolean("ism.browser.portal-submissions");
+        if(submissions){
+            jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT 21003,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='QUALIFICATION'");
+            jdbc.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(21080,21001,'SAFETY','安全生产许可证','CHEMICAL',9,9)");
+        }
         if(certificates){
             jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT 21003,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='QUALIFICATION'");
             jdbc.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(21080,21001,'SAFETY','安全生产许可证','CHEMICAL',9,9)");
@@ -86,6 +91,14 @@ class PortalBrowserFixture {
             }
             jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21008,id FROM sys_permission WHERE status='ACTIVE' AND module_code IN ('SYSTEM','COMMON','SUPPLIER')");
             jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21009,id FROM sys_permission WHERE status='ACTIVE' AND permission_code IN ('iam:organization:view','iam:menu:view','supplier:master:view','table:view:manage')");
+        }
+        if(submissions){
+            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21008,id FROM sys_permission WHERE status='ACTIVE' AND module_code='QUALIFICATION'");
+            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21009,id FROM sys_permission WHERE status='ACTIVE' AND permission_code='supplier:qualification:view'");
+            for(int index=0;index<2;index++){
+                jdbc.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(21001,?,'supplier:qualification','TENANT_ALL')",21008+index);
+                jdbc.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT 21001,?,id FROM sys_menu WHERE menu_code='SUPPLIER_QUALIFICATION'",21008+index);
+            }
         }
         if(exit){
             jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT 21003,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='RESTRICTION'");
@@ -114,16 +127,24 @@ class PortalBrowserFixture {
         assertThat(Files.exists(control.resolve("finish"))).as("Browser completion signal").isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_account WHERE tenant_id=21001 AND supplier_id=21005 AND username='browser.user'",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=21001 AND status='ACCEPTED'",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(changes||certificates?2:recovery||password?4:exit?2:management?4:1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(certificates||recovery||password||!exit&&management?2:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001",Long.class)).isEqualTo(changes||certificates||submissions?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_portal_session WHERE tenant_id=21001 AND revoked_at IS NOT NULL",Long.class)).isEqualTo(changes||certificates||submissions?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGIN'",Long.class)).isEqualTo(changes||certificates||submissions?2:recovery||password?4:exit?2:management?4:1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_LOGOUT'",Long.class)).isEqualTo(submissions||certificates||recovery||password||!exit&&management?2:1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_user WHERE tenant_id=21001",Long.class)).isEqualTo(management?2:0);
         if(!management)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM iam_refresh_token WHERE tenant_id=21001",Long.class)).isZero();
         if(certificates){
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND supplier_id=21005 AND version=0 AND status='VALID'",Long.class)).isEqualTo(12);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' AND object_id=21111 AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' AND object_id=21120",Long.class)).isZero();
+        }
+        if(submissions){
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='VALID' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='REJECTED' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(1);
+            for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE","PORTAL_CERTIFICATE_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(2);
         }
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
@@ -159,7 +180,7 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_exit_access_recovery_task WHERE tenant_id=21001 AND status='DISCOVERY_REQUIRED'",Long.class)).isEqualTo(3);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sup_portal_invitation WHERE tenant_id=21001 AND status='REVOKED' AND revoked_by=21007",Long.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='SUPPLIER_PORTAL_ACCOUNT_EXIT_RECOVERY' AND operator_id=21007",Long.class)).isEqualTo(1);
-        }else if(management){
+        }else if(management&&!submissions){
             assertThat(jdbc.queryForObject("SELECT version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(3);
             assertThat(jdbc.queryForObject("SELECT token_version FROM iam_portal_account WHERE tenant_id=21001",Integer.class)).isEqualTo(3);
             assertThat(jdbc.queryForObject("SELECT status FROM iam_portal_account WHERE tenant_id=21001",String.class)).isEqualTo("ACTIVE");
