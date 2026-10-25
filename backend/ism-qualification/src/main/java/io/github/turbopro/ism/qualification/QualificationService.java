@@ -25,6 +25,10 @@ public class QualificationService {
     @Transactional public QualificationModels.View verify(long id,QualificationModels.VerifyCommand c){
         var before=requireAllowed(id);var i=TenantContext.require();String next=c.decision()==QualificationModels.Decision.APPROVE?"VALID":"REJECTED";
         boolean portal=mapper.portalSubmission(i.tenantId(),id)>0;
+        String publicComment=blank(c.publicComment());
+        if(publicComment!=null&&publicComment.length()>1000)throw validation("对外审核说明不能超过1000字");
+        if(!portal&&publicComment!=null)throw validation("只有门户提交的申请可以发布对外审核说明");
+        if(portal&&c.decision()==QualificationModels.Decision.REJECT&&publicComment==null)throw validation("拒绝门户申请必须填写供应商可见的审核说明");
         if(portal)portalSuppliers.lockForResolution(before.supplierId());
         var renewal=portal?mapper.lockRenewal(i.tenantId(),id):null;
         if(renewal!=null&&!renewal.state().equals("PENDING"))throw new ApiException(CommonErrorCode.CONFLICT,"换证申请已处理");
@@ -44,6 +48,10 @@ public class QualificationService {
             }
         }
         try{if(mapper.verify(i.tenantId(),i.actorId(),id,next,c.comment().trim(),c.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);}catch(DuplicateKeyException duplicate){throw new ApiException(CommonErrorCode.CONFLICT,"相同类型和编号已有核验证照，请刷新后核查");}
+        if(portal){
+            if(mapper.publishReview(i.tenantId(),id,publicComment)!=1)throw new ApiException(CommonErrorCode.CONFLICT,"审核反馈已发布，请刷新核查");
+            audit.append(new AuditService.AuditCommand("PORTAL_CERTIFICATE_REVIEW_PUBLISH","QUALIFICATION",id,null,Map.of(),Map.of("decision",c.decision().name(),"hasPublicComment",publicComment!=null),null,null));
+        }
         if(renewal!=null){
             if(mapper.finishRenewal(i.tenantId(),id,c.decision()==QualificationModels.Decision.APPROVE?"APPROVED":"REJECTED")!=1)throw new ApiException(CommonErrorCode.CONFLICT,"换证申请已处理");
             audit("PORTAL_CERTIFICATE_RENEWAL_"+c.decision(),id,"DRAFT",next,"原证照 "+renewal.parentId());
@@ -65,6 +73,6 @@ public class QualificationService {
     private ApiException validation(String message){return new ApiException(CommonErrorCode.VALIDATION_FAILED,message);}
     private void audit(String action,long id,String from,String to,String comment){audit.append(new AuditService.AuditCommand(action,"QUALIFICATION",id,null,from==null?Map.of():Map.of("status",from),Map.of("status",to,"comment",comment),null,null));}
     private QualificationModels.TypeView typeView(QualificationModels.TypeRow r){return new QualificationModels.TypeView(Long.toString(r.id()),r.typeCode(),r.typeName(),r.category(),r.validityRequired(),r.defaultWarningDays(),r.description(),QualificationModels.TypeStatus.valueOf(r.status()),r.version(),r.updatedAt());}
-    private QualificationModels.View view(QualificationModels.Row r){return new QualificationModels.View(Long.toString(r.id()),Long.toString(r.organizationId()),Long.toString(r.supplierId()),r.supplierCode(),r.supplierName(),Long.toString(r.qualificationTypeId()),r.typeCode(),r.typeName(),r.parentQualificationId()==null?null:Long.toString(r.parentQualificationId()),r.certificateNo(),r.issuingAuthority(),r.issueDate(),r.effectiveDate(),r.expiryDate(),r.permanent(),r.warningDays(),Long.toString(r.fileId()),effective(r),r.verificationComment(),r.verifiedBy()==null?null:Long.toString(r.verifiedBy()),r.verifiedAt(),r.revokedReason(),r.version(),r.createdAt(),r.updatedAt());}
+    private QualificationModels.View view(QualificationModels.Row r){return new QualificationModels.View(Long.toString(r.id()),Long.toString(r.organizationId()),Long.toString(r.supplierId()),r.supplierCode(),r.supplierName(),Long.toString(r.qualificationTypeId()),r.typeCode(),r.typeName(),r.parentQualificationId()==null?null:Long.toString(r.parentQualificationId()),r.certificateNo(),r.issuingAuthority(),r.issueDate(),r.effectiveDate(),r.expiryDate(),r.permanent(),r.warningDays(),Long.toString(r.fileId()),effective(r),r.verificationComment(),r.verifiedBy()==null?null:Long.toString(r.verifiedBy()),r.verifiedAt(),r.revokedReason(),r.version(),r.createdAt(),r.updatedAt(),mapper.portalSubmission(TenantContext.require().tenantId(),r.id())>0,mapper.publicReviewComment(TenantContext.require().tenantId(),r.id()));}
     private QualificationModels.Status effective(QualificationModels.Row r){if(!r.status().equals("VALID")||r.permanent()||r.expiryDate()==null)return QualificationModels.Status.valueOf(r.status());long days=java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),r.expiryDate());return days<0?QualificationModels.Status.EXPIRED:days<=r.warningDays()?QualificationModels.Status.EXPIRING:QualificationModels.Status.VALID;}
 }

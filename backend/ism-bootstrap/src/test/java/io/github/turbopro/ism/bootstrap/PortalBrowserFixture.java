@@ -139,6 +139,8 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_QUALIFICATION_DOWNLOAD_OPEN' AND object_id=21120",Long.class)).isZero();
         }
         if(submissions){
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001 AND public_reviewed_at IS NOT NULL AND public_review_comment IS NOT NULL",Long.class)).isEqualTo(4);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_REVIEW_PUBLISH'",Long.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001",Long.class)).isEqualTo(4);

@@ -19,7 +19,9 @@ public final class QualificationModels {
         @NotBlank @Size(max=100) String certificateNo,@Size(max=200) String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,
         boolean permanent,@Min(0) @Max(3650) Integer warningDays,@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String fileId,
         @NotNull @PositiveOrZero Integer version) {}
-    public record VerifyCommand(@NotNull Decision decision,@NotBlank @Size(max=1000) String comment,@NotNull @PositiveOrZero Integer version) {}
+    public record VerifyCommand(@NotNull Decision decision,@NotBlank @Size(max=1000) String comment,@NotNull @PositiveOrZero Integer version,@Size(max=1000) String publicComment) {
+        public VerifyCommand(Decision decision,String comment,Integer version){this(decision,comment,version,null);}
+    }
     public record RevokeCommand(@NotBlank @Size(max=500) String reason,@NotNull @PositiveOrZero Integer version) {}
     public record Row(long id,long organizationId,long supplierId,long qualificationTypeId,Long parentQualificationId,String supplierCode,String supplierName,String typeCode,String typeName,
         String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,int warningDays,long fileId,
@@ -28,6 +30,6 @@ public final class QualificationModels {
         String certificateNo,LocalDate expiryDate,boolean permanent,Status status,int daysUntilExpiry,int version,LocalDateTime updatedAt) {}
     public record View(String id,String organizationId,String supplierId,String supplierCode,String supplierName,String typeId,String typeCode,String typeName,String parentQualificationId,
         String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,int warningDays,String fileId,Status status,
-        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt) {}
+        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment) {}
     public record Page(long total,int page,int size,List<Summary> items) {}
 }

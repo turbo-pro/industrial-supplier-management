@@ -7,6 +7,8 @@ import java.util.*;
 
 @Mapper
 public interface QualificationMapper extends TenantScopedMapper {
+    @Select("SELECT public_review_comment FROM qua_portal_submission WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") String publicReviewComment(long tenantId,long id);
+    @Update("UPDATE qua_portal_submission SET public_review_comment=#{comment},public_reviewed_at=UTC_TIMESTAMP(3) WHERE tenant_id=#{tenantId} AND qualification_id=#{id} AND public_reviewed_at IS NULL") int publishReview(long tenantId,long id,String comment);
     @Select("SELECT id,supplier_id,qualification_type_id type_id,organization_id,created_by,status,version FROM qua_supplier_qualification WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} FOR UPDATE") PortalCertificateSubmissionModels.Parent lockRenewalParent(long tenantId,long supplierId,long id);
     @Select("SELECT parent_id,parent_version,state FROM qua_portal_renewal WHERE tenant_id=#{tenantId} AND qualification_id=#{id} FOR UPDATE") PortalCertificateSubmissionModels.Renewal lockRenewal(long tenantId,long id);
     @Update("UPDATE qua_portal_renewal SET state=#{state} WHERE tenant_id=#{tenantId} AND qualification_id=#{id} AND state='PENDING'") int finishRenewal(long tenantId,long id,String state);

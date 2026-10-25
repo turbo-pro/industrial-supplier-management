@@ -197,7 +197,7 @@ class PortalAuthIT {
         mvc.perform(get("/api/portal/certificate-submissions/types").header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
         mvc.perform(get("/api/portal/certificate-uploads/"+ready).header("Authorization","Bearer "+token)).andExpect(status().isForbidden());
     }
-    void reviewPortalCertificate(Fixture f,String id,boolean approve){try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(approve?io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE:io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"独立员工核验",0));}}
+    void reviewPortalCertificate(Fixture f,String id,boolean approve){try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(approve?io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE:io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"独立员工核验",0,approve?null:"请补充清晰原件及有效期"));}}
     @Test void portalCertificateApprovalRechecksExitAndAuditFailureDoesNotPublish()throws Exception{
         var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String upload=readyPortalUpload(token,"review-rollback");var command=certificateCommand(f,upload,"REVIEW-ROLLBACK");String id=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();
         install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='QUALIFICATION_VERIFY' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='portal approval audit failure'; END IF; END");
@@ -318,9 +318,48 @@ class PortalAuthIT {
             assertThat(qualificationService.get(Long.parseLong(child)).organizationId()).isEqualTo(Long.toString(organization));
             assertThatThrownBy(()->qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE,"只拥有新工厂范围",0))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
             assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"DRAFT",0);
-            qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"退回至拥有双范围的复核人处理",0));
+            qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"退回至拥有双范围的复核人处理",0,"请联系邀请方重新确认归属"));
         }
         assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"REJECTED",1);
+    }
+    void reviewWithPublicComment(Fixture f,String id,boolean approve,String publicComment){
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+            qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(approve?io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE:io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"PRIVATE_EMPLOYEE_REVIEW",0,publicComment));
+        }
+    }
+    @Test void portalRejectionRequiresExplicitPublicExplanationAndDoesNotPublishInternalNotes()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();
+        String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"feedback"),"PUBLIC-FEEDBACK"),200)).get("data").get("id").asText();
+        for(String invalid:Arrays.asList(null," \n\t","字".repeat(1001))){assertThatThrownBy(()->reviewWithPublicComment(f,id,false,invalid)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        assertCertificateState(Long.parseLong(id),"DRAFT",0);
+        assertThat(jdbc.queryForObject("SELECT public_reviewed_at FROM qua_portal_submission WHERE qualification_id=?",java.sql.Timestamp.class,Long.parseLong(id))).isNull();
+        String explanation="请补充清晰原件。\n<script>不会执行</script>";reviewWithPublicComment(f,id,false,"  "+explanation+"  ");
+        String body=mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].publicReviewComment").value(explanation)).andExpect(jsonPath("$.data.items[0].reviewedAt").value(org.hamcrest.Matchers.endsWith("Z"))).andReturn().getResponse().getContentAsString();
+        assertThat(body).doesNotContain("PRIVATE_EMPLOYEE_REVIEW","verificationComment","verifiedBy","accountId");
+        assertThatThrownBy(()->reviewWithPublicComment(f,id,false,"覆盖已发布说明")).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT public_review_comment FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(id))).isEqualTo(explanation);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_REVIEW_PUBLISH'",Long.class,f.tenant())).isEqualTo(1);
+        var other=fixture();enableCertificates(other);String otherBody=mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+login(other).accessToken())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();assertThat(otherBody).doesNotContain("PUBLIC-FEEDBACK",explanation);
+    }
+    @Test void portalPublicFeedbackAuditFailureRollsBackDecisionAndRenewalSlot()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String child=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"feedback-audit"),parent,0,"PUBLIC-RENEW"));
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CERTIFICATE_REVIEW_PUBLISH' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='feedback audit failure'; END IF; END");
+        try{assertThatThrownBy(()->reviewWithPublicComment(f,child,true,"核验通过")).isInstanceOf(RuntimeException.class).hasStackTraceContaining("feedback audit failure");}finally{drop();}
+        assertCertificateState(parent,"VALID",0);assertCertificateState(Long.parseLong(child),"DRAFT",0);
+        assertThat(jdbc.queryForObject("SELECT state FROM qua_portal_renewal WHERE qualification_id=?",String.class,Long.parseLong(child))).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT public_review_comment FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(child))).isNull();
+        assertThat(jdbc.queryForObject("SELECT public_reviewed_at FROM qua_portal_submission WHERE qualification_id=?",java.sql.Timestamp.class,Long.parseLong(child))).isNull();
+        reviewWithPublicComment(f,child,true,"核验通过");assertCertificateState(parent,"SUPERSEDED",1);
+        assertThat(jdbc.queryForObject("SELECT public_review_comment FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(child))).isEqualTo("核验通过");
+    }
+    @Test void historicalReviewDoesNotBackfillPrivateCommentAndApprovalMayOmitPublicExplanation()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"feedback-legacy"),"LEGACY-FEEDBACK"),200)).get("data").get("id").asText();
+        reviewWithPublicComment(f,id,true,null);
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].reviewedAt").value(org.hamcrest.Matchers.endsWith("Z"))).andExpect(jsonPath("$.data.items[0].publicReviewComment").doesNotExist());
+        jdbc.update("UPDATE qua_portal_submission SET public_reviewed_at=NULL WHERE qualification_id=?",Long.parseLong(id));
+        String body=mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].reviewedAt").doesNotExist()).andReturn().getResponse().getContentAsString();assertThat(body).doesNotContain("PRIVATE_EMPLOYEE_REVIEW");
+        long internal=certificate(f,85,"DRAFT",60,false);
+        assertThatThrownBy(()->reviewWithPublicComment(f,Long.toString(internal),false,"内部来源禁止公开")).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(internal,"DRAFT",0);
     }
     @Test void supplierOrganizationCurrentReadBypassesEarlierSnapshot()throws Exception{
         var f=fixture();long organization=f.supplier()+40;

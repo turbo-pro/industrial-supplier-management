@@ -16,7 +16,7 @@
 
 档案下可展开“本企业资质证照”，按证书编号/类型关键词及到期状态筛选、分页查看详情、下载该证照关联的原件。租户须开通 QUALIFICATION 模块；内部草稿不发布，过期/撤销/已换证证照仅供留档，下载不代表准入有效。原件不暴露文件ID或存储链接。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-certificates`，详见 `docs/development/supplier-portal-certificates-review.md`。
 
-下方“新增证照申请”可上传PDF/PNG/JPEG原件（最多10MiB及租户上限，1MiB分片、24小时有效，账号/企业滚动24小时最多10/50次初始化），本页可暂停/续传，刷新不保留文件与标识。填写类型、编号及有效期并明确确认后进入管理端资质台账；有核验权限的员工通过/拒绝后，门户刷新申请记录查看结果，通过后可在证照区查阅原件。补正/撤回未接入，拒绝原因需联系邀请方；内部核验意见不会外发。提交结果未知时仅可核查或重试原申请，不应换标识重复提交。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-submissions`，详见 `docs/development/supplier-portal-certificate-submissions-review.md`。
+下方“新增证照申请”可上传PDF/PNG/JPEG原件（最多10MiB及租户上限，1MiB分片、24小时有效，账号/企业滚动24小时最多10/50次初始化），本页可暂停/续传，刷新不保留文件与标识。填写类型、编号及有效期并明确确认后进入管理端资质台账；有核验权限的员工通过/拒绝后，门户刷新申请记录查看结果，通过后可在证照区查阅原件。补正/撤回未接入，门户拒绝须由员工单独填写对外说明；历史未发布的拒绝原因仍需联系邀请方，内部核验意见不会外发。提交结果未知时仅可核查或重试原申请，不应换标识重复提交。真实验收：`node scripts/verify-reminder-e2e.mjs --portal-submissions`，详见 `docs/development/supplier-portal-certificate-submissions-review.md`。
 
 证照详情“申请该证照换证”绑定原证及版本，类型不可改变，允许同编号续证；同一原证最多一条待核验申请。提交或拒绝不会替代旧证，批准时才原子替代，新证须已生效且未过期。原证变更需拒绝后重提；组织调整后，批准人须同时覆盖新旧组织资格范围。请勿将门户策略与管理端既有提前替代的换证入口混同。上述真实验收命令已扩展换证拒绝/重提/批准、新旧原件及版本断言，详见 `docs/development/supplier-portal-certificate-renewal-review.md`。
 
@@ -33,3 +33,5 @@
 真实跨端账号管理验收：`node scripts/verify-reminder-e2e.mjs --portal-management`。额外启动随机端口管理端，夹具初始化两个真实员工及不同角色，不模拟认证/权限/API。通过管理端页面停用、恢复、撤销门户会话，验证门户实时失效、恢复不复活旧令牌、只读员工修改 403；最终核对管理版本、四条门户会话、登录退出和操作者审计。证据保留在 `output/playwright/portal-management-e2e-*`。该命令不操作现有开发数据库，也不自动启用生产门户开关。
 
 真实退出回收验收：`node scripts/verify-reminder-e2e.mjs --portal-exit`。申请人与审批人分别真实登录，经管理端页面创建待使用邀请、提交退出、独立审批，再验证门户/旧令牌失效、邀请兑换被拒及封存完整性。仅本场景在隔离库启用 MANUAL 财务模式并准备人工证据元数据和独立复核；不模拟 ERP 成功，也不代表物理文件归档已验证。证据位于 `output/playwright/portal-exit-e2e-*`。
+
+证照申请历史显示独立的对外审核说明和发布时间；历史内部意见不公开。拒绝后的关联补正轮次尚未接入，当前仍须重新上传并申请。验收见 `docs/development/supplier-portal-review-feedback-review.md`。

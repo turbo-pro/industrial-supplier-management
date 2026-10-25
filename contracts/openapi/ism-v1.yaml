@@ -2095,7 +2095,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyQualification' } } } }
-      responses: { '200': { description: Qualification verified, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Qualification verified, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
   /qualifications/{id}/revoke:
     post:
       operationId: revokeQualification
@@ -2879,6 +2879,8 @@ components:
         submittedAt: { type: string, format: date-time }
         parentQualificationId: { type: string, nullable: true }
         parentCertificateNo: { type: string, nullable: true }
+        publicReviewComment: { type: string, nullable: true, maxLength: 1000, description: Explicit supplier-visible explanation only. Never falls back to the internal verification comment. }
+        reviewedAt: { type: string, format: date-time, nullable: true, description: UTC publication instant with a Z suffix; null for pending and historical unpublished results. Portal displays Asia/Shanghai time explicitly. }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -3505,7 +3507,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/QualificationSummary'
         - type: object
-          required: [fileId, warningDays, createdAt]
+          required: [fileId, warningDays, createdAt, portalSubmission]
           properties:
             parentQualificationId: { type: string }
             issuingAuthority: { type: string }
@@ -3514,6 +3516,8 @@ components:
             warningDays: { type: integer }
             fileId: { type: string }
             verificationComment: { type: string }
+            portalSubmission: { type: boolean, description: Whether the certificate originated from the supplier portal. }
+            publicReviewComment: { type: string, nullable: true, maxLength: 1000 }
             verifiedBy: { type: string }
             verifiedAt: { type: string, format: date-time }
             revokedReason: { type: string }
@@ -3524,8 +3528,9 @@ components:
       properties: { total: { type: integer, format: int64 }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/QualificationSummary' } } }
     VerifyQualification:
       type: object
+      description: Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards.
       required: [decision, comment, version]
-      properties: { decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
+      properties: { publicComment: { type: string, nullable: true, maxLength: 1000 }, decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
     RevokeQualification:
       type: object
       required: [reason, version]

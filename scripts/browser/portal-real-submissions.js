@@ -49,6 +49,7 @@ async page => {
     const denied = await reader.request.post(`__ADMIN_URL__/api/qualifications/${submittedId}/verify`, { headers: { Authorization: `Bearer ${readerToken}` }, data: { decision: 'APPROVE', comment: '只读越权', version: 0 } });
     if (denied.status() !== 403) throw new Error('Readonly employee verified portal certificate');
     await employeeLogin(admin, 'browser-admin');
+    let reviewFailureChecked = false;
     const review = async (no, approve, renewal = false, unavailable = false) => {
       const row = admin.getByRole('row').filter({ hasText: no }).filter({ hasText: '待核验' }).first(); await row.waitFor();
       const direct = row.getByRole('button', { name: approve ? '通过' : '拒绝', exact: true });
@@ -57,7 +58,26 @@ async page => {
       const dialog = admin.getByRole('dialog', { name: '资质核验', exact: true });
       if (unavailable) { await admin.getByText('证照不存在或当前账号无权查看', { exact: true }).waitFor(); if (await dialog.count()) throw new Error('Failed detail read still allowed verification dialog'); return; }
       if (renewal) await dialog.getByText('门户换证会同时替代未变更的原证', { exact: false }).waitFor();
-      await dialog.getByRole('textbox').fill(approve ? 'PRIVATE_REVIEW_APPROVAL' : 'PRIVATE_REVIEW_REJECTION');
+      await dialog.getByRole('textbox', { name: '内部核验意见', exact: true }).fill(approve ? 'PRIVATE_REVIEW_APPROVAL' : 'PRIVATE_REVIEW_REJECTION');
+      if (!approve) {
+        await dialog.getByRole('button', { name: '确定', exact: true }).click();
+        await dialog.getByRole('alert').filter({ hasText: '请填写供应商可见的拒绝原因' }).waitFor();
+      }
+      await dialog.getByRole('textbox', { name: '对外审核说明', exact: true }).fill(approve ? '证照及原件核验通过' : '请补充清晰的证照原件，并核对有效期。');
+      if (!reviewFailureChecked) {
+        reviewFailureChecked = true;
+        await admin.route('**/api/qualifications/*/verify', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'SYSTEM_ERROR', message: '模拟审核服务暂不可用' } }) }), { times: 1 });
+        await dialog.getByRole('button', { name: '确定', exact: true }).click();
+        await dialog.getByRole('alert').filter({ hasText: '模拟审核服务暂不可用' }).waitFor();
+        if (await dialog.getByRole('textbox', { name: '内部核验意见', exact: true }).inputValue() !== 'PRIVATE_REVIEW_REJECTION') throw new Error('Failed review lost internal input');
+        if (!(await dialog.getByRole('textbox', { name: '对外审核说明', exact: true }).inputValue()).includes('清晰')) throw new Error('Failed review lost public input');
+        await admin.getByText('证照不存在或当前账号无权查看', { exact: true }).waitFor({ state: 'hidden' });
+        await admin.setViewportSize({ width: 375, height: 812 });
+        await admin.locator('body').ariaSnapshot();
+        if (await admin.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Review dialog mobile overflow');
+        await admin.screenshot({ path: 'output/playwright/portal-review-feedback-mobile.png' });
+        await admin.setViewportSize({ width: 1440, height: 900 });
+      }
       const finished = admin.waitForResponse(r => r.url().includes('/qualifications/') && r.url().endsWith('/verify') && r.request().method() === 'POST');
       await dialog.getByRole('button', { name: '确定', exact: true }).click();
       if ((await finished).status() !== 200) throw new Error('Employee verification failed');
@@ -67,6 +87,9 @@ async page => {
     await review('PORTAL-REJECTED', false);
     await page.getByRole('button', { name: '刷新证照申请', exact: true }).click();
     await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByRole('heading').filter({ hasText: '核验拒绝' }).waitFor();
+    await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByText('对外审核说明：请补充清晰的证照原件，并核对有效期。', { exact: true }).waitFor();
+    await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByText('审核时间（北京时间）：', { exact: false }).waitFor();
+    if ((await page.locator('.submissions').innerText()).includes('PRIVATE_REVIEW')) throw new Error('Internal review leaked to portal');
     await page.getByRole('combobox', { name: '申请资质类型', exact: true }).selectOption('21080');
     await page.getByLabel('申请到期日期', { exact: true }).fill('2030-12-31');
     await page.getByRole('textbox', { name: '申请证书编号', exact: true }).fill('PORTAL-APPROVED');
@@ -85,6 +108,9 @@ async page => {
     if (await page.getByText('PRIVATE_', { exact: false }).count()) throw new Error('Internal reviewer comment leaked');
     const records = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     const all = (await records.json()).data;
+    if (!all.items.every(r => r.reviewedAt?.endsWith('Z'))) throw new Error('Review timestamps lost their UTC offset');
+    const visibleReview = all.items.find(r => r.certificateNo === 'PORTAL-REJECTED');
+    await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByText(`审核时间（北京时间）：${new Date(visibleReview.reviewedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`, { exact: true }).waitFor();
     if (all.total !== 2 || all.items.filter(r => r.status === 'VALID').length !== 1) throw new Error('Portal submission count/outcome mismatch');
     const approved = all.items.find(r => r.status === 'VALID');
     const original = await page.request.get(new URL(`/api/portal/qualifications/${approved.id}/content`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });

@@ -3624,6 +3624,13 @@ export interface components {
             submittedAt: string;
             parentQualificationId?: string | null;
             parentCertificateNo?: string | null;
+            /** @description Explicit supplier-visible explanation only. Never falls back to the internal verification comment. */
+            publicReviewComment?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC publication instant with a Z suffix; null for pending and historical unpublished results. Portal displays Asia/Shanghai time explicitly.
+             */
+            reviewedAt?: string | null;
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -4548,6 +4555,9 @@ export interface components {
             warningDays: number;
             fileId: string;
             verificationComment?: string;
+            /** @description Whether the certificate originated from the supplier portal. */
+            portalSubmission: boolean;
+            publicReviewComment?: string | null;
             verifiedBy?: string;
             /** Format: date-time */
             verifiedAt?: string;
@@ -4562,7 +4572,9 @@ export interface components {
             size: number;
             items: components["schemas"]["QualificationSummary"][];
         };
+        /** @description Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards. */
         VerifyQualification: {
+            publicComment?: string | null;
             /** @enum {string} */
             decision: "APPROVE" | "REJECT";
             comment: string;
@@ -11704,6 +11716,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     revokeQualification: {

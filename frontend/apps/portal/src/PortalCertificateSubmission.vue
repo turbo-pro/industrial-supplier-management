@@ -16,7 +16,7 @@ const renewal = ref<components['schemas']['PortalQualification']>();
 const formPanel = ref<HTMLElement>();
 let uploadKey = '', disposed = false;
 const requests = new Set<AbortController>();
-const labels = { DRAFT: '待员工核验', VALID: '核验通过', REJECTED: '核验拒绝，请联系邀请方核查原因', EXPIRING: '即将到期', EXPIRED: '已过期', REVOKED: '已撤销', SUPERSEDED: '已换证' };
+const labels = { DRAFT: '待员工核验', VALID: '核验通过', REJECTED: '核验拒绝', EXPIRING: '即将到期', EXPIRED: '已过期', REVOKED: '已撤销', SUPERSEDED: '已换证' };
 async function fail(text: string) { if (disposed) return; error.value = text; await nextTick(); errorPanel.value?.focus(); }
 function take<T>(result: { data?: { data: T }; response: Response }): T {
   if (result.data) return result.data.data;
@@ -119,7 +119,7 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); file.valu
 <template>
   <section class="submissions" aria-labelledby="certificate-submit-title" :aria-busy="busy || historyBusy">
     <div class="heading"><h2 id="certificate-submit-title">{{ renewal ? '证照换证申请' : '新增证照申请' }}</h2><button class="secondary" :disabled="busy || historyBusy" @click="load()">{{ opened ? '刷新证照申请' : '填写证照申请' }}</button></div>
-    <p class="help">上传不等于提交，提交后由员工核验。换证提交或拒绝不改变旧证，批准才替代；新证须已生效且未过期。已提交内容不可直接修改或撤回，拒绝后须重新上传并申请；补正及公开审核说明尚未接入。</p>
+    <p class="help">上传不等于提交，提交后由员工核验。换证提交或拒绝不改变旧证，批准才替代；新证须已生效且未过期。已提交内容不可直接修改或撤回，拒绝后须重新上传并申请；对外审核说明见申请记录；补正关联重提尚未接入。</p>
     <p v-if="renewal" class="help">原证：{{ renewal.certificateNo }}（{{ renewal.typeName }}），版本 {{ renewal.version }}。类型不可改变；请填写新证日期和原件。</p>
     <div v-if="error" ref="errorPanel" class="error" role="alert" tabindex="-1">{{ error }}</div><p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="historyBusy" role="status">正在读取类型及证照申请…</p>
@@ -143,10 +143,11 @@ onUnmounted(() => { disposed = true; requests.forEach(r => r.abort()); file.valu
       </form>
     </template>
     <p v-else-if="opened && !historyBusy && !error" class="help">暂无可申请的有效资质类型，请联系邀请方。</p>
-    <template v-if="history"><h3>本企业证照申请记录</h3><p v-if="!history.items.length" class="help">暂无门户提交记录。</p><article v-for="item in history.items" :key="item.id" class="request"><h4>{{ item.certificateNo }} · {{ labels[item.status] }}</h4><p>{{ item.typeName }} · 原件：{{ item.fileName }}</p><p v-if="item.parentQualificationId">换证原证：{{ item.parentCertificateNo }}（{{ item.parentQualificationId }}）</p></article><div class="heading"><button class="secondary" :disabled="busy || historyBusy || history.page === 0" @click="load(history.page - 1)">上一页申请</button><span>第 {{ history.page + 1 }} 页，共 {{ history.total }} 条申请</span><button class="secondary" :disabled="busy || historyBusy || (history.page + 1) * history.size >= history.total" @click="load(history.page + 1)">下一页申请</button></div></template>
+    <template v-if="history"><h3>本企业证照申请记录</h3><p v-if="!history.items.length" class="help">暂无门户提交记录。</p><article v-for="item in history.items" :key="item.id" class="request"><h4>{{ item.certificateNo }} · {{ labels[item.status] }}</h4><p>{{ item.typeName }} · 原件：{{ item.fileName }}</p><template v-if="item.reviewedAt"><p>审核时间（北京时间）：{{ new Date(item.reviewedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) }}</p><p class="review-feedback">对外审核说明：{{ item.publicReviewComment || '本次审核未附说明。' }}</p></template><p v-else-if="item.status !== 'DRAFT'" class="help">历史记录未发布对外审核说明，请联系邀请方核查。</p><p v-if="item.parentQualificationId">换证原证：{{ item.parentCertificateNo }}（{{ item.parentQualificationId }}）</p></article><div class="heading"><button class="secondary" :disabled="busy || historyBusy || history.page === 0" @click="load(history.page - 1)">上一页申请</button><span>第 {{ history.page + 1 }} 页，共 {{ history.total }} 条申请</span><button class="secondary" :disabled="busy || historyBusy || (history.page + 1) * history.size >= history.total" @click="load(history.page + 1)">下一页申请</button></div></template>
   </section>
 </template>
 <style scoped>
 .submissions{margin-top:28px;padding-top:24px;border-top:1px solid #dce4ed;min-width:0;overflow-wrap:anywhere}.heading{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}.heading h2{margin:0}fieldset{border:1px solid #8295ab;border-radius:8px;margin:16px 0;padding:16px;min-width:0}legend{padding:0 8px}label{display:block;margin:12px 0}input:not([type=checkbox]),select{width:100%;box-sizing:border-box;min-height:44px;padding:10px;border:1px solid #8295ab;border-radius:6px;background:white;color:#24384f;font:inherit}input[type=file]{font-size:14px}.check{display:flex;gap:10px;align-items:center;min-height:44px}.check input{flex:none;width:20px;height:20px}.request{border-bottom:1px solid #dce4ed;overflow-wrap:anywhere}progress{display:block;width:100%;height:24px;margin:12px 0}button{margin-top:8px}
 .check{flex-direction:row}.check input{min-height:20px;padding:0}
+.review-feedback { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
