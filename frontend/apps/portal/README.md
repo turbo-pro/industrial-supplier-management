@@ -36,4 +36,6 @@
 
 证照申请历史显示独立的对外审核说明和发布时间；历史内部意见不公开。拒绝后的关联补正可在申请记录中发起，填写说明并重新上传；系统保留每轮记录及审核说明，类型锁定，同一上一轮只能创建一条后续补正。验收见 `docs/development/supplier-portal-review-feedback-review.md`。
 
-补正支持新增与换证申请，换证关联由后端继承，原证已变化时不允许静默更新原证版本。员工可查看补正来源、次数及说明；未实现独立“要求补正”状态、补正期限/通知或准入材料自助。验收见 `docs/development/supplier-portal-corrections-review.md`。
+补正支持新增与换证申请，换证关联由后端继承，原证已变化时不允许静默更新原证版本。员工可查看补正来源、次数及说明；已支持员工指定补正要求、目标期限和供应商逐项回复，未实现独立“要求补正”状态、催办通知或准入材料自助。验收见 `docs/development/supplier-portal-corrections-review.md`。
+
+目标期限按北京时间当日结束计算，逾期仍可补正但会固化迟交标记。逐项回复与来源清单分别留存，不代表系统自动验证实际材料齐全或真实；现有单份证照原件上传规则保持。见 `docs/development/supplier-portal-correction-policy-review.md`。

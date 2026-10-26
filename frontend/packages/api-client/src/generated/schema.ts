@@ -3608,6 +3608,8 @@ export interface components {
             correctionOfVersion?: number | null;
             /** @description Supplier explanation of corrected materials. Required for linked correction; original contents stay immutable. */
             correctionNote?: string | null;
+            /** @description One nonblank response per source requirement in the original order; does not prove material authenticity. */
+            correctionResponses?: string[];
         };
         PortalCertificateTypesResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
@@ -3654,6 +3656,16 @@ export interface components {
             correctionNote?: string | null;
             /** @description Already created successor; ancestors cannot branch again. */
             correctionChildId?: string | null;
+            /** Format: date */
+            correctionDueDate?: string | null;
+            correctionRequirements?: string[];
+            /** Format: date */
+            sourceCorrectionDueDate?: string | null;
+            sourceCorrectionRequirements?: string[];
+            correctionResponses?: string[];
+            lateCorrection?: boolean;
+            /** @description Current unconsumed rejected source is past its Beijing date target. Does not block submission. */
+            correctionOverdue?: boolean;
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -4590,6 +4602,14 @@ export interface components {
             revokedReason?: string;
             /** Format: date-time */
             createdAt: string;
+            /** Format: date */
+            correctionDueDate?: string | null;
+            correctionRequirements?: string[];
+            /** Format: date */
+            sourceCorrectionDueDate?: string | null;
+            sourceCorrectionRequirements?: string[];
+            correctionResponses?: string[];
+            lateCorrection?: boolean;
         };
         QualificationPage: {
             /** Format: int64 */
@@ -4600,6 +4620,13 @@ export interface components {
         };
         /** @description Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards. */
         VerifyQualification: {
+            /**
+             * Format: date
+             * @description Optional Beijing end-of-day target; late corrections remain allowed and marked. Portal REJECT only.
+             */
+            correctionDueDate?: string | null;
+            /** @description Ordered nonduplicate correction requirements; Portal REJECT only. */
+            correctionRequirements?: string[];
             publicComment?: string | null;
             /** @enum {string} */
             decision: "APPROVE" | "REJECT";

@@ -2853,6 +2853,7 @@ components:
         correctionOfId: { type: string, nullable: true, description: Latest rejected own portal submission; paired with correctionOfVersion and nonblank correctionNote. Cannot combine with renewal fields. }
         correctionOfVersion: { type: integer, minimum: 0, nullable: true }
         correctionNote: { type: string, maxLength: 1000, nullable: true, description: Supplier explanation of corrected materials. Required for linked correction; original contents stay immutable. }
+        correctionResponses: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 500 }, description: One nonblank response per source requirement in the original order; does not prove material authenticity. }
     PortalCertificateTypesResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -2896,6 +2897,13 @@ components:
         correctionRound: { type: integer, minimum: 0, description: Zero for initial submission; increments with each linked correction. }
         correctionNote: { type: string, nullable: true }
         correctionChildId: { type: string, nullable: true, description: Already created successor; ancestors cannot branch again. }
+        correctionDueDate: { type: string, format: date, nullable: true }
+        correctionRequirements: { type: array, items: { type: string } }
+        sourceCorrectionDueDate: { type: string, format: date, nullable: true }
+        sourceCorrectionRequirements: { type: array, items: { type: string } }
+        correctionResponses: { type: array, items: { type: string } }
+        lateCorrection: { type: boolean }
+        correctionOverdue: { type: boolean, description: Current unconsumed rejected source is past its Beijing date target. Does not block submission. }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -3540,6 +3548,12 @@ components:
             verifiedAt: { type: string, format: date-time }
             revokedReason: { type: string }
             createdAt: { type: string, format: date-time }
+            correctionDueDate: { type: string, format: date, nullable: true }
+            correctionRequirements: { type: array, items: { type: string } }
+            sourceCorrectionDueDate: { type: string, format: date, nullable: true }
+            sourceCorrectionRequirements: { type: array, items: { type: string } }
+            correctionResponses: { type: array, items: { type: string } }
+            lateCorrection: { type: boolean }
     QualificationPage:
       type: object
       required: [total, page, size, items]
@@ -3548,7 +3562,7 @@ components:
       type: object
       description: Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards.
       required: [decision, comment, version]
-      properties: { publicComment: { type: string, nullable: true, maxLength: 1000 }, decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
+      properties: { correctionDueDate: { type: string, format: date, nullable: true, description: Optional Beijing end-of-day target; late corrections remain allowed and marked. Portal REJECT only. }, correctionRequirements: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 200 }, description: Ordered nonduplicate correction requirements; Portal REJECT only. }, publicComment: { type: string, nullable: true, maxLength: 1000 }, decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
     RevokeQualification:
       type: object
       required: [reason, version]

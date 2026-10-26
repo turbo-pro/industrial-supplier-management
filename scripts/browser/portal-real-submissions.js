@@ -49,6 +49,7 @@ async page => {
     const denied = await reader.request.post(`__ADMIN_URL__/api/qualifications/${submittedId}/verify`, { headers: { Authorization: `Bearer ${readerToken}` }, data: { decision: 'APPROVE', comment: '只读越权', version: 0 } });
     if (denied.status() !== 403) throw new Error('Readonly employee verified portal certificate');
     await employeeLogin(admin, 'browser-admin');
+    const correctionDue = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
     let reviewFailureChecked = false;
     const review = async (no, approve, renewal = false, unavailable = false, correction = false) => {
       const row = admin.getByRole('row').filter({ hasText: no }).filter({ hasText: '待核验' }).first(); await row.waitFor();
@@ -65,6 +66,14 @@ async page => {
         await dialog.getByRole('alert').filter({ hasText: '请填写供应商可见的拒绝原因' }).waitFor();
       }
       await dialog.getByRole('textbox', { name: '对外审核说明', exact: true }).fill(approve ? '证照及原件核验通过' : '请补充清晰的证照原件，并核对有效期。');
+      if (!approve) {
+        await dialog.getByLabel('补正期限（北京时间）', { exact: true }).fill(correctionDue);
+        await dialog.getByRole('textbox', { name: '补正要求清单', exact: true }).fill('提供清晰证照原件\n说明证照有效期');
+      }
+      if (correction) {
+        await dialog.getByText('供应商回复：已替换清晰原件', { exact: true }).waitFor();
+        await dialog.getByText('供应商回复：有效期已经核对', { exact: true }).waitFor();
+      }
       if (!reviewFailureChecked) {
         reviewFailureChecked = true;
         await admin.route('**/api/qualifications/*/verify', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'SYSTEM_ERROR', message: '模拟审核服务暂不可用' } }) }), { times: 1 });
@@ -76,6 +85,8 @@ async page => {
         await admin.setViewportSize({ width: 375, height: 812 });
         await admin.locator('body').ariaSnapshot();
         if (await admin.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Review dialog mobile overflow');
+        const saveBox = await dialog.getByRole('button', { name: '确定', exact: true }).boundingBox();
+        if (!saveBox || saveBox.y + saveBox.height > 812) throw new Error('Review footer was hidden on mobile');
         await admin.screenshot({ path: 'output/playwright/portal-review-feedback-mobile.png' });
         await admin.setViewportSize({ width: 1440, height: 900 });
       }
@@ -101,6 +112,8 @@ async page => {
     await page.getByRole('heading', { name: '证照补正申请', exact: true }).waitFor();
     if (await page.getByRole('combobox', { name: '申请资质类型', exact: true }).isEnabled()) throw new Error('Correction type was editable');
     await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
+    await page.getByRole('textbox', { name: '补正回复 1', exact: true }).fill('已替换清晰原件');
+    await page.getByRole('textbox', { name: '补正回复 2', exact: true }).fill('有效期已经核对');
     await page.setViewportSize({ width: 375, height: 812 });
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Correction mobile overflow');
     await page.locator('.submissions').screenshot({ path: 'output/playwright/portal-correction-form-mobile.png' });
@@ -140,6 +153,8 @@ async page => {
         await page.locator('article.request').filter({ hasText: '换证原证' }).filter({ hasText: '核验拒绝' }).getByRole('button', { name: '按审核意见补正', exact: true }).click();
         await page.getByRole('heading', { name: '证照补正申请', exact: true }).waitFor();
         await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
+        await page.getByRole('textbox', { name: '补正回复 1', exact: true }).fill('已替换清晰原件');
+        await page.getByRole('textbox', { name: '补正回复 2', exact: true }).fill('有效期已经核对');
       } else {
         await page.getByRole('button', { name: '申请该证照换证', exact: true }).click();
         await page.getByRole('heading', { name: '证照换证申请', exact: true }).waitFor();
@@ -174,7 +189,7 @@ async page => {
     if (old.status !== 'SUPERSEDED' || old.version !== 2) throw new Error('Approved renewal did not supersede original exactly once');
     const results = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     const renewed = (await results.json()).data.items.find(r => r.parentQualificationId === approved.id && r.status === 'VALID');
-    if (!renewed || !renewed.correctionOfId || renewed.correctionRound !== 1) throw new Error('Approved corrected replacement missing');
+    if (!renewed || !renewed.correctionOfId || renewed.correctionRound !== 1 || renewed.sourceCorrectionDueDate !== correctionDue || renewed.correctionResponses?.[1] !== '有效期已经核对' || renewed.lateCorrection) throw new Error('Approved corrected replacement missing');
     const replacement = await page.request.get(new URL(`/api/portal/qualifications/${renewed.id}/content`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     if ((await replacement.body()).toString() !== '%PDF-1.7\nRENEWAL-approved') throw new Error('Replacement original bytes mismatch');
     await page.setViewportSize({ width: 1440, height: 900 });

@@ -21,6 +21,7 @@ public class PortalCertificateSubmissionService {
         guard.lockCurrent();var i=identity();String request=write(command);var previous=mapper.byKey(i.tenantId(),i.supplierId(),command.requestKey());
         if(previous!=null){if(previous.accountId()!=i.accountId()||!same(previous.requestJson(),command))throw new ApiException(CommonErrorCode.CONFLICT,"提交标识已用于其他内容");return mapper.find(i.tenantId(),i.supplierId(),previous.qualificationId());}
         boolean correction=command.correctionOfId()!=null;
+        if(!correction&&!command.correctionResponses().isEmpty())throw invalid("逐项补正回复必须关联上一轮申请");
         if(correction!=(command.correctionOfVersion()!=null))throw invalid("补正必须同时提供上一轮申请和版本");
         if(!correction&&command.correctionNote()!=null&&!command.correctionNote().isBlank())throw invalid("补正说明必须关联上一轮申请");
         if(correction&&(command.correctionNote()==null||command.correctionNote().isBlank()||command.correctionNote().length()>1000))throw invalid("请填写1000字以内的补正说明");
@@ -32,6 +33,8 @@ public class PortalCertificateSubmissionService {
             if(source==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
             if(!source.status().equals("REJECTED")||source.version()!=command.correctionOfVersion()||mapper.correctionChildren(i.tenantId(),source.id())>0)throw new ApiException(CommonErrorCode.CONFLICT,"原申请不是可补正的最新拒绝记录，请刷新");
             if(source.typeId()!=id(command.typeId()))throw invalid("补正不能改变资质类型");
+            var required=CorrectionJson.read(source.requirementsJson());
+            if(command.correctionResponses().size()!=required.size()||command.correctionResponses().stream().anyMatch(v->v==null||v.isBlank()||v.length()>500))throw invalid("请按上一轮要求逐项填写补正回复，每项最多500字");
             renewalParent=source.renewalParentId();renewalVersion=source.renewalParentVersion();
         }
         boolean renewal=renewalParent!=null;
@@ -56,7 +59,7 @@ public class PortalCertificateSubmissionService {
             qualifications.insert(qualificationId,i.tenantId(),i.accountId(),organization,i.supplierId(),type.id(),parent==null?null:parent.id(),command.certificateNo(),command.issuingAuthority(),command.issueDate(),command.effectiveDate(),command.permanent()?null:command.expiryDate(),command.permanent(),type.defaultWarningDays(),file.fileId());
             mapper.insert(qualificationId,i.tenantId(),i.supplierId(),i.accountId(),command.requestKey(),id(command.uploadId()),request,file.fileName());
             if(parent!=null)mapper.insertRenewal(qualificationId,i.tenantId(),i.supplierId(),parent.id(),parent.version());
-            if(source!=null)mapper.insertCorrection(qualificationId,i.tenantId(),i.supplierId(),source.id(),source.version(),source.rootId(),source.roundNo()+1,command.correctionNote().trim());
+            if(source!=null)mapper.insertCorrection(qualificationId,i.tenantId(),i.supplierId(),source.id(),source.version(),source.rootId(),source.roundNo()+1,command.correctionNote().trim(),source.correctionDueDate(),source.requirementsJson(),CorrectionJson.write(command.correctionResponses().stream().map(String::trim).toList()),source.correctionDueDate()!=null&&source.correctionDueDate().isBefore(CorrectionJson.today()));
         }catch(org.springframework.dao.DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号重复、原件已使用或原申请已有后续补正");}
         audit.append(new AuditService.AuditCommand(correction?"PORTAL_CERTIFICATE_CORRECTION_SUBMIT":renewal?"PORTAL_CERTIFICATE_RENEWAL_SUBMIT":"PORTAL_CERTIFICATE_SUBMIT","QUALIFICATION",qualificationId,null,Map.of(),Map.of("supplierId",i.supplierId()),null,null));
         return mapper.find(i.tenantId(),i.supplierId(),qualificationId);
