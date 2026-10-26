@@ -7,6 +7,7 @@ import java.util.*;
 
 @Mapper
 public interface QualificationMapper extends TenantScopedMapper {
+    @Select("SELECT CAST(predecessor_id AS CHAR) correction_of_id,round_no correction_round,correction_note FROM qua_portal_correction WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") PortalCertificateSubmissionModels.CorrectionInfo correctionInfo(long tenantId,long id);
     @Select("SELECT public_review_comment FROM qua_portal_submission WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") String publicReviewComment(long tenantId,long id);
     @Update("UPDATE qua_portal_submission SET public_review_comment=#{comment},public_reviewed_at=UTC_TIMESTAMP(3) WHERE tenant_id=#{tenantId} AND qualification_id=#{id} AND public_reviewed_at IS NULL") int publishReview(long tenantId,long id,String comment);
     @Select("SELECT id,supplier_id,qualification_type_id type_id,organization_id,created_by,status,version FROM qua_supplier_qualification WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND id=#{id} FOR UPDATE") PortalCertificateSubmissionModels.Parent lockRenewalParent(long tenantId,long supplierId,long id);

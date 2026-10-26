@@ -353,7 +353,7 @@ paths:
     post:
       operationId: submitOwnPortalCertificate
       tags: [Supplier Portal]
-      description: Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. No withdrawal or public internal review comments.
+      description: Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. No withdrawal or public internal review comments.
       security: [{ portalBearer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmit' } } } }
       responses:
@@ -2095,7 +2095,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyQualification' } } } }
-      responses: { '200': { description: Qualification verified, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Qualification verified, content: { application/json: { schema: { $ref: '#/components/schemas/QualificationResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' }, '400': { $ref: '#/components/responses/ApiFailure' } }
   /qualifications/{id}/revoke:
     post:
       operationId: revokeQualification
@@ -2850,6 +2850,9 @@ components:
         uploadId: { type: string }
         renewalParentId: { type: string, nullable: true, description: Own original certificate; must accompany renewalParentVersion. }
         renewalParentVersion: { type: integer, minimum: 0, nullable: true, description: Original version captured when renewal starts; must accompany renewalParentId. }
+        correctionOfId: { type: string, nullable: true, description: Latest rejected own portal submission; paired with correctionOfVersion and nonblank correctionNote. Cannot combine with renewal fields. }
+        correctionOfVersion: { type: integer, minimum: 0, nullable: true }
+        correctionNote: { type: string, maxLength: 1000, nullable: true, description: Supplier explanation of corrected materials. Required for linked correction; original contents stay immutable. }
     PortalCertificateTypesResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -2868,7 +2871,7 @@ components:
                   validityRequired: { type: boolean }
     PortalCertificateSubmission:
       type: object
-      required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt]
+      required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt, typeId, permanent, version, correctionRootId, correctionRound]
       properties:
         id: { type: string }
         requestKey: { type: string }
@@ -2881,6 +2884,18 @@ components:
         parentCertificateNo: { type: string, nullable: true }
         publicReviewComment: { type: string, nullable: true, maxLength: 1000, description: Explicit supplier-visible explanation only. Never falls back to the internal verification comment. }
         reviewedAt: { type: string, format: date-time, nullable: true, description: UTC publication instant with a Z suffix; null for pending and historical unpublished results. Portal displays Asia/Shanghai time explicitly. }
+        typeId: { type: string }
+        issuingAuthority: { type: string, nullable: true }
+        issueDate: { type: string, format: date, nullable: true }
+        effectiveDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        permanent: { type: boolean }
+        version: { type: integer, minimum: 0 }
+        correctionOfId: { type: string, nullable: true }
+        correctionRootId: { type: string, description: First submission in this correction chain. }
+        correctionRound: { type: integer, minimum: 0, description: Zero for initial submission; increments with each linked correction. }
+        correctionNote: { type: string, nullable: true }
+        correctionChildId: { type: string, nullable: true, description: Already created successor; ancestors cannot branch again. }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -3507,7 +3522,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/QualificationSummary'
         - type: object
-          required: [fileId, warningDays, createdAt, portalSubmission]
+          required: [fileId, warningDays, createdAt, portalSubmission, correctionRound]
           properties:
             parentQualificationId: { type: string }
             issuingAuthority: { type: string }
@@ -3516,6 +3531,9 @@ components:
             warningDays: { type: integer }
             fileId: { type: string }
             verificationComment: { type: string }
+            correctionOfId: { type: string, nullable: true }
+            correctionRound: { type: integer, minimum: 0 }
+            correctionNote: { type: string, nullable: true }
             portalSubmission: { type: boolean, description: Whether the certificate originated from the supplier portal. }
             publicReviewComment: { type: string, nullable: true, maxLength: 1000 }
             verifiedBy: { type: string }

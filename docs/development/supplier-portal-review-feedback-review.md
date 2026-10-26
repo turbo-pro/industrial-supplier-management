@@ -15,7 +15,7 @@
 
 V78仅给 `qua_portal_submission` 添加可空 `public_review_comment`、`public_reviewed_at`，历史行不自动回填。旧迁移及旧库校验策略不变，无新部署组件。
 
-现有 POST `/qualifications/{id}/verify` 增加可选 `publicComment`（门户拒绝条件必填）；员工详情增加 `portalSubmission`、`publicReviewComment`。门户申请列表/幂等提交结果增加 `publicReviewComment`、`reviewedAt`。OpenAPI和生成客户端同步，未新增越权的独立发布入口。旧客户端仍可核验内部证照或批准门户证照；门户拒绝调用必须升级为显式提供 `publicComment`，缺失时返回422，不能静默把内部意见公开。管理端已有未提交视觉改动继续保留，仅选择性提交核验入口、说明展示及新增独立弹窗；构建和浏览器验收基于当前工作区执行。
+现有 POST `/qualifications/{id}/verify` 增加可选 `publicComment`（门户拒绝条件必填）；员工详情增加 `portalSubmission`、`publicReviewComment`。门户申请列表/幂等提交结果增加 `publicReviewComment`、`reviewedAt`。OpenAPI和生成客户端同步，未新增越权的独立发布入口。旧客户端仍可核验内部证照或批准门户证照；门户拒绝调用必须升级为显式提供 `publicComment`，缺失时返回400，不能静默把内部意见公开。管理端已有未提交视觉改动继续保留，仅选择性提交核验入口、说明展示及新增独立弹窗；构建和浏览器验收基于当前工作区执行。
 
 ## 验收记录
 

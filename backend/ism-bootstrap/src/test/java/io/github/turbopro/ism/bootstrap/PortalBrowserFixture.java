@@ -148,7 +148,9 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='REJECTED' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='SUPERSEDED' AND version=2",Long.class)).isEqualTo(1);
             for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(4);
-            for(String action:List.of("PORTAL_CERTIFICATE_SUBMIT","PORTAL_CERTIFICATE_RENEWAL_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(2);
+            for(String action:List.of("PORTAL_CERTIFICATE_SUBMIT","PORTAL_CERTIFICATE_RENEWAL_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT'",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction c JOIN qua_supplier_qualification q ON q.id=c.predecessor_id WHERE c.tenant_id=21001 AND c.round_no=1 AND q.status='REJECTED' AND q.version=1",Long.class)).isEqualTo(2);
             for(String state:List.of("APPROVED","REJECTED"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=21001 AND state=?",Long.class,state)).isEqualTo(1);
         }
         if(changes){

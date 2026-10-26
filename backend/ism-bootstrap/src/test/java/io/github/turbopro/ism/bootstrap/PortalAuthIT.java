@@ -361,6 +361,65 @@ class PortalAuthIT {
         long internal=certificate(f,85,"DRAFT",60,false);
         assertThatThrownBy(()->reviewWithPublicComment(f,Long.toString(internal),false,"内部来源禁止公开")).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(internal,"DRAFT",0);
     }
+    io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit correctionCommand(Fixture f,String upload,String previous,int version,String note){
+        var c=certificateCommand(f,upload,"CORRECTED-CERT");return new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit(c.requestKey(),c.typeId(),c.certificateNo(),c.issuingAuthority(),c.issueDate(),c.effectiveDate(),c.expiryDate(),false,c.uploadId(),null,null,previous,version,note);
+    }
+    String rejectedSubmission(Fixture f,String token,String suffix)throws Exception{String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,suffix),"REJECT-"+suffix),200)).get("data").get("id").asText();reviewPortalCertificate(f,id,false);return id;}
+    @Test void portalCorrectionPreservesHistoryAndBuildsAnUnbranchedMultiRoundChain()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),original=rejectedSubmission(f,token,"chain");
+        String snapshot=jdbc.queryForObject("SELECT CAST(request_json AS CHAR) FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(original));
+        var command=correctionCommand(f,readyPortalUpload(token,"round-one"),original,1,"补齐清晰原件");String first=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();
+        assertThat(profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText()).isEqualTo(first);assertCertificateState(Long.parseLong(original),"REJECTED",1);
+        reviewPortalCertificate(f,first,false);
+        String second=profileJson.readTree(submitCertificate(token,correctionCommand(f,readyPortalUpload(token,"round-two"),first,1,"补齐有效期说明"),200)).get("data").get("id").asText();reviewPortalCertificate(f,second,true);
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].correctionOfId").value(first)).andExpect(jsonPath("$.data.items[0].correctionRootId").value(original)).andExpect(jsonPath("$.data.items[0].correctionRound").value(2)).andExpect(jsonPath("$.data.items[0].correctionNote").value("补齐有效期说明")).andExpect(jsonPath("$.data.items[2].correctionChildId").value(first));
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThat(qualificationService.get(Long.parseLong(second)).correctionOfId()).isEqualTo(first);}
+        assertThat(jdbc.queryForObject("SELECT CAST(request_json AS CHAR) FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(original))).isEqualTo(snapshot);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT'",Long.class,f.tenant())).isEqualTo(2);
+    }
+    @Test void portalCorrectionRejectsForeignInternalPendingStaleAndMalformedSources()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),upload=readyPortalUpload(token,"bad-correction");
+        String pending=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"pending-correction"),"PENDING-CORRECTION"),200)).get("data").get("id").asText();
+        submitCertificate(token,correctionCommand(f,upload,pending,0,"尚未拒绝"),409);reviewPortalCertificate(f,pending,false);
+        submitCertificate(token,correctionCommand(f,upload,pending,0,"错误版本"),409);submitCertificate(token,correctionCommand(f,upload,pending,1,"   "),400);
+        var foreign=fixture();enableCertificates(foreign);String otherToken=login(foreign).accessToken();submitCertificate(otherToken,correctionCommand(foreign,readyPortalUpload(otherToken,"foreign-correction"),pending,1,"跨租户"),404);
+        long internal=certificate(f,85,"REJECTED",60,false);submitCertificate(token,correctionCommand(f,upload,Long.toString(internal),0,"内部来源"),404);
+        long sibling=f.supplier()+20,otherAccount=f.supplier()+21;
+        jdbc.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,'SIBLING','另一企业','TRADER',9,9)",sibling,f.tenant(),f.supplier()+1);
+        jdbc.update("INSERT INTO iam_portal_account(id,tenant_id,supplier_id,username,display_name,email,password_hash) SELECT ?,tenant_id,?,'other.user','其他联系人','other@example.test',password_hash FROM iam_portal_account WHERE id=?",otherAccount,sibling,f.account());
+        String siblingToken=auth.login(new PortalAuthModels.Login(f.code(),"other.user","Portal#Pass123")).accessToken();submitCertificate(siblingToken,correctionCommand(f,upload,pending,1,"同租户其他企业"),404);
+        var json=profileJson.valueToTree(correctionCommand(f,upload,pending,1,"类型不可改变"));((com.fasterxml.jackson.databind.node.ObjectNode)json).put("typeId",Long.toString(f.supplier()+90));
+        mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(json.toString())).andExpect(status().isBadRequest());
+        ((com.fasterxml.jackson.databind.node.ObjectNode)json).put("typeId",Long.toString(f.supplier()+80)).remove("correctionOfVersion");mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(json.toString())).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=?",Long.class,f.tenant())).isZero();
+    }
+    @Test void portalCorrectionAuditRollbackLeavesOriginalAndUploadReusable()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=rejectedSubmission(f,token,"correction-rollback");var command=correctionCommand(f,readyPortalUpload(token,"correction-retry"),previous,1,"修正有效期");
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='correction audit failure'; END IF; END");
+        try{submitCertificate(token,command,500);}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=?",Long.class,f.tenant())).isZero();assertCertificateState(Long.parseLong(previous),"REJECTED",1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+        submitCertificate(token,command,200);String unused=readyPortalUpload(token,"unused-correction");submitCertificate(token,correctionCommand(f,unused,previous,1,"不允许分支"),409);submitCertificate(token,certificateCommand(f,unused,"UNUSED-STILL-AVAILABLE"),200);
+    }
+    @Test void portalRenewalCorrectionInheritsOriginalVersionAndApprovesWithoutEarlyReplacement()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String previous=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"correct-renewal"),parent,0,"SAME-RENEWAL"));reviewPortalCertificate(f,previous,false);
+        var command=correctionCommand(f,readyPortalUpload(token,"correct-renewal-upload"),previous,1,"补充换证原件");var json=profileJson.valueToTree(command);((com.fasterxml.jackson.databind.node.ObjectNode)json).put("renewalParentId",Long.toString(parent)).put("renewalParentVersion",0);
+        mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(json.toString())).andExpect(status().isBadRequest());
+        String child=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();assertCertificateState(parent,"VALID",0);
+        assertThat(jdbc.queryForObject("SELECT parent_id FROM qua_portal_renewal WHERE qualification_id=?",Long.class,Long.parseLong(child))).isEqualTo(parent);reviewPortalCertificate(f,child,true);assertCertificateState(parent,"SUPERSEDED",1);assertCertificateState(Long.parseLong(previous),"REJECTED",1);
+    }
+    @Test void portalRenewalCorrectionDoesNotSilentlyRebaseAChangedOriginal()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String previous=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"changed-correct-renewal"),parent,0,"CHANGED-RENEWAL"));reviewPortalCertificate(f,previous,false);
+        jdbc.update("UPDATE qua_supplier_qualification SET version=version+1 WHERE id=?",parent);submitCertificate(token,correctionCommand(f,readyPortalUpload(token,"changed-parent-upload"),previous,1,"不允许重置原证版本"),409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=?",Long.class,f.tenant())).isZero();assertCertificateState(parent,"VALID",1);
+    }
+    @Test void portalCorrectionConcurrentRequestsCreateExactlyOneSuccessor()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=rejectedSubmission(f,token,"concurrent-correction");
+        var one=correctionCommand(f,readyPortalUpload(token,"concurrent-correction-one"),previous,1,"并发一");var two=correctionCommand(f,readyPortalUpload(token,"concurrent-correction-two"),previous,1,"并发二");
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(2);var start=new java.util.concurrent.CountDownLatch(1);
+        try{var first=pool.submit(()->{start.await();return mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(one))).andReturn().getResponse().getStatus();});var second=pool.submit(()->{start.await();return mvc.perform(post("/api/portal/certificate-submissions").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(two))).andReturn().getResponse().getStatus();});start.countDown();assertThat(List.of(first.get(30,java.util.concurrent.TimeUnit.SECONDS),second.get(30,java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(200,409);}finally{pool.shutdownNow();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT'",Long.class,f.tenant())).isEqualTo(1);
+    }
     @Test void supplierOrganizationCurrentReadBypassesEarlierSnapshot()throws Exception{
         var f=fixture();long organization=f.supplier()+40;
         jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,'CURRENT-ORG','当前组织','FACTORY','ACTIVE')",organization,f.tenant());

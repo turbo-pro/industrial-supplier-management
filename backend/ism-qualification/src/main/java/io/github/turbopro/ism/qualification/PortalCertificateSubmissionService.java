@@ -20,15 +20,29 @@ public class PortalCertificateSubmissionService {
     @Transactional public PortalCertificateSubmissionModels.View submit(PortalCertificateSubmissionModels.Submit command){
         guard.lockCurrent();var i=identity();String request=write(command);var previous=mapper.byKey(i.tenantId(),i.supplierId(),command.requestKey());
         if(previous!=null){if(previous.accountId()!=i.accountId()||!same(previous.requestJson(),command))throw new ApiException(CommonErrorCode.CONFLICT,"提交标识已用于其他内容");return mapper.find(i.tenantId(),i.supplierId(),previous.qualificationId());}
-        boolean renewal=command.renewalParentId()!=null;
-        if(renewal!=(command.renewalParentVersion()!=null))throw invalid("换证必须同时提供原证照和版本");
+        boolean correction=command.correctionOfId()!=null;
+        if(correction!=(command.correctionOfVersion()!=null))throw invalid("补正必须同时提供上一轮申请和版本");
+        if(!correction&&command.correctionNote()!=null&&!command.correctionNote().isBlank())throw invalid("补正说明必须关联上一轮申请");
+        if(correction&&(command.correctionNote()==null||command.correctionNote().isBlank()||command.correctionNote().length()>1000))throw invalid("请填写1000字以内的补正说明");
+        if(correction&&(command.renewalParentId()!=null||command.renewalParentVersion()!=null))throw invalid("补正的换证关联由原申请继承，不能指定新原证");
+        PortalCertificateSubmissionModels.CorrectionSource source=null;
+        Long renewalParent=command.renewalParentId()==null?null:id(command.renewalParentId());Integer renewalVersion=command.renewalParentVersion();
+        if(correction){
+            source=mapper.lockCorrectionSource(i.tenantId(),i.supplierId(),id(command.correctionOfId()));
+            if(source==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+            if(!source.status().equals("REJECTED")||source.version()!=command.correctionOfVersion()||mapper.correctionChildren(i.tenantId(),source.id())>0)throw new ApiException(CommonErrorCode.CONFLICT,"原申请不是可补正的最新拒绝记录，请刷新");
+            if(source.typeId()!=id(command.typeId()))throw invalid("补正不能改变资质类型");
+            renewalParent=source.renewalParentId();renewalVersion=source.renewalParentVersion();
+        }
+        boolean renewal=renewalParent!=null;
+        if(renewal!=(renewalVersion!=null))throw invalid("换证必须同时提供原证照和版本");
         var type=qualifications.typeForReview(i.tenantId(),id(command.typeId()));
         if(type==null||!type.status().equals("ACTIVE"))throw invalid("资质类型不可用，请刷新后选择");
         PortalCertificateSubmissionModels.Parent parent=null;
         if(renewal){
-            parent=qualifications.lockRenewalParent(i.tenantId(),i.supplierId(),id(command.renewalParentId()));
+            parent=qualifications.lockRenewalParent(i.tenantId(),i.supplierId(),renewalParent);
             if(parent==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
-            if(!parent.status().equals("VALID")||parent.version()!=command.renewalParentVersion())throw new ApiException(CommonErrorCode.CONFLICT,"原证照已变化，请刷新后申请");
+            if(!parent.status().equals("VALID")||parent.version()!=renewalVersion)throw new ApiException(CommonErrorCode.CONFLICT,"原证照已变化，请刷新后申请");
             if(parent.typeId()!=type.id())throw invalid("换证不能改变资质类型");
             if(command.effectiveDate()!=null&&command.effectiveDate().isAfter(LocalDate.now())||command.expiryDate()!=null&&command.expiryDate().isBefore(LocalDate.now()))throw invalid("换证新证必须已生效且未过期，暂不支持计划生效");
         }
@@ -42,8 +56,9 @@ public class PortalCertificateSubmissionService {
             qualifications.insert(qualificationId,i.tenantId(),i.accountId(),organization,i.supplierId(),type.id(),parent==null?null:parent.id(),command.certificateNo(),command.issuingAuthority(),command.issueDate(),command.effectiveDate(),command.permanent()?null:command.expiryDate(),command.permanent(),type.defaultWarningDays(),file.fileId());
             mapper.insert(qualificationId,i.tenantId(),i.supplierId(),i.accountId(),command.requestKey(),id(command.uploadId()),request,file.fileName());
             if(parent!=null)mapper.insertRenewal(qualificationId,i.tenantId(),i.supplierId(),parent.id(),parent.version());
-        }catch(org.springframework.dao.DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号重复或原件已用于其他申请");}
-        audit.append(new AuditService.AuditCommand(renewal?"PORTAL_CERTIFICATE_RENEWAL_SUBMIT":"PORTAL_CERTIFICATE_SUBMIT","QUALIFICATION",qualificationId,null,Map.of(),Map.of("supplierId",i.supplierId()),null,null));
+            if(source!=null)mapper.insertCorrection(qualificationId,i.tenantId(),i.supplierId(),source.id(),source.version(),source.rootId(),source.roundNo()+1,command.correctionNote().trim());
+        }catch(org.springframework.dao.DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号重复、原件已使用或原申请已有后续补正");}
+        audit.append(new AuditService.AuditCommand(correction?"PORTAL_CERTIFICATE_CORRECTION_SUBMIT":renewal?"PORTAL_CERTIFICATE_RENEWAL_SUBMIT":"PORTAL_CERTIFICATE_SUBMIT","QUALIFICATION",qualificationId,null,Map.of(),Map.of("supplierId",i.supplierId()),null,null));
         return mapper.find(i.tenantId(),i.supplierId(),qualificationId);
     }
     private PortalIdentityContext.Identity identity(){var i=PortalIdentityContext.require();modules.requireAvailable("QUALIFICATION");return i;}

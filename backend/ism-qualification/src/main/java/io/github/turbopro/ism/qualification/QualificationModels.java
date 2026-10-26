@@ -30,6 +30,6 @@ public final class QualificationModels {
         String certificateNo,LocalDate expiryDate,boolean permanent,Status status,int daysUntilExpiry,int version,LocalDateTime updatedAt) {}
     public record View(String id,String organizationId,String supplierId,String supplierCode,String supplierName,String typeId,String typeCode,String typeName,String parentQualificationId,
         String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,int warningDays,String fileId,Status status,
-        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment) {}
+        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment,String correctionOfId,int correctionRound,String correctionNote) {}
     public record Page(long total,int page,int size,List<Summary> items) {}
 }

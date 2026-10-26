@@ -50,13 +50,14 @@ async page => {
     if (denied.status() !== 403) throw new Error('Readonly employee verified portal certificate');
     await employeeLogin(admin, 'browser-admin');
     let reviewFailureChecked = false;
-    const review = async (no, approve, renewal = false, unavailable = false) => {
+    const review = async (no, approve, renewal = false, unavailable = false, correction = false) => {
       const row = admin.getByRole('row').filter({ hasText: no }).filter({ hasText: '待核验' }).first(); await row.waitFor();
       const direct = row.getByRole('button', { name: approve ? '通过' : '拒绝', exact: true });
       if (await direct.count()) await direct.click();
       else { await row.getByRole('button', { name: `${no}的更多操作`, exact: true }).click(); await admin.getByRole('menuitem', { name: approve ? '核验通过' : '核验拒绝', exact: true }).click(); }
       const dialog = admin.getByRole('dialog', { name: '资质核验', exact: true });
       if (unavailable) { await admin.getByText('证照不存在或当前账号无权查看', { exact: true }).waitFor(); if (await dialog.count()) throw new Error('Failed detail read still allowed verification dialog'); return; }
+      if (correction) await dialog.getByText('供应商补正说明：已补充清晰原件与有效期', { exact: true }).waitFor();
       if (renewal) await dialog.getByText('门户换证会同时替代未变更的原证', { exact: false }).waitFor();
       await dialog.getByRole('textbox', { name: '内部核验意见', exact: true }).fill(approve ? 'PRIVATE_REVIEW_APPROVAL' : 'PRIVATE_REVIEW_REJECTION');
       if (!approve) {
@@ -90,7 +91,20 @@ async page => {
     await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByText('对外审核说明：请补充清晰的证照原件，并核对有效期。', { exact: true }).waitFor();
     await page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' }).getByText('审核时间（北京时间）：', { exact: false }).waitFor();
     if ((await page.locator('.submissions').innerText()).includes('PRIVATE_REVIEW')) throw new Error('Internal review leaked to portal');
-    await page.getByRole('combobox', { name: '申请资质类型', exact: true }).selectOption('21080');
+    const rejected = page.locator('article.request').filter({ hasText: 'PORTAL-REJECTED' });
+    await page.getByRole('textbox', { name: '申请证书编号', exact: true }).fill('UNSAVED-CORRECTION');
+    await rejected.getByRole('button', { name: '按审核意见补正', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: '不会覆盖尚未提交的内容' }).waitFor();
+    if (await page.getByRole('textbox', { name: '申请证书编号', exact: true }).inputValue() !== 'UNSAVED-CORRECTION') throw new Error('Correction overwrote unsaved input');
+    await page.getByRole('button', { name: '清空当前填写', exact: true }).click();
+    await rejected.getByRole('button', { name: '按审核意见补正', exact: true }).click();
+    await page.getByRole('heading', { name: '证照补正申请', exact: true }).waitFor();
+    if (await page.getByRole('combobox', { name: '申请资质类型', exact: true }).isEnabled()) throw new Error('Correction type was editable');
+    await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
+    await page.setViewportSize({ width: 375, height: 812 });
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Correction mobile overflow');
+    await page.locator('.submissions').screenshot({ path: 'output/playwright/portal-correction-form-mobile.png' });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByLabel('申请到期日期', { exact: true }).fill('2030-12-31');
     await page.getByRole('textbox', { name: '申请证书编号', exact: true }).fill('PORTAL-APPROVED');
     await page.getByLabel('选择证照原件', { exact: true }).setInputFiles({ name: 'portal-approved.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\nAPPROVED-PORTAL-ORIGINAL') });
@@ -98,8 +112,9 @@ async page => {
     await page.getByRole('status').filter({ hasText: '原件上传完成' }).waitFor();
     await page.getByRole('checkbox', { name: '确认原件与填写内容一致，提交后等待员工核验', exact: true }).check();
     await page.getByRole('button', { name: '确认提交证照申请', exact: true }).click();
-    await page.getByRole('status').filter({ hasText: '证照申请已提交：PORTAL-APPROVED' }).waitFor();
-    await admin.reload(); await review('PORTAL-APPROVED', true);
+    await page.getByRole('status').filter({ hasText: '补正申请已提交：PORTAL-APPROVED' }).waitFor();
+    if (await rejected.getByRole('button', { name: '按审核意见补正', exact: true }).count()) throw new Error('Corrected ancestor still offered branching');
+    await admin.reload(); await review('PORTAL-APPROVED', true, false, false, true);
     await page.getByRole('button', { name: '刷新证照申请', exact: true }).click();
     await page.locator('article.request').filter({ hasText: 'PORTAL-APPROVED' }).getByRole('heading').filter({ hasText: '核验通过' }).waitFor();
     await page.getByRole('button', { name: '查看本企业证照', exact: true }).click();
@@ -121,8 +136,14 @@ async page => {
     if (await page.getByRole('textbox', { name: '申请证书编号', exact: true }).inputValue() !== 'UNSAVED-DRAFT') throw new Error('Renewal overwrote an unsaved form');
     await page.getByRole('button', { name: '清空当前填写', exact: true }).click();
     const renew = async (suffix) => {
-      await page.getByRole('button', { name: '申请该证照换证', exact: true }).click();
-      await page.getByRole('heading', { name: '证照换证申请', exact: true }).waitFor();
+      if (suffix === 'approved') {
+        await page.locator('article.request').filter({ hasText: '换证原证' }).filter({ hasText: '核验拒绝' }).getByRole('button', { name: '按审核意见补正', exact: true }).click();
+        await page.getByRole('heading', { name: '证照补正申请', exact: true }).waitFor();
+        await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
+      } else {
+        await page.getByRole('button', { name: '申请该证照换证', exact: true }).click();
+        await page.getByRole('heading', { name: '证照换证申请', exact: true }).waitFor();
+      }
       if (await page.getByRole('combobox', { name: '申请资质类型', exact: true }).isEnabled()) throw new Error('Renewal type was editable');
       await page.getByLabel('申请生效日期', { exact: true }).fill('2026-01-01');
       await page.getByLabel('申请到期日期', { exact: true }).fill('2031-12-31');
@@ -137,7 +158,7 @@ async page => {
       }
       await page.getByRole('checkbox', { name: '确认原件与填写内容一致，提交后等待员工核验', exact: true }).check();
       await page.getByRole('button', { name: '确认提交证照申请', exact: true }).click();
-      await page.getByRole('status').filter({ hasText: '换证申请已提交：PORTAL-APPROVED' }).waitFor();
+      await page.getByRole('status').filter({ hasText: `${suffix === 'approved' ? '补正' : '换证'}申请已提交：PORTAL-APPROVED` }).waitFor();
       const old = await page.request.get(new URL(`/api/portal/qualifications/${approved.id}`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
       const data = (await old.json()).data;
       if (data.status !== 'VALID' || data.version !== 1) throw new Error('Renewal submission prematurely superseded original');
@@ -145,7 +166,7 @@ async page => {
     await renew('rejected'); await admin.reload(); await review('PORTAL-APPROVED', false, true);
     await page.getByRole('button', { name: '刷新证照申请', exact: true }).click();
     await page.locator('article.request').filter({ hasText: '换证原证' }).getByRole('heading').filter({ hasText: '核验拒绝' }).waitFor();
-    await renew('approved'); await admin.reload(); await review('PORTAL-APPROVED', true, true);
+    await renew('approved'); await admin.reload(); await review('PORTAL-APPROVED', true, true, false, true);
     await page.getByRole('button', { name: '刷新证照申请', exact: true }).click();
     await page.locator('article.request').filter({ hasText: '换证原证' }).getByRole('heading').filter({ hasText: '核验通过' }).waitFor();
     const after = await page.request.get(new URL(`/api/portal/qualifications/${approved.id}`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
@@ -153,7 +174,7 @@ async page => {
     if (old.status !== 'SUPERSEDED' || old.version !== 2) throw new Error('Approved renewal did not supersede original exactly once');
     const results = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     const renewed = (await results.json()).data.items.find(r => r.parentQualificationId === approved.id && r.status === 'VALID');
-    if (!renewed) throw new Error('Approved replacement missing');
+    if (!renewed || !renewed.correctionOfId || renewed.correctionRound !== 1) throw new Error('Approved corrected replacement missing');
     const replacement = await page.request.get(new URL(`/api/portal/qualifications/${renewed.id}/content`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     if ((await replacement.body()).toString() !== '%PDF-1.7\nRENEWAL-approved') throw new Error('Replacement original bytes mismatch');
     await page.setViewportSize({ width: 1440, height: 900 });

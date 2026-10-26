@@ -303,7 +303,7 @@ export interface paths {
         /** @description Enterprise-bound portal-origin requests only, including pending/rejected ones; never internal review comments or employee drafts. Review outcome is not a current admission decision. */
         get: operations["listOwnPortalCertificateSubmissions"];
         put?: never;
-        /** @description Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. No withdrawal or public internal review comments. */
+        /** @description Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. No withdrawal or public internal review comments. */
         post: operations["submitOwnPortalCertificate"];
         delete?: never;
         options?: never;
@@ -3603,6 +3603,11 @@ export interface components {
             renewalParentId?: string | null;
             /** @description Original version captured when renewal starts; must accompany renewalParentId. */
             renewalParentVersion?: number | null;
+            /** @description Latest rejected own portal submission; paired with correctionOfVersion and nonblank correctionNote. Cannot combine with renewal fields. */
+            correctionOfId?: string | null;
+            correctionOfVersion?: number | null;
+            /** @description Supplier explanation of corrected materials. Required for linked correction; original contents stay immutable. */
+            correctionNote?: string | null;
         };
         PortalCertificateTypesResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
@@ -3631,6 +3636,24 @@ export interface components {
              * @description UTC publication instant with a Z suffix; null for pending and historical unpublished results. Portal displays Asia/Shanghai time explicitly.
              */
             reviewedAt?: string | null;
+            typeId: string;
+            issuingAuthority?: string | null;
+            /** Format: date */
+            issueDate?: string | null;
+            /** Format: date */
+            effectiveDate?: string | null;
+            /** Format: date */
+            expiryDate?: string | null;
+            permanent: boolean;
+            version: number;
+            correctionOfId?: string | null;
+            /** @description First submission in this correction chain. */
+            correctionRootId: string;
+            /** @description Zero for initial submission; increments with each linked correction. */
+            correctionRound: number;
+            correctionNote?: string | null;
+            /** @description Already created successor; ancestors cannot branch again. */
+            correctionChildId?: string | null;
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -4555,6 +4578,9 @@ export interface components {
             warningDays: number;
             fileId: string;
             verificationComment?: string;
+            correctionOfId?: string | null;
+            correctionRound: number;
+            correctionNote?: string | null;
             /** @description Whether the certificate originated from the supplier portal. */
             portalSubmission: boolean;
             publicReviewComment?: string | null;
@@ -11715,8 +11741,8 @@ export interface operations {
                     "application/json": components["schemas"]["QualificationResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
-            422: components["responses"]["ApiFailure"];
         };
     };
     revokeQualification: {

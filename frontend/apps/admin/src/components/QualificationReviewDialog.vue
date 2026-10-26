@@ -38,6 +38,7 @@ defineExpose({ open });
 <template>
   <el-dialog v-model="opened" title="资质核验" width="min(600px, calc(100vw - 32px))" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
     <p>{{ current?.certificateNo }} · {{ decision === 'APPROVE' ? '核验通过' : '核验拒绝' }}</p>
+    <div v-if="current?.correctionOfId"><p>第 {{ current.correctionRound }} 次补正 · 上一轮申请 {{ current.correctionOfId }}</p><p class="correction-note">供应商补正说明：{{ current.correctionNote }}</p></div>
     <p v-if="current?.parentQualificationId">关联原证照 {{ current.parentQualificationId }}。核验通过将生效新证；门户换证会同时替代未变更的原证，拒绝不新增替代。</p>
     <div v-if="error" ref="errorPanel" role="alert" tabindex="-1" class="review-error">{{ error }}</div>
     <el-form label-position="top" :disabled="busy" @submit.prevent="save">
@@ -54,4 +55,5 @@ defineExpose({ open });
 <style scoped>
 .review-help { color: var(--ism-text-secondary, #526477); line-height: 1.6; }
 .review-error { color: var(--ism-danger, #b42332); margin-bottom: 16px; }
+.correction-note { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
