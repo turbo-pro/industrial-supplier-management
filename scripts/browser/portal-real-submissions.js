@@ -50,6 +50,19 @@ async page => {
     if (denied.status() !== 403) throw new Error('Readonly employee verified portal certificate');
     await employeeLogin(admin, 'browser-admin');
     const correctionDue = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    let materialRound=0;
+    const uploadMaterials=async()=>{
+      materialRound++;
+      for(let index=0;index<2;index++){
+        const name=`material-${materialRound}-${index+1}.pdf`,bytes=Buffer.from(`%PDF-1.7\nMATERIAL-${materialRound}-${index+1}`);
+        const group=page.locator('.materials').nth(index);
+        await page.getByLabel(`要求 ${index+1} 的附件`,{exact:true}).setInputFiles({name,mimeType:'application/pdf',buffer:bytes});
+        if(materialRound===1&&index===0)await page.route('**/api/portal/certificate-uploads/*/chunks/0',r=>r.abort('failed'),{times:1});
+        await group.getByRole('button',{name:'上传附件',exact:true}).click();
+        if(materialRound===1&&index===0){await group.getByRole('alert').waitFor();await group.getByRole('button',{name:'继续上传附件',exact:true}).click();}
+        await group.getByText(`${name} · 附件上传完成`,{exact:true}).waitFor();
+      }
+    };
     let reviewFailureChecked = false;
     const review = async (no, approve, renewal = false, unavailable = false, correction = false) => {
       const row = admin.getByRole('row').filter({ hasText: no }).filter({ hasText: '待核验' }).first(); await row.waitFor();
@@ -69,8 +82,20 @@ async page => {
       if (!approve) {
         await dialog.getByLabel('补正期限（北京时间）', { exact: true }).fill(correctionDue);
         await dialog.getByRole('textbox', { name: '补正要求清单', exact: true }).fill('提供清晰证照原件\n说明证照有效期');
+        await dialog.getByText('提供清晰证照原件至少一份附件',{exact:true}).click();
+        if(!await dialog.getByRole('checkbox',{name:'提供清晰证照原件至少一份附件',exact:true}).isChecked())throw new Error('Attachment-required option did not become checked');
+        await dialog.getByText('说明证照有效期至少一份附件',{exact:true}).click();
+        if(!await dialog.getByRole('checkbox',{name:'说明证照有效期至少一份附件',exact:true}).isChecked())throw new Error('Attachment-required option did not become checked');
       }
       if (correction) {
+        await dialog.getByRole('button',{name:'查看补正附件',exact:true}).click();
+        const expected=`material-${materialRound}-1.pdf`;
+        const receiving=admin.waitForEvent('download');
+        await dialog.getByRole('button',{name:`下载附件 ${expected}`,exact:true}).click();
+        const downloaded=await receiving;
+        if(downloaded.suggestedFilename()!==expected)throw new Error('Employee attachment filename mismatch');
+        const chunks=[];for await(const part of await downloaded.createReadStream())chunks.push(part);
+        if(Buffer.concat(chunks).toString()!==`%PDF-1.7\nMATERIAL-${materialRound}-1`)throw new Error('Employee attachment bytes mismatch');
         await dialog.getByText('供应商回复：已替换清晰原件', { exact: true }).waitFor();
         await dialog.getByText('供应商回复：有效期已经核对', { exact: true }).waitFor();
       }
@@ -114,6 +139,7 @@ async page => {
     await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
     await page.getByRole('textbox', { name: '补正回复 1', exact: true }).fill('已替换清晰原件');
     await page.getByRole('textbox', { name: '补正回复 2', exact: true }).fill('有效期已经核对');
+    await uploadMaterials();
     await page.setViewportSize({ width: 375, height: 812 });
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Correction mobile overflow');
     await page.locator('.submissions').screenshot({ path: 'output/playwright/portal-correction-form-mobile.png' });
@@ -155,6 +181,7 @@ async page => {
         await page.getByRole('textbox', { name: '补正说明', exact: true }).fill('已补充清晰原件与有效期');
         await page.getByRole('textbox', { name: '补正回复 1', exact: true }).fill('已替换清晰原件');
         await page.getByRole('textbox', { name: '补正回复 2', exact: true }).fill('有效期已经核对');
+        await uploadMaterials();
       } else {
         await page.getByRole('button', { name: '申请该证照换证', exact: true }).click();
         await page.getByRole('heading', { name: '证照换证申请', exact: true }).waitFor();
@@ -190,6 +217,11 @@ async page => {
     const results = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     const renewed = (await results.json()).data.items.find(r => r.parentQualificationId === approved.id && r.status === 'VALID');
     if (!renewed || !renewed.correctionOfId || renewed.correctionRound !== 1 || renewed.sourceCorrectionDueDate !== correctionDue || renewed.correctionResponses?.[1] !== '有效期已经核对' || renewed.lateCorrection) throw new Error('Approved corrected replacement missing');
+    const materials=await page.request.get(new URL(`/api/portal/certificate-submissions/${renewed.id}/attachments`,page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+    const entries=(await materials.json()).data;if(entries.length!==2||Object.keys(entries[0]).some(k=>['fileId','uploadId'].includes(k)))throw new Error('Attachment list scope/allowlist mismatch');
+    const portalBytes=await page.request.get(new URL(`/api/portal/certificate-submissions/${renewed.id}/attachments/${entries[0].id}/content`,page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+    if(portalBytes.status()!==200||(await portalBytes.body()).toString()!=='%PDF-1.7\nMATERIAL-2-1')throw new Error('Portal attachment bytes mismatch');
+    const readerDenied=await reader.request.get(`__ADMIN_URL__/api/qualifications/${renewed.id}/correction-attachments/${entries[0].id}/content`,{headers:{Authorization:`Bearer ${readerToken}`}});if(readerDenied.status()!==403)throw new Error('View-only employee downloaded material without file permission');
     const replacement = await page.request.get(new URL(`/api/portal/qualifications/${renewed.id}/content`, page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     if ((await replacement.body()).toString() !== '%PDF-1.7\nRENEWAL-approved') throw new Error('Replacement original bytes mismatch');
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -204,5 +236,6 @@ async page => {
     await page.getByRole('status').filter({ hasText: '已退出当前会话' }).waitFor();
     const stale = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     if (stale.status() !== 401) throw new Error('Logged out portal still read submissions');
+    const staleMaterial=await page.request.get(new URL(`/api/portal/certificate-submissions/${renewed.id}/attachments/${entries[0].id}/content`,page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});if(staleMaterial.status()!==401)throw new Error('Logged out portal still downloaded supporting material');
   } finally { await admin.close(); await reader.close(); }
 }

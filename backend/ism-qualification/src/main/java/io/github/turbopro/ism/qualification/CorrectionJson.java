@@ -10,5 +10,6 @@ final class CorrectionJson {
     private CorrectionJson(){}
     static LocalDate today(){return LocalDate.now(ZoneId.of("Asia/Shanghai"));}
     static List<String> read(String value){try{return value==null?List.of():List.copyOf(JSON.readValue(value,new TypeReference<List<String>>(){}));}catch(Exception e){throw new IllegalStateException("Invalid stored correction list",e);}}
-    static String write(List<String> values){try{return JSON.writeValueAsString(values);}catch(Exception e){throw new IllegalStateException(e);}}
+    static List<Integer> readInts(String value){try{return value==null?List.of():List.copyOf(JSON.readValue(value,new TypeReference<List<Integer>>(){}));}catch(Exception e){throw new IllegalStateException("Invalid stored attachment requirements",e);}}
+    static String write(List<?> values){try{return JSON.writeValueAsString(values);}catch(Exception e){throw new IllegalStateException(e);}}
 }

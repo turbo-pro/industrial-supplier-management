@@ -7,5 +7,5 @@ import org.springframework.stereotype.Service;
 public class QualificationFileReferenceAdapter implements QualificationFileReference {
     private final FileReferenceService files;
     public QualificationFileReferenceAdapter(FileReferenceService files){this.files=files;}
-    @Override public boolean active(long fileId){return files.active(fileId);}
+    @Override public boolean active(long fileId){return files.activeForQualification(fileId);}
 }

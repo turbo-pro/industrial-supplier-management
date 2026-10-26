@@ -8,6 +8,7 @@ import java.util.List;
 
 @Mapper
 public interface FileMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM res_file_object WHERE tenant_id=#{tenantId} AND id=#{id} AND status='ACTIVE' FOR SHARE") Long activeForQualification(long tenantId,long id);
     @Select("SELECT setting_value FROM cfg_tenant_setting WHERE tenant_id=#{tenantId} AND setting_key=#{key}")
     String tenantSetting(long tenantId,String key);
     @Select("SELECT id,owner_id,original_name,content_type,file_size,file_sha256,storage_provider,object_key,status,created_at FROM res_file_object WHERE tenant_id=#{tenantId} AND file_sha256=#{sha256} AND file_size=#{size} AND status='ACTIVE'")

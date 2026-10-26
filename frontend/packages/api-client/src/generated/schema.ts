@@ -3455,10 +3455,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portal/certificate-submissions/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPortalCorrectionAttachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-submissions/{id}/attachments/{attachmentId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Authorized business attachment download; no-store and attachment-only. Employee requires qualification view, data scope and resource file download. Portal revalidates session and own enterprise. Opening is audited atomically; audit failure closes the stream. */
+        get: operations["downloadPortalCorrectionAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}/correction-attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEmployeeCorrectionAttachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/qualifications/{id}/correction-attachments/{attachmentId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Authorized business attachment download; no-store and attachment-only. Employee requires qualification view, data scope and resource file download. Portal revalidates session and own enterprise. Opening is audited atomically; audit failure closes the stream. */
+        get: operations["downloadEmployeeCorrectionAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CorrectionAttachmentListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                id: string;
+                requirementIndex: number;
+                fileName: string;
+            }[];
+        };
         PortalAccountChange: {
             version: number;
             reason: string;
@@ -3610,6 +3683,11 @@ export interface components {
             correctionNote?: string | null;
             /** @description One nonblank response per source requirement in the original order; does not prove material authenticity. */
             correctionResponses?: string[];
+            /** @description New own completed uploads, at most 3 per requirement and 5 per correction. Each required index must be covered. Uploads cannot be reused as certificate originals or other materials. */
+            correctionAttachments?: {
+                requirementIndex: number;
+                uploadId: string;
+            }[];
         };
         PortalCertificateTypesResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
@@ -3666,6 +3744,8 @@ export interface components {
             lateCorrection?: boolean;
             /** @description Current unconsumed rejected source is past its Beijing date target. Does not block submission. */
             correctionOverdue?: boolean;
+            attachmentRequiredFor?: number[];
+            sourceAttachmentRequiredFor?: number[];
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -4610,6 +4690,8 @@ export interface components {
             sourceCorrectionRequirements?: string[];
             correctionResponses?: string[];
             lateCorrection?: boolean;
+            attachmentRequiredFor?: number[];
+            sourceAttachmentRequiredFor?: number[];
         };
         QualificationPage: {
             /** Format: int64 */
@@ -4620,6 +4702,8 @@ export interface components {
         };
         /** @description Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards. */
         VerifyQualification: {
+            /** @description Zero-based indices of correction requirements requiring at least one attachment. Portal REJECT only. */
+            attachmentRequiredFor?: number[];
             /**
              * Format: date
              * @description Optional Beijing end-of-day target; late corrections remain allowed and marked. Portal REJECT only.
@@ -13658,6 +13742,104 @@ export interface operations {
             };
             400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
+        };
+    };
+    listPortalCorrectionAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped supporting files without file or upload IDs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectionAttachmentListResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    downloadPortalCorrectionAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    listEmployeeCorrectionAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped supporting files without file or upload IDs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectionAttachmentListResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    downloadEmployeeCorrectionAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
 }

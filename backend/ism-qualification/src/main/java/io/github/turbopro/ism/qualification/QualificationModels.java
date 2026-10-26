@@ -19,7 +19,8 @@ public final class QualificationModels {
         @NotBlank @Size(max=100) String certificateNo,@Size(max=200) String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,
         boolean permanent,@Min(0) @Max(3650) Integer warningDays,@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String fileId,
         @NotNull @PositiveOrZero Integer version) {}
-    public record VerifyCommand(@NotNull Decision decision,@NotBlank @Size(max=1000) String comment,@NotNull @PositiveOrZero Integer version,@Size(max=1000) String publicComment,LocalDate correctionDueDate,@Size(max=10) List<@NotBlank @Size(max=200) String> correctionRequirements) {
+    public record VerifyCommand(@NotNull Decision decision,@NotBlank @Size(max=1000) String comment,@NotNull @PositiveOrZero Integer version,@Size(max=1000) String publicComment,LocalDate correctionDueDate,@Size(max=10) List<@NotBlank @Size(max=200) String> correctionRequirements,@Size(max=5) List<@Min(0) @Max(9) Integer> attachmentRequiredFor) {
+        public VerifyCommand(Decision decision,String comment,Integer version,String publicComment,LocalDate correctionDueDate,List<String> correctionRequirements){this(decision,comment,version,publicComment,correctionDueDate,correctionRequirements,null);}
         public VerifyCommand(Decision decision,String comment,Integer version,String publicComment){this(decision,comment,version,publicComment,null,null);}
         public VerifyCommand(Decision decision,String comment,Integer version){this(decision,comment,version,null);}
     }
@@ -31,6 +32,6 @@ public final class QualificationModels {
         String certificateNo,LocalDate expiryDate,boolean permanent,Status status,int daysUntilExpiry,int version,LocalDateTime updatedAt) {}
     public record View(String id,String organizationId,String supplierId,String supplierCode,String supplierName,String typeId,String typeCode,String typeName,String parentQualificationId,
         String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,int warningDays,String fileId,Status status,
-        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment,String correctionOfId,int correctionRound,String correctionNote,LocalDate correctionDueDate,List<String> correctionRequirements,LocalDate sourceCorrectionDueDate,List<String> sourceCorrectionRequirements,List<String> correctionResponses,boolean lateCorrection) {}
+        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment,String correctionOfId,int correctionRound,String correctionNote,LocalDate correctionDueDate,List<String> correctionRequirements,LocalDate sourceCorrectionDueDate,List<String> sourceCorrectionRequirements,List<String> correctionResponses,boolean lateCorrection,List<Integer> attachmentRequiredFor,List<Integer> sourceAttachmentRequiredFor) {}
     public record Page(long total,int page,int size,List<Summary> items) {}
 }

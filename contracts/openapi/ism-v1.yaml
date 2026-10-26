@@ -2655,6 +2655,49 @@ paths:
               schema: { $ref: '#/components/schemas/EmptyResponse' }
         '400': { $ref: '#/components/responses/ApiFailure' }
         '401': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-submissions/{id}/attachments:
+    get:
+      operationId: listPortalCorrectionAttachments
+      tags: [Qualification]
+      security: [{ portalBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Scoped supporting files without file or upload IDs, content: { application/json: { schema: { $ref: '#/components/schemas/CorrectionAttachmentListResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-submissions/{id}/attachments/{attachmentId}/content:
+    get:
+      operationId: downloadPortalCorrectionAttachment
+      tags: [Qualification]
+      description: Authorized business attachment download; no-store and attachment-only. Employee requires qualification view, data scope and resource file download. Portal revalidates session and own enterprise. Opening is audited atomically; audit failure closes the stream.
+      security: [{ portalBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: attachmentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Attachment bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /qualifications/{id}/correction-attachments:
+    get:
+      operationId: listEmployeeCorrectionAttachments
+      tags: [Qualification]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Scoped supporting files without file or upload IDs, content: { application/json: { schema: { $ref: '#/components/schemas/CorrectionAttachmentListResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /qualifications/{id}/correction-attachments/{attachmentId}/content:
+    get:
+      operationId: downloadEmployeeCorrectionAttachment
+      tags: [Qualification]
+      description: Authorized business attachment download; no-store and attachment-only. Employee requires qualification view, data scope and resource file download. Portal revalidates session and own enterprise. Opening is audited atomically; audit failure closes the stream.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: attachmentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Attachment bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+
 components:
   parameters:
     IdempotencyKey:
@@ -2679,6 +2722,22 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    CorrectionAttachmentListResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                required: [id, requirementIndex, fileName]
+                properties:
+                  id: { type: string }
+                  requirementIndex: { type: integer, minimum: 0 }
+                  fileName: { type: string }
+
     PortalAccountChange:
       type: object
       required: [version, reason]
@@ -2854,6 +2913,16 @@ components:
         correctionOfVersion: { type: integer, minimum: 0, nullable: true }
         correctionNote: { type: string, maxLength: 1000, nullable: true, description: Supplier explanation of corrected materials. Required for linked correction; original contents stay immutable. }
         correctionResponses: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 500 }, description: One nonblank response per source requirement in the original order; does not prove material authenticity. }
+        correctionAttachments:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [requirementIndex, uploadId]
+            properties:
+              requirementIndex: { type: integer, minimum: 0, maximum: 9 }
+              uploadId: { type: string }
+          description: New own completed uploads, at most 3 per requirement and 5 per correction. Each required index must be covered. Uploads cannot be reused as certificate originals or other materials.
     PortalCertificateTypesResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -2904,6 +2973,8 @@ components:
         correctionResponses: { type: array, items: { type: string } }
         lateCorrection: { type: boolean }
         correctionOverdue: { type: boolean, description: Current unconsumed rejected source is past its Beijing date target. Does not block submission. }
+        attachmentRequiredFor: { type: array, items: { type: integer } }
+        sourceAttachmentRequiredFor: { type: array, items: { type: integer } }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -3554,6 +3625,8 @@ components:
             sourceCorrectionRequirements: { type: array, items: { type: string } }
             correctionResponses: { type: array, items: { type: string } }
             lateCorrection: { type: boolean }
+            attachmentRequiredFor: { type: array, items: { type: integer } }
+            sourceAttachmentRequiredFor: { type: array, items: { type: integer } }
     QualificationPage:
       type: object
       required: [total, page, size, items]
@@ -3562,7 +3635,7 @@ components:
       type: object
       description: Internal comment stays private. Portal rejections require a nonblank publicComment. Portal approvals may optionally include one; internal certificates cannot publish publicComment. Publication, decision and audit are atomic and cannot be edited afterwards.
       required: [decision, comment, version]
-      properties: { correctionDueDate: { type: string, format: date, nullable: true, description: Optional Beijing end-of-day target; late corrections remain allowed and marked. Portal REJECT only. }, correctionRequirements: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 200 }, description: Ordered nonduplicate correction requirements; Portal REJECT only. }, publicComment: { type: string, nullable: true, maxLength: 1000 }, decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
+      properties: { attachmentRequiredFor: { type: array, maxItems: 5, uniqueItems: true, items: { type: integer, minimum: 0, maximum: 9 }, description: Zero-based indices of correction requirements requiring at least one attachment. Portal REJECT only. }, correctionDueDate: { type: string, format: date, nullable: true, description: Optional Beijing end-of-day target; late corrections remain allowed and marked. Portal REJECT only. }, correctionRequirements: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 200 }, description: Ordered nonduplicate correction requirements; Portal REJECT only. }, publicComment: { type: string, nullable: true, maxLength: 1000 }, decision: { type: string, enum: [APPROVE, REJECT] }, comment: { type: string, maxLength: 1000 }, version: { type: integer, minimum: 0 } }
     RevokeQualification:
       type: object
       required: [reason, version]

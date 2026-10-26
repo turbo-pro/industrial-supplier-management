@@ -55,7 +55,7 @@ public class PortalUploadService implements PortalQualificationUploadReference {
     private PortalIdentityContext.Identity identity(){guard.lockCurrent();modules.requireAvailable("QUALIFICATION");return PortalIdentityContext.require();}
     private FileModels.UploadRow lock(long id){var i=PortalIdentityContext.require();var row=ownership.lock(i.tenantId(),i.supplierId(),i.accountId(),id);if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);return row;}
     private void available(FileModels.UploadRow row){if(!row.expiresAt().isAfter(now()))throw new ApiException(FileErrorCode.UPLOAD_EXPIRED);}
-    private void requireActive(FileModels.UploadRow row){if(row.fileId()==null||mapper.file(PortalIdentityContext.require().tenantId(),row.fileId())==null)throw new ApiException(CommonErrorCode.NOT_FOUND,"上传原件已不可用");}
+    private void requireActive(FileModels.UploadRow row){if(row.fileId()==null||mapper.activeForQualification(PortalIdentityContext.require().tenantId(),row.fileId())==null)throw new ApiException(CommonErrorCode.NOT_FOUND,"上传原件已不可用");}
     private PortalUploadModels.View view(FileModels.UploadRow row){return new PortalUploadModels.View(Long.toString(row.id()),row.fileName(),row.contentType(),row.totalSize(),row.fileSha256(),row.chunkSize(),row.totalChunks(),mapper.uploadedChunks(PortalIdentityContext.require().tenantId(),row.id()),row.status(),row.expiresAt(),row.version());}
     private ObjectStorage store(){return stores.stream().filter(s->s.provider().equalsIgnoreCase(properties.getProvider())).findFirst().orElseThrow(()->new ApiException(FileErrorCode.STORAGE_UNAVAILABLE));}
     private void validate(PortalUploadModels.Initialize c){

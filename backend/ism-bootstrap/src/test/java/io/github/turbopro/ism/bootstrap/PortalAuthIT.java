@@ -43,6 +43,7 @@ class PortalAuthIT {
     @Autowired io.github.turbopro.ism.resource.file.FileService certificateFiles;
     @Autowired io.github.turbopro.ism.qualification.PortalQualificationService portalCertificates;
     @Autowired io.github.turbopro.ism.qualification.QualificationService qualificationService;
+    @Autowired io.github.turbopro.ism.qualification.CorrectionAttachmentService correctionAttachments;
     @Autowired io.github.turbopro.ism.qualification.QualificationMapper qualificationMapper;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper profileJson;
     static final AtomicLong IDS=new AtomicLong(20900);
@@ -466,6 +467,73 @@ class PortalAuthIT {
         var f=fixture();enableCertificates(f);long internal=certificate(f,81,"DRAFT",60,false);String token=login(f).accessToken();submitCertificate(token,withResponses(certificateCommand(f,readyPortalUpload(token,"orphan-replies"),"ORPHAN-REPLIES"),List.of("无来源回复")),400);
         try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThatThrownBy(()->qualificationService.verify(internal,new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"内部核验",0,null,correctionToday(),List.of("内部不可发布")))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
         assertCertificateState(internal,"DRAFT",0);
+    }
+    void reviewWithMaterialRequirements(Fixture f,String id,List<Integer> required){
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"PRIVATE_MATERIAL_REVIEW",0,"按要求补齐附件",correctionToday().plusDays(2),List.of("清晰证照","有效期依据"),required));}
+    }
+    io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Material material(int index,String id){return new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Material(index,id);}
+    io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit withMaterials(io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit c,List<io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Material> items){return new io.github.turbopro.ism.qualification.PortalCertificateSubmissionModels.Submit(c.requestKey(),c.typeId(),c.certificateNo(),c.issuingAuthority(),c.issueDate(),c.effectiveDate(),c.expiryDate(),c.permanent(),c.uploadId(),c.renewalParentId(),c.renewalParentVersion(),c.correctionOfId(),c.correctionOfVersion(),c.correctionNote(),c.correctionResponses(),items);}
+    String sourceForMaterials(Fixture f,String token,String name,List<Integer> required)throws Exception{String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,name),"MAT-"+name),200)).get("data").get("id").asText();reviewWithMaterialRequirements(f,id,required);return id;}
+    @Test void correctionMaterialsRequireCoverageAndConsumeUploadsAcrossBothUsageKinds()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=sourceForMaterials(f,token,"required-materials",List.of(0,1));
+        var command=withResponses(correctionCommand(f,readyPortalUpload(token,"material-main"),previous,1,"材料补齐"),List.of("清晰原件已补","有效期已补"));
+        submitCertificate(token,command,400);String one=readyPortalUpload(token,"material-one"),two=readyPortalUpload(token,"material-two");submitCertificate(token,withMaterials(command,List.of(material(0,one))),400);
+        var complete=withMaterials(command,List.of(material(0,one),material(1,two)));String child=profileJson.readTree(submitCertificate(token,complete,200)).get("data").get("id").asText();
+        assertThat(profileJson.readTree(submitCertificate(token,complete,200)).get("data").get("id").asText()).isEqualTo(child);
+        String listing=mvc.perform(get("/api/portal/certificate-submissions/"+child+"/attachments").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(2)).andReturn().getResponse().getContentAsString();assertThat(listing).doesNotContain("uploadId","fileId","PRIVATE_MATERIAL");
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].sourceAttachmentRequiredFor[1]").value(1)).andExpect(jsonPath("$.data.items[1].attachmentRequiredFor[0]").value(0));
+        submitCertificate(token,certificateCommand(f,one,"REUSED-MATERIAL-AS-PRIMARY"),409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(2);reviewPortalCertificate(f,child,true);
+    }
+    @Test void correctionMaterialBoundsAndForeignUploadsFailWithoutPartialConsumption()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=sourceForMaterials(f,token,"bad-materials",List.of());
+        var command=withResponses(correctionCommand(f,readyPortalUpload(token,"bad-material-main"),previous,1,"补正"),List.of("回复一","回复二"));String own=readyPortalUpload(token,"own-material");
+        submitCertificate(token,withMaterials(command,List.of(material(0,command.uploadId()))),400);submitCertificate(token,withMaterials(command,List.of(material(0,own),material(1,own))),400);submitCertificate(token,withMaterials(command,List.of(material(2,own))),400);
+        submitCertificate(token,withMaterials(command,java.util.stream.IntStream.range(0,4).mapToObj(n->material(0,Integer.toString(n+1))).toList()),400);
+        submitCertificate(token,withMaterials(command,java.util.stream.IntStream.range(0,6).mapToObj(n->material(n%2,Integer.toString(n+1))).toList()),400);
+        var foreign=fixture();enableCertificates(foreign);String foreignToken=login(foreign).accessToken(),foreignUpload=readyPortalUpload(foreignToken,"foreign-material");submitCertificate(token,withMaterials(command,List.of(material(0,foreignUpload))),404);
+        String pending=initializePortalUpload(token,UUID.randomUUID().toString(),"pending-material.pdf",original("pending-material"),digest(original("pending-material")));submitCertificate(token,withMaterials(command,List.of(material(0,pending))),422);
+        String used=jdbc.queryForObject("SELECT upload_id FROM qua_portal_submission WHERE qualification_id=?",String.class,Long.parseLong(previous));submitCertificate(token,withMaterials(command,List.of(material(0,used))),409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE tenant_id=?",Long.class,f.tenant())).isZero();assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+        submitCertificate(token,withMaterials(command,List.of(material(0,own))),200);
+    }
+    @Test void correctionMaterialAuditFailureRollsBackConsumptionAndUnavailableFilesBlockApproval()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=sourceForMaterials(f,token,"material-rollback",List.of(0));String upload=readyPortalUpload(token,"material-rollback-support");
+        var command=withMaterials(withResponses(correctionCommand(f,readyPortalUpload(token,"material-rollback-main"),previous,1,"补正"),List.of("回复一","回复二")),List.of(material(0,upload)));
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='material consume rollback'; END IF; END");
+        try{submitCertificate(token,command,500);}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE tenant_id=?",Long.class,f.tenant())).isZero();assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=?",Long.class,f.tenant())).isEqualTo(1);
+        String child=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();jdbc.update("UPDATE res_file_object SET status='DELETED' WHERE id=(SELECT file_id FROM res_upload_session WHERE id=?)",Long.parseLong(upload));
+        assertThatThrownBy(()->reviewPortalCertificate(f,child,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);assertCertificateState(Long.parseLong(child),"DRAFT",0);reviewPortalCertificate(f,child,false);
+    }
+    @Test void materialDownloadsEnforceBusinessScopePermissionsAndAuditBeforeReturningBytes()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=sourceForMaterials(f,token,"material-download",List.of(0));String support=readyPortalUpload(token,"download-evidence");
+        String child=profileJson.readTree(submitCertificate(token,withMaterials(withResponses(correctionCommand(f,readyPortalUpload(token,"download-main"),previous,1,"补正"),List.of("回复一","回复二")),List.of(material(0,support))),200)).get("data").get("id").asText();long attachment=jdbc.queryForObject("SELECT id FROM qua_correction_attachment WHERE qualification_id=?",Long.class,Long.parseLong(child));
+        String path="/api/portal/certificate-submissions/"+child+"/attachments/"+attachment+"/content";
+        mvc.perform(get(path).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(content().bytes(original("download-evidence"))).andExpect(header().string("Content-Disposition",org.hamcrest.Matchers.containsString("own-download-evidence.pdf")));
+        mvc.perform(get("/api/portal/certificate-submissions/"+previous+"/attachments/"+attachment+"/content").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        var foreign=fixture();enableCertificates(foreign);mvc.perform(get(path).header("Authorization","Bearer "+login(foreign).accessToken())).andExpect(status().isNotFound());
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThat(correctionAttachments.employeeList(Long.parseLong(child))).hasSize(1);assertThatThrownBy(()->correctionAttachments.employeeDownload(Long.parseLong(child),attachment)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view","resource:file:download"),Map.of("supplier:qualification",DataScope.organizations(Set.of(f.supplier()+99))),Set.of()))){assertThatThrownBy(()->correctionAttachments.employeeDownload(Long.parseLong(child),attachment)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view","resource:file:download"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){var file=correctionAttachments.employeeDownload(Long.parseLong(child),attachment);try(var bytes=file.stream()){assertThat(bytes.readAllBytes()).isEqualTo(original("download-evidence"));}}
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CORRECTION_ATTACHMENT_OPEN' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='material open audit failure'; END IF; END");try{mvc.perform(get(path).header("Authorization","Bearer "+token)).andExpect(status().isInternalServerError());}finally{drop();}
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CORRECTION_ATTACHMENT_OPEN'",Long.class,f.tenant())).isEqualTo(1);
+    }
+    @Test void materialRequiredIndicesAreValidatedWithoutChangingThePendingRequest()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken();String id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"invalid-material-policy"),"INVALID-MATERIAL-POLICY"),200)).get("data").get("id").asText();
+        for(List<Integer> invalid:List.of(List.of(0,0),List.of(-1),List.of(2)))assertThatThrownBy(()->reviewWithMaterialRequirements(f,id,invalid)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThatThrownBy(()->qualificationService.verify(Long.parseLong(id),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.REJECT,"内部核验",0,"补齐材料",null,List.of("一","二","三","四","五","六"),List.of(0,1,2,3,4,5)))).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);}
+        assertCertificateState(Long.parseLong(id),"DRAFT",0);reviewWithMaterialRequirements(f,id,List.of(0));
+    }
+    @Test void correctionMaterialApprovalRechecksCurrentFileStateAfterEarlierSnapshot()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),previous=sourceForMaterials(f,token,"current-material",List.of(0));String support=readyPortalUpload(token,"current-material-support");
+        String child=profileJson.readTree(submitCertificate(token,withMaterials(withResponses(correctionCommand(f,readyPortalUpload(token,"current-material-main"),previous,1,"补正"),List.of("回复一","回复二")),List.of(material(0,support))),200)).get("data").get("id").asText();long file=jdbc.queryForObject("SELECT file_id FROM qua_correction_attachment WHERE qualification_id=?",Long.class,Long.parseLong(child));
+        var transaction=new org.springframework.transaction.support.TransactionTemplate(transactionManager);transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:verify"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){
+            assertThatThrownBy(()->transaction.execute(status->{assertThat(jdbc.queryForObject("SELECT status FROM res_file_object WHERE id=?",String.class,file)).isEqualTo("ACTIVE");try{java.util.concurrent.CompletableFuture.runAsync(()->jdbc.update("UPDATE res_file_object SET status='DELETED' WHERE id=?",file)).get(10,java.util.concurrent.TimeUnit.SECONDS);}catch(Exception e){throw new RuntimeException(e);}qualificationService.verify(Long.parseLong(child),new io.github.turbopro.ism.qualification.QualificationModels.VerifyCommand(io.github.turbopro.ism.qualification.QualificationModels.Decision.APPROVE,"不可使用旧文件快照",0));return null;})).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        }
+        assertCertificateState(Long.parseLong(child),"DRAFT",0);assertThat(jdbc.queryForObject("SELECT status FROM res_file_object WHERE id=?",String.class,file)).isEqualTo("DELETED");
     }
     @Test void supplierOrganizationCurrentReadBypassesEarlierSnapshot()throws Exception{
         var f=fixture();long organization=f.supplier()+40;

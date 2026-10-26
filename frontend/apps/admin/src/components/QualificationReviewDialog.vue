@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { components } from '@ism/api-client';
 import CorrectionPolicyDetails from './CorrectionPolicyDetails.vue';
@@ -11,10 +11,12 @@ const opened = ref(false), busy = ref(false), error = ref('');
 const errorPanel = ref<HTMLElement>();
 const current = ref<components['schemas']['Qualification']>();
 const decision = ref<'APPROVE' | 'REJECT'>('APPROVE');
+const requiredNames=ref<string[]>([]);
+const materialRequirements=computed(()=>form.requirements.split('\n').map(v=>v.trim()).filter(Boolean));
 const form = reactive({ comment: '', publicComment: '', correctionDueDate: '', requirements: '' });
 function open(value: components['schemas']['Qualification'], action: 'APPROVE' | 'REJECT') {
   if (opened.value || busy.value) return;
-  current.value = value; decision.value = action;
+  current.value = value; decision.value = action; requiredNames.value=[];
   form.comment = ''; form.publicComment = ''; form.correctionDueDate = ''; form.requirements = ''; error.value = ''; opened.value = true;
 }
 async function fail(message: string) { error.value = message; await nextTick(); errorPanel.value?.focus(); }
@@ -24,12 +26,15 @@ async function save() {
   if (current.value.portalSubmission && decision.value === 'REJECT' && !form.publicComment.trim()) return fail('请填写供应商可见的拒绝原因及需要补充的材料。');
   const requirements = form.requirements.split('\n').map(v => v.trim()).filter(Boolean);
   if (requirements.length > 10 || requirements.some(v => v.length > 200) || new Set(requirements).size !== requirements.length) return fail('补正要求最多10项，每项不超过200字且不能重复。');
+  if(requiredNames.value.length>5)return fail('每轮最多5份附件，最多指定5个附件必交项。');
+  if(requiredNames.value.some(v=>!requirements.includes(v)))return fail('要求清单已变化，请重新勾选附件必交项。');
+  const attachmentRequiredFor=requiredNames.value.map(v=>requirements.indexOf(v));
   busy.value = true; error.value = '';
   try {
     const { error: responseError } = await session.client.POST('/qualifications/{id}/verify', {
       params: { path: { id: current.value.id } },
       body: { decision: decision.value, comment: form.comment.trim(), version: current.value.version,
-        ...(current.value.portalSubmission ? { publicComment: form.publicComment.trim() || null, ...(decision.value === 'REJECT' ? { correctionDueDate: form.correctionDueDate || null, correctionRequirements: requirements } : {}) } : {}) }
+        ...(current.value.portalSubmission ? { publicComment: form.publicComment.trim() || null, ...(decision.value === 'REJECT' ? { correctionDueDate: form.correctionDueDate || null, correctionRequirements: requirements, attachmentRequiredFor } : {}) } : {}) }
     });
     if (responseError) { await fail(responseError.error.message); return; }
     opened.value = false; emit('saved'); ElMessage.success('核验结果已保存');
@@ -55,6 +60,7 @@ defineExpose({ open });
           <el-form-item label="补正期限（北京时间）"><el-input v-model="form.correctionDueDate" type="date" aria-label="补正期限（北京时间）"/></el-form-item>
           <p class="review-help">选填，截止当日结束。迟交仍可提交并标注，不会自动改变证照或准入状态。</p>
           <el-form-item label="补正要求清单"><el-input v-model="form.requirements" type="textarea" :rows="3" aria-label="补正要求清单"/></el-form-item>
+          <el-form-item v-if="materialRequirements.length" label="附件必交项"><el-checkbox-group v-model="requiredNames"><el-checkbox v-for="requirement in materialRequirements" :key="requirement" :value="requirement">{{requirement}}至少一份附件</el-checkbox></el-checkbox-group></el-form-item>
           <p class="review-help">选填，每行一项，最多10项、每项200字；供应商须按顺序逐项回复。这不等于系统自动验证材料真实或齐全。</p>
         </template>
       </template>
