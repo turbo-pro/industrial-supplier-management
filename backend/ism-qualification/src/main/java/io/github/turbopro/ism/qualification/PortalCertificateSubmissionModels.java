@@ -18,6 +18,9 @@ public final class PortalCertificateSubmissionModels {
         public Submit(String requestKey,String typeId,String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,String uploadId,String renewalParentId,Integer renewalParentVersion){this(requestKey,typeId,certificateNo,issuingAuthority,issueDate,effectiveDate,expiryDate,permanent,uploadId,renewalParentId,renewalParentVersion,null,null,null);}
         public Submit(String requestKey,String typeId,String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,String uploadId){this(requestKey,typeId,certificateNo,issuingAuthority,issueDate,effectiveDate,expiryDate,permanent,uploadId,null,null);}
     }
+    public record Withdraw(@NotNull @PositiveOrZero Integer version,@NotBlank @Size(max=500) String reason){}
+    public record Withdrawal(long accountId,int sourceVersion,String reason){}
+    public record WithdrawalTarget(long accountId,String status,int version){}
     public record Material(@NotNull @Min(0) @Max(9) Integer requirementIndex,@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String uploadId){}
     public record Attachment(String id,int requirementIndex,String fileName){}
     public record AttachmentFile(long fileId,String fileName){}
@@ -28,7 +31,8 @@ public final class PortalCertificateSubmissionModels {
         String correctionOfId,String correctionRootId,int correctionRound,String correctionNote,String correctionChildId,LocalDate correctionDueDate,
         @com.fasterxml.jackson.annotation.JsonIgnore String correctionRequirementsJson,
         LocalDate sourceCorrectionDueDate,@com.fasterxml.jackson.annotation.JsonIgnore String sourceRequirementsJson,
-        @com.fasterxml.jackson.annotation.JsonIgnore String correctionResponsesJson,boolean lateCorrection,@com.fasterxml.jackson.annotation.JsonIgnore String attachmentRequiredJson,@com.fasterxml.jackson.annotation.JsonIgnore String sourceAttachmentRequiredJson){
+        @com.fasterxml.jackson.annotation.JsonIgnore String correctionResponsesJson,boolean lateCorrection,@com.fasterxml.jackson.annotation.JsonIgnore String attachmentRequiredJson,@com.fasterxml.jackson.annotation.JsonIgnore String sourceAttachmentRequiredJson,
+        boolean withdrawable,String withdrawalReason,@com.fasterxml.jackson.annotation.JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") LocalDateTime withdrawnAt){
         @com.fasterxml.jackson.annotation.JsonProperty public List<String> correctionRequirements(){return CorrectionJson.read(correctionRequirementsJson);}
         @com.fasterxml.jackson.annotation.JsonProperty public List<String> sourceCorrectionRequirements(){return CorrectionJson.read(sourceRequirementsJson);}
         @com.fasterxml.jackson.annotation.JsonProperty public List<String> correctionResponses(){return CorrectionJson.read(correctionResponsesJson);}

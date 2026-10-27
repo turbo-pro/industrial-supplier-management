@@ -303,8 +303,25 @@ export interface paths {
         /** @description Enterprise-bound portal-origin requests only, including pending/rejected ones; never internal review comments or employee drafts. Review outcome is not a current admission decision. */
         get: operations["listOwnPortalCertificateSubmissions"];
         put?: never;
-        /** @description Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. No withdrawal or public internal review comments. */
+        /** @description Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. Pending requests may be withdrawn only by their original submitter through the dedicated versioned withdrawal endpoint. Internal review comments remain private. */
         post: operations["submitOwnPortalCertificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/certificate-submissions/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Only the submitting account can withdraw a pending request. Same original version and trimmed reason replay safely; changed payload, processed request or stale version conflicts. Preserves uploaded evidence and correction history, releases pending renewal slot without changing original certificate. Never returns internal review notes. */
+        post: operations["withdrawOwnPortalCertificateSubmission"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3703,7 +3720,7 @@ export interface components {
             typeName: string;
             certificateNo: string;
             /** @enum {string} */
-            status: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED";
+            status: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED" | "WITHDRAWN";
             fileName: string;
             /** Format: date-time */
             submittedAt: string;
@@ -3746,6 +3763,18 @@ export interface components {
             correctionOverdue?: boolean;
             attachmentRequiredFor?: number[];
             sourceAttachmentRequiredFor?: number[];
+            /** @description Pending request submitted by the current portal account. Server independently rechecks authorization and version. */
+            withdrawable: boolean;
+            withdrawalReason?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC instant with Z suffix.
+             */
+            withdrawnAt?: string | null;
+        };
+        PortalCertificateWithdraw: {
+            version: number;
+            reason: string;
         };
         PortalCertificateSubmissionResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["PortalCertificateSubmission"];
@@ -4609,7 +4638,7 @@ export interface components {
         /** @enum {string} */
         QualificationTypeStatus: "ACTIVE" | "DISABLED";
         /** @enum {string} */
-        QualificationStatus: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED";
+        QualificationStatus: "DRAFT" | "VALID" | "EXPIRING" | "EXPIRED" | "REJECTED" | "REVOKED" | "SUPERSEDED" | "WITHDRAWN";
         SaveQualificationType: {
             code: string;
             name: string;
@@ -4673,6 +4702,12 @@ export interface components {
             correctionOfId?: string | null;
             correctionRound: number;
             correctionNote?: string | null;
+            withdrawalReason?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC instant with Z suffix.
+             */
+            withdrawnAt?: string | null;
             /** @description Whether the certificate originated from the supplier portal. */
             portalSubmission: boolean;
             publicReviewComment?: string | null;
@@ -7305,6 +7340,67 @@ export interface operations {
             409: components["responses"]["ApiFailure"];
             410: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    withdrawOwnPortalCertificateSubmission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalCertificateWithdraw"];
+            };
+        };
+        responses: {
+            /** @description Withdrawn or identical replay; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCertificateSubmissionResponse"];
+                };
+            };
+            /** @description Invalid reason or version */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or revoked portal session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Qualification module unavailable */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request not submitted by current account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Processed request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listOwnPortalQualifications: {

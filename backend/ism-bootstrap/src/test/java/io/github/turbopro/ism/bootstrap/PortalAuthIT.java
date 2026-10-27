@@ -535,6 +535,64 @@ class PortalAuthIT {
         }
         assertCertificateState(Long.parseLong(child),"DRAFT",0);assertThat(jdbc.queryForObject("SELECT status FROM res_file_object WHERE id=?",String.class,file)).isEqualTo("DELETED");
     }
+    String withdrawCertificate(String token,String id,int version,String reason,int expected)throws Exception {
+        return mvc.perform(post("/api/portal/certificate-submissions/"+id+"/withdraw").header("Authorization","Bearer "+token).contentType("application/json").content(profileJson.writeValueAsString(Map.of("version",version,"reason",reason))))
+            .andExpect(status().is(expected)).andReturn().getResponse().getContentAsString();
+    }
+    @Test void portalWithdrawalIsVersionedIdempotentAndPreservesConsumedEvidence()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),upload=readyPortalUpload(token,"withdraw-original");var command=certificateCommand(f,upload,"WITHDRAW-ORIGINAL");
+        String id=profileJson.readTree(submitCertificate(token,command,200)).get("data").get("id").asText();
+        withdrawCertificate(token,id,1,"陈旧页面",409);String body=withdrawCertificate(token,id,0,"  原件需重新核对  ",200);
+        assertThat(profileJson.readTree(body).at("/data/status").asText()).isEqualTo("WITHDRAWN");assertThat(profileJson.readTree(body).at("/data/withdrawable").asBoolean()).isFalse();assertThat(profileJson.readTree(body).at("/data/withdrawnAt").asText()).endsWith("Z");
+        withdrawCertificate(token,id,0,"原件需重新核对",200);withdrawCertificate(token,id,0,"改写原因",409);withdrawCertificate(token,id,1,"原件需重新核对",409);
+        assertCertificateState(Long.parseLong(id),"WITHDRAWN",1);assertThatThrownBy(()->reviewPortalCertificate(f,id,true)).isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+        assertThat(profileJson.readTree(submitCertificate(token,command,200)).at("/data/status").asText()).isEqualTo("WITHDRAWN");submitCertificate(token,certificateCommand(f,upload,"REUSE-WITHDRAWN-UPLOAD"),409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=? AND action='PORTAL_CERTIFICATE_WITHDRAW'",Long.class,f.tenant())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE qualification_id=?",Long.class,Long.parseLong(id))).isEqualTo(1);
+        assertThat(body).doesNotContain("accountId","verifiedBy","verificationComment");
+        try(var tenant=TenantContext.open(f.tenant(),10);var grants=AuthorizationContext.open(new PermissionSnapshot(Set.of("supplier:qualification:view"),Map.of("supplier:qualification",DataScope.all()),Set.of()))){assertThat(qualificationService.get(Long.parseLong(id)).withdrawalReason()).isEqualTo("原件需重新核对");}
+        submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"fresh-after-withdrawal"),"WITHDRAW-ORIGINAL"),200);
+    }
+    @Test void portalWithdrawalRejectsColleaguesForeignRealmAndInvalidCommands()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),id=profileJson.readTree(submitCertificate(token,certificateCommand(f,readyPortalUpload(token,"withdraw-scope"),"WITHDRAW-SCOPE"),200)).at("/data/id").asText();
+        long colleague=f.supplier()+21;jdbc.update("INSERT INTO iam_portal_account(id,tenant_id,supplier_id,username,display_name,email,password_hash) SELECT ?,tenant_id,supplier_id,'colleague.user','同企业联系人','colleague@example.test',password_hash FROM iam_portal_account WHERE id=?",colleague,f.account());String other=auth.login(new PortalAuthModels.Login(f.code(),"colleague.user","Portal#Pass123")).accessToken();
+        withdrawCertificate(other,id,0,"他人申请",404);
+        mvc.perform(get("/api/portal/certificate-submissions").header("Authorization","Bearer "+other)).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].withdrawable").value(false));
+        var foreign=fixture();enableCertificates(foreign);withdrawCertificate(login(foreign).accessToken(),id,0,"跨租户",404);
+        withdrawCertificate(token,Long.toString(certificate(f,85,"DRAFT",60,false)),0,"内部申请",404);
+        for(String reason:List.of(" ","字".repeat(501)))withdrawCertificate(token,id,0,reason,400);withdrawCertificate(token,id,-1,"负版本",400);
+        mvc.perform(post("/api/portal/certificate-submissions/"+id+"/withdraw").contentType("application/json").content("{\"version\":0,\"reason\":\"无会话\"}")).andExpect(status().isUnauthorized());
+        jdbc.update("UPDATE plt_package_module SET enabled=0 WHERE package_version_id=? AND module_id=(SELECT id FROM plt_module WHERE module_code='QUALIFICATION')",f.supplier()+3);withdrawCertificate(token,id,0,"未开通",403);
+        assertCertificateState(Long.parseLong(id),"DRAFT",0);
+    }
+    @Test void portalRenewalWithdrawalRollsBackOnAuditFailureAndReleasesOnlyPendingSlot()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),id=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"withdraw-renewal"),parent,0,"WITHDRAW-RENEWAL"));
+        install("CREATE TRIGGER portal_auth_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.tenant_id="+f.tenant()+" AND NEW.action='PORTAL_CERTIFICATE_WITHDRAW' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='withdraw audit rollback'; END IF; END");try{withdrawCertificate(token,id,0,"重核原件",500);}finally{drop();}
+        assertCertificateState(Long.parseLong(id),"DRAFT",0);assertThat(jdbc.queryForObject("SELECT state FROM qua_portal_renewal WHERE qualification_id=?",String.class,Long.parseLong(id))).isEqualTo("PENDING");assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_withdrawal WHERE qualification_id=?",Long.class,Long.parseLong(id))).isZero();
+        withdrawCertificate(token,id,0,"重核原件",200);assertCertificateState(parent,"VALID",0);
+        assertThat(jdbc.queryForObject("SELECT state FROM qua_portal_renewal WHERE qualification_id=?",String.class,Long.parseLong(id))).isEqualTo("WITHDRAWN");
+        String replacement=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"retry-renewal"),parent,0,"WITHDRAW-RENEWAL"));assertThat(replacement).isNotEqualTo(id);assertCertificateState(parent,"VALID",0);
+    }
+    @Test void processedCertificateAndWithdrawnCorrectionCannotBeReopened()throws Exception{
+        var f=fixture();enableCertificates(f);certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),source=sourceForMaterials(f,token,"withdraw-correction",List.of(0));withdrawCertificate(token,source,0,"审核已拒绝",409);
+        String support=readyPortalUpload(token,"withdraw-support"),main=readyPortalUpload(token,"withdraw-corrected-main");String evidence=readyPortalUpload(token,"withdraw-correction-evidence");var command=withMaterials(withResponses(correctionCommand(f,main,source,1,"补齐后先自查"),List.of("已补清晰证照","已核对有效期")),List.of(material(0,evidence)));String child=profileJson.readTree(submitCertificate(token,command,200)).at("/data/id").asText();withdrawCertificate(token,child,0,"暂缓补正",200);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE qualification_id=?",Long.class,Long.parseLong(child))).isEqualTo(1);
+        submitCertificate(token,certificateCommand(f,evidence,"REUSE-WITHDRAWN-MATERIAL"),409);
+        submitCertificate(token,correctionCommand(f,support,source,1,"不能重开旧轮次"),409);submitCertificate(token,correctionCommand(f,support,child,1,"撤回不是拒绝"),409);assertCertificateState(Long.parseLong(source),"REJECTED",1);
+        String approved=profileJson.readTree(submitCertificate(token,certificateCommand(f,support,"APPROVE-BEFORE-WITHDRAW"),200)).at("/data/id").asText();reviewPortalCertificate(f,approved,true);withdrawCertificate(token,approved,0,"迟到撤回",409);assertCertificateState(Long.parseLong(approved),"VALID",1);
+        mvc.perform(post("/api/portal/auth/logout").header("Authorization","Bearer "+token)).andExpect(status().isOk());withdrawCertificate(token,child,0,"暂缓补正",401);
+    }
+    @Test void concurrentWithdrawalAndApprovalCommitExactlyOneDecision()throws Exception{
+        var f=fixture();enableCertificates(f);long parent=certificate(f,81,"VALID",60,false);String token=login(f).accessToken(),id=submitRenewal(token,renewalCommand(f,readyPortalUpload(token,"withdraw-race"),parent,0,"WITHDRAW-RACE"));
+        var executor=java.util.concurrent.Executors.newFixedThreadPool(2);var start=new java.util.concurrent.CountDownLatch(1);
+        try{
+            var withdrawal=executor.submit(()->{start.await();return mvc.perform(post("/api/portal/certificate-submissions/"+id+"/withdraw").header("Authorization","Bearer "+token).contentType("application/json").content("{\"version\":0,\"reason\":\"核验前自查\"}")).andReturn().getResponse().getStatus();});
+            var approval=executor.submit(()->{start.await();try{reviewPortalCertificate(f,id,true);return true;}catch(io.github.turbopro.ism.common.api.error.ApiException conflict){return false;}});
+            start.countDown();int result=withdrawal.get(20,java.util.concurrent.TimeUnit.SECONDS);boolean approved=approval.get(20,java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(result).isIn(200,409);assertThat(approved).isEqualTo(result==409);assertCertificateState(Long.parseLong(id),approved?"VALID":"WITHDRAWN",1);assertCertificateState(parent,approved?"SUPERSEDED":"VALID",approved?1:0);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_withdrawal WHERE qualification_id=?",Long.class,Long.parseLong(id))).isEqualTo(approved?0:1);
+        }finally{executor.shutdownNow();}
+    }
     @Test void supplierOrganizationCurrentReadBypassesEarlierSnapshot()throws Exception{
         var f=fixture();long organization=f.supplier()+40;
         jdbc.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,'CURRENT-ORG','当前组织','FACTORY','ACTIVE')",organization,f.tenant());

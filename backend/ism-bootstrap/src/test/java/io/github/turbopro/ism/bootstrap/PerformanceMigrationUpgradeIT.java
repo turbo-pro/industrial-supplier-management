@@ -38,6 +38,8 @@ class PerformanceMigrationUpgradeIT {
         assertThat(row.get("supplier_code")).isEqualTo("LEGACY_SUP");assertThat(row.get("supplier_name")).isEqualTo("历史供应商");
         assertThat(row.get("total_score").toString()).isEqualTo("88.50");assertThat(row.get("version")).isEqualTo(0);
         assertThat(jdbc.queryForObject("SELECT qualification_id FROM qua_portal_upload_use WHERE upload_id=9906 AND usage_kind='CERTIFICATE'",Long.class)).isEqualTo(9909L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_withdrawal",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM qua_supplier_qualification WHERE id=9909",String.class)).isEqualTo("DRAFT");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
 }

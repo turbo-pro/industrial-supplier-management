@@ -141,24 +141,32 @@ class PortalBrowserFixture {
         if(submissions){
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001 AND public_reviewed_at IS NOT NULL AND public_review_comment IS NOT NULL",Long.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_REVIEW_PUBLISH'",Long.class)).isEqualTo(4);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(8);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(8);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001",Long.class)).isEqualTo(4);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(9);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(9);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001",Long.class)).isEqualTo(5);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='VALID' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='REJECTED' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='SUPERSEDED' AND version=2",Long.class)).isEqualTo(1);
-            for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(8);
-            for(String action:List.of("PORTAL_CERTIFICATE_SUBMIT","PORTAL_CERTIFICATE_RENEWAL_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(1);
+            for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(9);
+            for(String action:List.of("PORTAL_CERTIFICATE_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT'",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction c JOIN qua_supplier_qualification q ON q.id=c.predecessor_id WHERE c.tenant_id=21001 AND c.round_no=1 AND q.status='REJECTED' AND q.version=1",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001 AND correction_due_date IS NOT NULL AND JSON_LENGTH(correction_requirements)=2",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=21001 AND source_due_date IS NOT NULL AND JSON_LENGTH(source_requirements)=2 AND JSON_LENGTH(correction_responses)=2 AND late_flag=0",Long.class)).isEqualTo(2);
             for(String state:List.of("APPROVED","REJECTED"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=21001 AND state=?",Long.class,state)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE tenant_id=21001",Long.class)).isEqualTo(4);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=21001",Long.class)).isEqualTo(8);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=21001",Long.class)).isEqualTo(9);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='QUALIFICATION_CORRECTION_ATTACHMENT_OPEN'",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CORRECTION_ATTACHMENT_OPEN'",Long.class)).isEqualTo(1);
         }
+        if(submissions){
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_withdrawal WHERE tenant_id=21001 AND source_version=0 AND reason='原件需要重新核对'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='WITHDRAWN' AND version=1 AND verified_at IS NULL",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=21001 AND state='WITHDRAWN' AND pending_parent_id IS NULL",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_WITHDRAW'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification q JOIN qua_portal_renewal r ON r.parent_id=q.id WHERE r.tenant_id=21001 AND r.state='WITHDRAWN' AND q.status='VALID' AND q.version=1",Long.class)).isEqualTo(1);
+        }
+        if(submissions)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_RENEWAL_SUBMIT'",Long.class)).isEqualTo(2);
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT address FROM sup_supplier WHERE id=21005",String.class)).isEqualTo("批准后的工业园地址");

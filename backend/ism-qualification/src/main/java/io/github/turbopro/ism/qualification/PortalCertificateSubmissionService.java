@@ -16,10 +16,10 @@ public class PortalCertificateSubmissionService {
     private final OperationIdGenerator ids;private final AuditService audit;private final ObjectMapper json;
     public PortalCertificateSubmissionService(PortalCertificateSubmissionMapper mapper,QualificationMapper qualifications,PortalWriteGuard guard,PortalModuleAccessGate modules,PortalQualificationUploadReference uploads,OperationIdGenerator ids,AuditService audit,ObjectMapper json){this.mapper=mapper;this.qualifications=qualifications;this.guard=guard;this.modules=modules;this.uploads=uploads;this.ids=ids;this.audit=audit;this.json=json;}
     @Transactional(readOnly=true) public List<PortalCertificateSubmissionModels.Type> types(){var i=identity();return qualifications.types(i.tenantId()).stream().filter(t->t.status().equals("ACTIVE")).map(t->new PortalCertificateSubmissionModels.Type(Long.toString(t.id()),t.typeCode(),t.typeName(),t.validityRequired())).toList();}
-    @Transactional(readOnly=true) public PortalCertificateSubmissionModels.Page list(int page,int size){var i=identity();if(page<0||page>10000||size<1||size>100)throw invalid("分页参数无效");return new PortalCertificateSubmissionModels.Page(mapper.count(i.tenantId(),i.supplierId()),page,size,mapper.list(i.tenantId(),i.supplierId(),page*size,size));}
+    @Transactional(readOnly=true) public PortalCertificateSubmissionModels.Page list(int page,int size){var i=identity();if(page<0||page>10000||size<1||size>100)throw invalid("分页参数无效");return new PortalCertificateSubmissionModels.Page(mapper.count(i.tenantId(),i.supplierId()),page,size,mapper.list(i.tenantId(),i.supplierId(),i.accountId(),page*size,size));}
     @Transactional public PortalCertificateSubmissionModels.View submit(PortalCertificateSubmissionModels.Submit command){
         guard.lockCurrent();var i=identity();String request=write(command);var previous=mapper.byKey(i.tenantId(),i.supplierId(),command.requestKey());
-        if(previous!=null){if(previous.accountId()!=i.accountId()||!same(previous.requestJson(),command))throw new ApiException(CommonErrorCode.CONFLICT,"提交标识已用于其他内容");return mapper.find(i.tenantId(),i.supplierId(),previous.qualificationId());}
+        if(previous!=null){if(previous.accountId()!=i.accountId()||!same(previous.requestJson(),command))throw new ApiException(CommonErrorCode.CONFLICT,"提交标识已用于其他内容");return mapper.find(i.tenantId(),i.supplierId(),previous.qualificationId(),i.accountId());}
         boolean correction=command.correctionOfId()!=null;
         if(!correction&&!command.correctionAttachments().isEmpty())throw invalid("材料附件必须关联补正来源");
         if(command.correctionAttachments().size()>5)throw invalid("每轮补正最多5份附件");
@@ -71,7 +71,27 @@ public class PortalCertificateSubmissionService {
             for(var material:command.correctionAttachments()){var ready=uploads.requireReady(id(material.uploadId()));mapper.consumeUpload(id(material.uploadId()),i.tenantId(),i.supplierId(),qualificationId,"MATERIAL");mapper.insertAttachment(ids.nextId(),i.tenantId(),i.supplierId(),qualificationId,material.requirementIndex(),id(material.uploadId()),ready.fileId(),ready.fileName());}
         }catch(org.springframework.dao.DuplicateKeyException e){throw new ApiException(CommonErrorCode.CONFLICT,"证书编号重复、原件已使用或原申请已有后续补正");}
         audit.append(new AuditService.AuditCommand(correction?"PORTAL_CERTIFICATE_CORRECTION_SUBMIT":renewal?"PORTAL_CERTIFICATE_RENEWAL_SUBMIT":"PORTAL_CERTIFICATE_SUBMIT","QUALIFICATION",qualificationId,null,Map.of(),Map.of("supplierId",i.supplierId()),null,null));
-        return mapper.find(i.tenantId(),i.supplierId(),qualificationId);
+        return mapper.find(i.tenantId(),i.supplierId(),qualificationId,i.accountId());
+    }
+    @Transactional public PortalCertificateSubmissionModels.View withdraw(long id,PortalCertificateSubmissionModels.Withdraw command){
+        guard.lockCurrent();var i=identity();
+        var target=mapper.lockWithdrawalTarget(i.tenantId(),i.supplierId(),id);
+        // Do not reveal another submitter's identity or permit company colleagues to cancel their work.
+        if(target==null||target.accountId()!=i.accountId())throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(command.version()==null||command.version()<0||command.reason()==null||command.reason().isBlank()||command.reason().length()>500)throw invalid("请填写500字以内的撤回原因和当前版本");
+        String reason=command.reason().trim();var previous=mapper.withdrawal(i.tenantId(),id);
+        if(previous!=null){
+            if(previous.accountId()!=i.accountId()||previous.sourceVersion()!=command.version()||!previous.reason().equals(reason))throw new ApiException(CommonErrorCode.CONFLICT,"撤回记录与本次请求不同，请刷新核查");
+            return mapper.find(i.tenantId(),i.supplierId(),id,i.accountId());
+        }
+        if(!target.status().equals("DRAFT")||target.version()!=command.version())throw new ApiException(CommonErrorCode.CONFLICT,"申请已被处理或版本已变化，请刷新核查");
+        var renewal=qualifications.lockRenewal(i.tenantId(),id);
+        if(renewal!=null&&!renewal.state().equals("PENDING"))throw new ApiException(CommonErrorCode.CONFLICT,"换证申请已处理");
+        if(mapper.withdraw(i.tenantId(),i.supplierId(),id,i.accountId(),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+        if(renewal!=null&&qualifications.finishRenewal(i.tenantId(),id,"WITHDRAWN")!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.recordWithdrawal(i.tenantId(),i.supplierId(),id,i.accountId(),command.version(),reason);
+        audit.append(new AuditService.AuditCommand("PORTAL_CERTIFICATE_WITHDRAW","QUALIFICATION",id,null,Map.of("status","DRAFT","version",command.version()),Map.of("status","WITHDRAWN","reason",reason),null,null));
+        return mapper.find(i.tenantId(),i.supplierId(),id,i.accountId());
     }
     private PortalIdentityContext.Identity identity(){var i=PortalIdentityContext.require();modules.requireAvailable("QUALIFICATION");return i;}
     private long id(String value){try{return Long.parseLong(value);}catch(NumberFormatException e){throw invalid("标识无效");}}

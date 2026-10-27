@@ -5,6 +5,7 @@ defineProps<{ value: components['schemas']['Qualification'] }>();
 </script>
 <template>
   <div class="correction-policy">
+    <template v-if="value.status === 'WITHDRAWN'"><p>供应商已撤回，本申请不再核验。</p><p v-if="value.withdrawnAt">撤回时间（北京时间）：{{ new Date(value.withdrawnAt).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false}) }}</p><p class="response">撤回原因：{{ value.withdrawalReason }}</p></template>
     <p v-if="value.correctionDueDate">补正期限（北京时间当日结束）：{{ value.correctionDueDate }}</p>
     <ol v-if="value.correctionRequirements?.length"><li v-for="(item,index) in value.correctionRequirements" :key="index">{{ item }}{{value.attachmentRequiredFor?.includes(index)?'（附件必交）':''}}</li></ol>
     <CorrectionAttachmentList v-if="value.correctionOfId" :key="value.id" :qualification-id="value.id"/>

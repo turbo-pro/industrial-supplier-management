@@ -7,6 +7,7 @@ import java.util.*;
 
 @Mapper
 public interface QualificationMapper extends TenantScopedMapper {
+    @Select("SELECT reason,withdrawn_at FROM qua_portal_withdrawal WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") QualificationModels.WithdrawalInfo withdrawalInfo(long tenantId,long id);
     @Select("SELECT file_id FROM qua_correction_attachment WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") List<Long> correctionFiles(long tenantId,long id);
     @Select("SELECT CAST(predecessor_id AS CHAR) correction_of_id,round_no correction_round,correction_note,source_due_date,source_requirements source_requirements_json,correction_responses responses_json,late_flag late_correction,source_attachment_required attachment_required_json FROM qua_portal_correction WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") PortalCertificateSubmissionModels.CorrectionInfo correctionInfo(long tenantId,long id);
     @Select("SELECT correction_due_date due_date,correction_requirements requirements_json,correction_attachment_required attachment_required_json FROM qua_portal_submission WHERE tenant_id=#{tenantId} AND qualification_id=#{id}") PortalCertificateSubmissionModels.ReviewPolicy reviewPolicy(long tenantId,long id);

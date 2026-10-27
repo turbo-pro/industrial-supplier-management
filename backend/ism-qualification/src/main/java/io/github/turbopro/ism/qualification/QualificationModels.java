@@ -7,7 +7,7 @@ import java.util.List;
 public final class QualificationModels {
     private QualificationModels() {}
     public enum TypeStatus { ACTIVE, DISABLED }
-    public enum Status { DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED }
+    public enum Status { DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED, WITHDRAWN }
     public enum Decision { APPROVE, REJECT }
     public record SaveType(@NotBlank @Pattern(regexp="[A-Z][A-Z0-9_]{1,63}") String code,@NotBlank @Size(max=100) String name,
         @NotBlank @Pattern(regexp="[A-Z][A-Z0-9_]{1,63}") String category,boolean validityRequired,
@@ -32,6 +32,7 @@ public final class QualificationModels {
         String certificateNo,LocalDate expiryDate,boolean permanent,Status status,int daysUntilExpiry,int version,LocalDateTime updatedAt) {}
     public record View(String id,String organizationId,String supplierId,String supplierCode,String supplierName,String typeId,String typeCode,String typeName,String parentQualificationId,
         String certificateNo,String issuingAuthority,LocalDate issueDate,LocalDate effectiveDate,LocalDate expiryDate,boolean permanent,int warningDays,String fileId,Status status,
-        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment,String correctionOfId,int correctionRound,String correctionNote,LocalDate correctionDueDate,List<String> correctionRequirements,LocalDate sourceCorrectionDueDate,List<String> sourceCorrectionRequirements,List<String> correctionResponses,boolean lateCorrection,List<Integer> attachmentRequiredFor,List<Integer> sourceAttachmentRequiredFor) {}
+        String verificationComment,String verifiedBy,LocalDateTime verifiedAt,String revokedReason,int version,LocalDateTime createdAt,LocalDateTime updatedAt,boolean portalSubmission,String publicReviewComment,String correctionOfId,int correctionRound,String correctionNote,LocalDate correctionDueDate,List<String> correctionRequirements,LocalDate sourceCorrectionDueDate,List<String> sourceCorrectionRequirements,List<String> correctionResponses,boolean lateCorrection,List<Integer> attachmentRequiredFor,List<Integer> sourceAttachmentRequiredFor,String withdrawalReason,@com.fasterxml.jackson.annotation.JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") LocalDateTime withdrawnAt) {}
+    public record WithdrawalInfo(String reason,LocalDateTime withdrawnAt) {}
     public record Page(long total,int page,int size,List<Summary> items) {}
 }

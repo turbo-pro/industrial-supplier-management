@@ -20,7 +20,7 @@ const query=reactive<{keyword:string;status?:Status;page:number;size:number}>({k
 const form=reactive({supplierId:'',typeId:'',certificateNo:'',issuingAuthority:'',issueDate:'',effectiveDate:'',expiryDate:'',permanent:false,warningDays:30,fileId:''});
 const amend=reactive({certificateNo:'',issuingAuthority:'',issueDate:'',effectiveDate:'',expiryDate:'',permanent:false,warningDays:30,fileId:''});
 const typeForm=reactive({code:'',name:'',category:'LEGAL',validityRequired:true,defaultWarningDays:30,description:''});
-const statusNames={DRAFT:'待核验',VALID:'有效',EXPIRING:'即将到期',EXPIRED:'已过期',REJECTED:'核验拒绝',REVOKED:'已撤销',SUPERSEDED:'已被替代'};
+const statusNames={DRAFT:'待核验',VALID:'有效',EXPIRING:'即将到期',EXPIRED:'已过期',REJECTED:'核验拒绝',REVOKED:'已撤销',SUPERSEDED:'已被替代',WITHDRAWN:'已撤回'};
 async function load(){loading.value=true;const {data}=await session.client.GET('/qualifications',{params:{query:{keyword:query.keyword||undefined,status:query.status,page:query.page,size:query.size}}});loading.value=false;const page=data?.data;if(!page){ElMessage.error('资质台账加载失败');return;}rows.value=page.items;total.value=page.total;}
 async function loadTypes(){const {data}=await session.client.GET('/qualifications/types');types.value=data?.data??[];}
 async function openCreate(){await Promise.all([loadTypes(),session.client.GET('/suppliers',{params:{query:{page:0,size:100}}}).then(({data})=>suppliers.value=data?.data?.items??[])]);Object.assign(form,{supplierId:'',typeId:'',certificateNo:'',issuingAuthority:'',issueDate:'',effectiveDate:'',expiryDate:'',permanent:false,warningDays:30,fileId:''});dialog.value=true;}

@@ -14,5 +14,6 @@ public class PortalCertificateSubmissionController {
     @GetMapping("/types") ResponseEntity<ApiResponse<List<PortalCertificateSubmissionModels.Type>>> types(){return reply(service.types());}
     @GetMapping ResponseEntity<ApiResponse<PortalCertificateSubmissionModels.Page>> list(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size){return reply(service.list(page,size));}
     @PostMapping ResponseEntity<ApiResponse<PortalCertificateSubmissionModels.View>> submit(@Valid @RequestBody PortalCertificateSubmissionModels.Submit command){return reply(service.submit(command));}
+    @PostMapping("/{id}/withdraw") ResponseEntity<ApiResponse<PortalCertificateSubmissionModels.View>> withdraw(@PathVariable long id,@Valid @RequestBody PortalCertificateSubmissionModels.Withdraw command){return reply(service.withdraw(id,command));}
     private <T> ResponseEntity<ApiResponse<T>> reply(T value){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(value));}
 }

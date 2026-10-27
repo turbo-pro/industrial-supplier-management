@@ -353,7 +353,7 @@ paths:
     post:
       operationId: submitOwnPortalCertificate
       tags: [Supplier Portal]
-      description: Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. No withdrawal or public internal review comments.
+      description: Creates an immutable certificate DRAFT for employee verification. Optional renewalParentId and renewalParentVersion must be supplied together for renewal of a currently verified own-enterprise certificate of the same type. At most one pending portal renewal per original; submit/rejection never replace the original. Approval atomically supersedes the unchanged original and verifies the replacement. Future-effective/expired replacements are rejected (no scheduled activation). Only completed unexpired own-account uploads may be consumed once. Same request key/account/normalized command replay; different reuse conflicts. Linked correction requires latest own rejected portal source ID/version and nonblank correctionNote, same type, new owned upload, at most one successor per source. Root and round are server-derived; renewal parent/version are inherited and cannot be overridden. Rejected originals and all files remain immutable. Pending requests may be withdrawn only by their original submitter through the dedicated versioned withdrawal endpoint. Internal review comments remain private.
       security: [{ portalBearer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmit' } } } }
       responses:
@@ -365,6 +365,24 @@ paths:
         '409': { $ref: '#/components/responses/ApiFailure' }
         '410': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /portal/certificate-submissions/{id}/withdraw:
+    post:
+      operationId: withdrawOwnPortalCertificateSubmission
+      tags: [Supplier Portal]
+      description: Only the submitting account can withdraw a pending request. Same original version and trimmed reason replay safely; changed payload, processed request or stale version conflicts. Preserves uploaded evidence and correction history, releases pending renewal slot without changing original certificate. Never returns internal review notes.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateWithdraw' } } }
+      responses:
+        '200': { description: Withdrawn or identical replay; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/PortalCertificateSubmissionResponse' } } } }
+        '400': { description: Invalid reason or version }
+        '401': { description: Invalid or revoked portal session }
+        '403': { description: Qualification module unavailable }
+        '404': { description: Request not submitted by current account }
+        '409': { description: Processed request, stale version or changed replay }
   /portal/qualifications:
     get:
       operationId: listOwnPortalQualifications
@@ -2941,13 +2959,13 @@ components:
                   validityRequired: { type: boolean }
     PortalCertificateSubmission:
       type: object
-      required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt, typeId, permanent, version, correctionRootId, correctionRound]
+      required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt, typeId, permanent, version, correctionRootId, correctionRound, withdrawable]
       properties:
         id: { type: string }
         requestKey: { type: string }
         typeName: { type: string }
         certificateNo: { type: string }
-        status: { type: string, enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED] }
+        status: { type: string, enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED, WITHDRAWN] }
         fileName: { type: string }
         submittedAt: { type: string, format: date-time }
         parentQualificationId: { type: string, nullable: true }
@@ -2975,6 +2993,15 @@ components:
         correctionOverdue: { type: boolean, description: Current unconsumed rejected source is past its Beijing date target. Does not block submission. }
         attachmentRequiredFor: { type: array, items: { type: integer } }
         sourceAttachmentRequiredFor: { type: array, items: { type: integer } }
+        withdrawable: { type: boolean, description: Pending request submitted by the current portal account. Server independently rechecks authorization and version. }
+        withdrawalReason: { type: string, nullable: true, maxLength: 500 }
+        withdrawnAt: { type: string, format: date-time, nullable: true, description: UTC instant with Z suffix. }
+    PortalCertificateWithdraw:
+      type: object
+      required: [version, reason]
+      properties:
+        version: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
     PortalCertificateSubmissionResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }
@@ -3544,7 +3571,7 @@ components:
       enum: [ACTIVE, DISABLED]
     QualificationStatus:
       type: string
-      enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED]
+      enum: [DRAFT, VALID, EXPIRING, EXPIRED, REJECTED, REVOKED, SUPERSEDED, WITHDRAWN]
     SaveQualificationType:
       type: object
       required: [code, name, category, validityRequired, defaultWarningDays, status, version]
@@ -3613,6 +3640,8 @@ components:
             correctionOfId: { type: string, nullable: true }
             correctionRound: { type: integer, minimum: 0 }
             correctionNote: { type: string, nullable: true }
+            withdrawalReason: { type: string, nullable: true, maxLength: 500 }
+            withdrawnAt: { type: string, format: date-time, nullable: true, description: UTC instant with Z suffix. }
             portalSubmission: { type: boolean, description: Whether the certificate originated from the supplier portal. }
             publicReviewComment: { type: string, nullable: true, maxLength: 1000 }
             verifiedBy: { type: string }
