@@ -328,6 +328,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admissions/{id}/material-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdmissionMaterialRequests"];
+        put?: never;
+        /** @description Requires admission view and apply plus data scope. Publishes only selected material names and explicit external instruction. No internal file or review is disclosed. At most one open/submitted request; stale application versions conflict. */
+        post: operations["publishAdmissionMaterialRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admission-material-requests/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires admission view and apply plus data scope. Rechecks unchanged application version and current files, then updates only requested material file references atomically. Does not submit or approve admission; existing admission workflow remains required. */
+        post: operations["acceptAdmissionMaterialRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admission-material-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelAdmissionMaterialRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/admission-material-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOwnAdmissionMaterialRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/admission-material-requests/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description All requested types with one completed current-account upload each. Shared upload transport is certificate-uploads; same QUALIFICATION entitlement and account/company quotas apply. Upload consumption is global across certificate originals, correction attachments and admission materials. Same account/version/materials replay safely, including after acceptance; changed requests conflict. Does not change internal admission until an employee accepts. */
+        post: operations["submitAdmissionMaterialRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/admission-material-requests/{id}/materials/{type}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadOwnAdmissionRequestMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admission-material-requests/{id}/materials/{type}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires admission view, file download permission and admission data scope. */
+        get: operations["downloadAdmissionRequestMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/qualifications": {
         parameters: {
             query?: never;
@@ -3713,6 +3829,65 @@ export interface components {
                 name: string;
                 validityRequired: boolean;
             }[];
+        };
+        PublishAdmissionMaterialRequest: {
+            version: number;
+            instruction: string;
+            types: string[];
+        };
+        AdmissionMaterialRequestVersion: {
+            version: number;
+        };
+        CancelAdmissionMaterialRequest: {
+            version: number;
+            /** @description Supplier-visible cancellation explanation. */
+            reason: string;
+        };
+        SubmitAdmissionMaterialRequest: {
+            version: number;
+            materials: {
+                type: string;
+                uploadId: string;
+            }[];
+        };
+        AdmissionMaterialRequest: {
+            id: string;
+            applicationNo: string;
+            instruction: string;
+            /** @enum {string} */
+            state: "OPEN" | "SUBMITTED" | "ACCEPTED" | "CANCELLED";
+            version: number;
+            closeNote?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC instant with Z suffix.
+             */
+            createdAt: string;
+            /** Format: date-time */
+            submittedAt?: string | null;
+            items: {
+                type: string;
+                name: string;
+                fileName?: string | null;
+            }[];
+        };
+        AdmissionMaterialRequestResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AdmissionMaterialRequest"];
+        };
+        AdmissionMaterialRequestListResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                canManage: boolean;
+                canDownload: boolean;
+                items: components["schemas"]["AdmissionMaterialRequest"][];
+            };
+        };
+        AdmissionMaterialRequestPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["AdmissionMaterialRequest"][];
+            };
         };
         PortalCertificateSubmission: {
             id: string;
@@ -7401,6 +7576,241 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listAdmissionMaterialRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestListResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    publishAdmissionMaterialRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishAdmissionMaterialRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    acceptAdmissionMaterialRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdmissionMaterialRequestVersion"];
+            };
+        };
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    cancelAdmissionMaterialRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelAdmissionMaterialRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnAdmissionMaterialRequests: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    submitAdmissionMaterialRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitAdmissionMaterialRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionMaterialRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    downloadOwnAdmissionRequestMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    downloadAdmissionRequestMaterial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized result; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     listOwnPortalQualifications: {

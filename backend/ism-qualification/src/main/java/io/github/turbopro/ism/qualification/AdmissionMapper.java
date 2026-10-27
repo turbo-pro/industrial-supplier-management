@@ -7,6 +7,7 @@ import java.util.*;
 
 @Mapper
 public interface AdmissionMapper extends TenantScopedMapper {
+    @Select("SELECT id FROM qua_admission_application WHERE tenant_id=#{tenantId} AND id=#{id} FOR UPDATE") Long lockApplication(long tenantId,long id);
     String SCOPE="<choose><when test=\"scopeType == 'TENANT_ALL'\"></when><when test=\"scopeType == 'ORGANIZATION_SET'\"> AND a.organization_id IN <foreach collection='organizationIds' item='o' open='(' separator=',' close=')'>#{o}</foreach></when><when test=\"scopeType == 'CREATED'\"> AND a.created_by=#{actorId}</when><otherwise> AND 1=0</otherwise></choose>";
     String FILTER="<if test='keyword != null and keyword != &quot;&quot;'> AND (a.application_no LIKE #{keyword} ESCAPE '=' OR s.supplier_code LIKE #{keyword} ESCAPE '=' OR s.supplier_name LIKE #{keyword} ESCAPE '=')</if><if test='status != null and status != &quot;&quot;'> AND a.status=#{status}</if>";
     @Select("<script>SELECT COUNT(*) FROM qua_admission_application a JOIN sup_supplier s ON s.id=a.supplier_id AND s.tenant_id=a.tenant_id WHERE a.tenant_id=#{tenantId}"+SCOPE+FILTER+"</script>")

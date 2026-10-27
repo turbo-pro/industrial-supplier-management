@@ -40,6 +40,8 @@ class PerformanceMigrationUpgradeIT {
         assertThat(jdbc.queryForObject("SELECT qualification_id FROM qua_portal_upload_use WHERE upload_id=9906 AND usage_kind='CERTIFICATE'",Long.class)).isEqualTo(9909L);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_withdrawal",Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT status FROM qua_supplier_qualification WHERE id=9909",String.class)).isEqualTo("DRAFT");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_portal_request",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE upload_id=9906 AND admission_request_id IS NULL AND qualification_id=9909",Long.class)).isEqualTo(1);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
 }

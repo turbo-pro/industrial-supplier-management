@@ -94,11 +94,17 @@ class PortalBrowserFixture {
         }
         if(submissions){
             jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21008,id FROM sys_permission WHERE status='ACTIVE' AND module_code='QUALIFICATION'");
-            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21009,id FROM sys_permission WHERE status='ACTIVE' AND permission_code='supplier:qualification:view'");
+            jdbc.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) SELECT 21001,21009,id FROM sys_permission WHERE status='ACTIVE' AND permission_code IN ('supplier:qualification:view','supplier:admission:view','supplier:admission:review')");
             for(int index=0;index<2;index++){
                 jdbc.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(21001,?,'supplier:qualification','TENANT_ALL')",21008+index);
+                jdbc.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(21001,?,'supplier:admission','TENANT_ALL')",21008+index);
+                jdbc.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT 21001,?,id FROM sys_menu WHERE menu_code='SUPPLIER_ADMISSION'",21008+index);
                 jdbc.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) SELECT 21001,?,id FROM sys_menu WHERE menu_code='SUPPLIER_QUALIFICATION'",21008+index);
             }
+        }
+        if(submissions){
+            jdbc.update("INSERT INTO qua_admission_application(id,tenant_id,organization_id,supplier_id,application_no,purchase_category,admission_reason,expected_annual_amount,currency,created_by,updated_by) VALUES(21200,21001,21004,21005,'ADM-BROWSER','化工原料','PRIVATE_ADMISSION_REASON',12345,'CNY',21006,21006)");
+            jdbc.update("INSERT INTO qua_admission_material(id,tenant_id,application_id,material_type,material_name,required_flag,provided_flag,remark,sort_order) VALUES(21201,21001,21200,'BUSINESS_LICENSE','营业执照',1,0,'PRIVATE_MATERIAL_REMARK',10),(21202,21001,21200,'INTERNAL','内部评估',0,0,'PRIVATE_INTERNAL_REMARK',20)");
         }
         if(exit){
             jdbc.update("INSERT INTO plt_package_module(package_version_id,module_id,enabled,quota_json) SELECT 21003,id,1,JSON_OBJECT() FROM plt_module WHERE module_code='RESTRICTION'");
@@ -141,13 +147,13 @@ class PortalBrowserFixture {
         if(submissions){
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001 AND public_reviewed_at IS NOT NULL AND public_review_comment IS NOT NULL",Long.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_REVIEW_PUBLISH'",Long.class)).isEqualTo(4);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(9);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(9);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_portal_upload WHERE tenant_id=21001",Long.class)).isEqualTo(10);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM res_upload_session WHERE tenant_id=21001 AND status='COMPLETED'",Long.class)).isEqualTo(10);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_submission WHERE tenant_id=21001",Long.class)).isEqualTo(5);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='VALID' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='REJECTED' AND verified_by=21006 AND version=1",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification WHERE tenant_id=21001 AND status='SUPERSEDED' AND version=2",Long.class)).isEqualTo(1);
-            for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(9);
+            for(String action:List.of("PORTAL_UPLOAD_INITIALIZE","PORTAL_UPLOAD_COMPLETE"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(10);
             for(String action:List.of("PORTAL_CERTIFICATE_SUBMIT"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=? AND operator_id=(SELECT id FROM iam_portal_account WHERE tenant_id=21001)",Long.class,action)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_CORRECTION_SUBMIT'",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction c JOIN qua_supplier_qualification q ON q.id=c.predecessor_id WHERE c.tenant_id=21001 AND c.round_no=1 AND q.status='REJECTED' AND q.version=1",Long.class)).isEqualTo(2);
@@ -155,7 +161,7 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_correction WHERE tenant_id=21001 AND source_due_date IS NOT NULL AND JSON_LENGTH(source_requirements)=2 AND JSON_LENGTH(correction_responses)=2 AND late_flag=0",Long.class)).isEqualTo(2);
             for(String state:List.of("APPROVED","REJECTED"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_renewal WHERE tenant_id=21001 AND state=?",Long.class,state)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_correction_attachment WHERE tenant_id=21001",Long.class)).isEqualTo(4);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=21001",Long.class)).isEqualTo(9);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=21001",Long.class)).isEqualTo(10);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='QUALIFICATION_CORRECTION_ATTACHMENT_OPEN'",Long.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CORRECTION_ATTACHMENT_OPEN'",Long.class)).isEqualTo(1);
         }
@@ -167,6 +173,15 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_supplier_qualification q JOIN qua_portal_renewal r ON r.parent_id=q.id WHERE r.tenant_id=21001 AND r.state='WITHDRAWN' AND q.status='VALID' AND q.version=1",Long.class)).isEqualTo(1);
         }
         if(submissions)assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='PORTAL_CERTIFICATE_RENEWAL_SUBMIT'",Long.class)).isEqualTo(2);
+        if(submissions){
+            assertThat(jdbc.queryForObject("SELECT status FROM qua_admission_application WHERE id=21200",String.class)).isEqualTo("APPROVED");
+            assertThat(jdbc.queryForObject("SELECT version FROM qua_admission_application WHERE id=21200",Integer.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT state FROM qua_admission_portal_request WHERE application_id=21200",String.class)).isEqualTo("ACCEPTED");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE tenant_id=21001 AND admission_request_id IS NOT NULL AND qualification_id IS NULL AND usage_kind='ADMISSION'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT remark FROM qua_admission_material WHERE application_id=21200 AND material_type='INTERNAL'",String.class)).isEqualTo("PRIVATE_INTERNAL_REMARK");
+            for(String action:List.of("ADMISSION_PORTAL_PUBLISH","ADMISSION_PORTAL_SUBMIT","ADMISSION_PORTAL_ACCEPT","ADMISSION_PORTAL_FILE_OPEN","ADMISSION_EMPLOYEE_FILE_OPEN"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=?",Long.class,action)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT operator_id FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_REVIEW'",Long.class)).isEqualTo(21007);
+        }
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT address FROM sup_supplier WHERE id=21005",String.class)).isEqualTo("批准后的工业园地址");

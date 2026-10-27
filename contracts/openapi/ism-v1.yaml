@@ -383,6 +383,128 @@ paths:
         '403': { description: Qualification module unavailable }
         '404': { description: Request not submitted by current account }
         '409': { description: Processed request, stale version or changed replay }
+  /admissions/{id}/material-requests:
+    get:
+      operationId: listAdmissionMaterialRequests
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestListResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: publishAdmissionMaterialRequest
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Requires admission view and apply plus data scope. Publishes only selected material names and explicit external instruction. No internal file or review is disclosed. At most one open/submitted request; stale application versions conflict.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PublishAdmissionMaterialRequest' } } } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /admission-material-requests/{id}/accept:
+    post:
+      operationId: acceptAdmissionMaterialRequest
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Requires admission view and apply plus data scope. Rechecks unchanged application version and current files, then updates only requested material file references atomically. Does not submit or approve admission; existing admission workflow remains required.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestVersion' } } } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /admission-material-requests/{id}/cancel:
+    post:
+      operationId: cancelAdmissionMaterialRequest
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CancelAdmissionMaterialRequest' } } } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /portal/admission-material-requests:
+    get:
+      operationId: listOwnAdmissionMaterialRequests
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /portal/admission-material-requests/{id}/submit:
+    post:
+      operationId: submitAdmissionMaterialRequest
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      description: All requested types with one completed current-account upload each. Shared upload transport is certificate-uploads; same QUALIFICATION entitlement and account/company quotas apply. Upload consumption is global across certificate originals, correction attachments and admission materials. Same account/version/materials replay safely, including after acceptance; changed requests conflict. Does not change internal admission until an employee accepts.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitAdmissionMaterialRequest' } } } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionMaterialRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /portal/admission-material-requests/{id}/materials/{type}/content:
+    get:
+      operationId: downloadOwnAdmissionRequestMaterial
+      tags: [Supplier Portal]
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+        - { name: type, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /admission-material-requests/{id}/materials/{type}/content:
+    get:
+      operationId: downloadAdmissionRequestMaterial
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Requires admission view, file download permission and admission data scope.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+        - { name: type, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Authorized result; no-store, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /portal/qualifications:
     get:
       operationId: listOwnPortalQualifications
@@ -2957,6 +3079,74 @@ components:
                   code: { type: string }
                   name: { type: string }
                   validityRequired: { type: boolean }
+    PublishAdmissionMaterialRequest:
+      type: object
+      required: [version, instruction, types]
+      properties:
+        version: { type: integer, minimum: 0 }
+        instruction: { type: string, minLength: 1, maxLength: 1000 }
+        types: { type: array, minItems: 1, maxItems: 5, uniqueItems: true, items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' } }
+    AdmissionMaterialRequestVersion:
+      type: object
+      required: [version]
+      properties: { version: { type: integer, minimum: 0 } }
+    CancelAdmissionMaterialRequest:
+      type: object
+      required: [version, reason]
+      properties: { version: { type: integer, minimum: 0 }, reason: { type: string, minLength: 1, maxLength: 500, description: Supplier-visible cancellation explanation. } }
+    SubmitAdmissionMaterialRequest:
+      type: object
+      required: [version, materials]
+      properties:
+        version: { type: integer, minimum: 0 }
+        materials:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            type: object
+            required: [type, uploadId]
+            properties: { type: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }, uploadId: { type: string, pattern: '^[1-9][0-9]{0,18}$' } }
+    AdmissionMaterialRequest:
+      type: object
+      required: [id, applicationNo, instruction, state, version, createdAt, items]
+      properties:
+        id: { type: string }
+        applicationNo: { type: string }
+        instruction: { type: string }
+        state: { type: string, enum: [OPEN, SUBMITTED, ACCEPTED, CANCELLED] }
+        version: { type: integer }
+        closeNote: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time, description: UTC instant with Z suffix. }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            required: [type, name]
+            properties: { type: { type: string }, name: { type: string }, fileName: { type: string, nullable: true } }
+    AdmissionMaterialRequestResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AdmissionMaterialRequest' } } }]
+    AdmissionMaterialRequestListResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [canManage, canDownload, items]
+              properties: { canManage: { type: boolean }, canDownload: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionMaterialRequest' } } }
+    AdmissionMaterialRequestPageResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [total, page, size, items]
+              properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionMaterialRequest' } } }
     PortalCertificateSubmission:
       type: object
       required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt, typeId, permanent, version, correctionRootId, correctionRound, withdrawable]

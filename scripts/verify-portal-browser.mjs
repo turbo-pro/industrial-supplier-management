@@ -12,7 +12,7 @@ writeFileSync(script, readFileSync('scripts/browser/portal-real-auth.js', 'utf8'
 const session = `ism-portal-real-${process.pid}`;
 function cli(args, quiet = false) {
   // run-code prints source including the test invitation; do not persist that output.
-  const result = spawnSync('npx', ['--yes', '--package', '@playwright/cli@0.1.22', 'playwright-cli', `-s=${session}`, ...args], { encoding: 'utf8', timeout: 120_000 });
+  const result = spawnSync('npx', ['--yes', '--package', '@playwright/cli@0.1.22', 'playwright-cli', `-s=${session}`, ...args], { encoding: 'utf8', timeout: scenario==='submissions'?240_000:120_000 });
   if (!quiet) process.stdout.write(result.stdout ?? '');
   if (result.error || result.status !== 0 || /### Error/.test(result.stdout ?? '')) {
     const detail=(result.stdout?.split('### Error')[1]?.split('### ')[0] || result.error?.message || 'nonzero exit')
