@@ -2238,6 +2238,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 仅当前租户的任务发起人可操作，需要 task:center:operate。排队任务立即取消并记录结束时间；运行任务登记取消请求，在执行器下一个安全检查点终结为 CANCELLED，此后不能发布成功结果。按任务版本校验，重复取消或状态变化返回 409；他人或其他租户的任务返回 404。 */
         post: operations["cancelMyTask"];
         delete?: never;
         options?: never;
@@ -2254,6 +2255,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description 仅当前租户的任务发起人可操作，需要 task:center:operate。仅 FAILED 或 CANCELLED 可按当前版本重新排队，每次成功重试将 retryCount 加一，上限三次；清除旧结果引用、进度、取消标记、错误和执行时间。旧执行的租约不能影响重试任务；他人或其他租户的任务返回 404。 */
         post: operations["retryMyTask"];
         delete?: never;
         options?: never;
@@ -11491,6 +11493,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskResponse"];
                 };
             };
+            404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
         };
     };
@@ -11518,6 +11521,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskResponse"];
                 };
             };
+            404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
         };
     };

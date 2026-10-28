@@ -62,27 +62,40 @@ public class AsyncTaskService {
     public boolean renew(long taskId, String nodeId, Duration leaseDuration) {
         DispatchLease.validateDuration(leaseDuration);
         LocalDateTime now = utcNow();
-        return dispatchMapper.renewTask(taskId, nodeId, now, now.plus(leaseDuration)) == 1;
+        return checkpoint(taskId, nodeId, now, dispatchMapper.renewTask(taskId, nodeId, now, now.plus(leaseDuration)));
     }
 
     @Transactional
     public boolean complete(long taskId, String nodeId) {
-        return dispatchMapper.completeTask(taskId, nodeId, utcNow()) == 1;
+        LocalDateTime now = utcNow();
+        return checkpoint(taskId, nodeId, now, dispatchMapper.completeTask(taskId, nodeId, now));
     }
 
     @Transactional
     public boolean progress(long taskId,String nodeId,int progress,String stage){
         if(progress<0||progress>99)throw new IllegalArgumentException("运行中进度必须在 0 到 99 之间");
-        return dispatchMapper.updateTaskProgress(taskId,nodeId,progress,stage,utcNow())==1;
+        LocalDateTime now = utcNow();
+        return checkpoint(taskId,nodeId,now,dispatchMapper.updateTaskProgress(taskId,nodeId,progress,stage,now));
     }
 
     @Transactional
-    public boolean attachResult(long taskId,String nodeId,long fileId){return dispatchMapper.attachTaskResult(taskId,nodeId,fileId,utcNow())==1;}
+    public boolean attachResult(long taskId,String nodeId,long fileId){
+        LocalDateTime now = utcNow();
+        return checkpoint(taskId,nodeId,now,dispatchMapper.attachTaskResult(taskId,nodeId,fileId,now));
+    }
 
     @Transactional
     public boolean fail(long taskId,String nodeId,String errorCode,String message){
         String safe=message==null?null:message.substring(0,Math.min(message.length(),500));
-        return dispatchMapper.failTask(taskId,nodeId,errorCode,safe,utcNow())==1;
+        LocalDateTime now = utcNow();
+        return checkpoint(taskId,nodeId,now,dispatchMapper.failTask(taskId,nodeId,errorCode,safe,now));
+    }
+
+    private boolean checkpoint(long taskId, String owner, LocalDateTime now, int written) {
+        if (written == 1) return true;
+        // A cancellation request ends at the next safe worker checkpoint, under the same lease.
+        dispatchMapper.settleTaskCancellation(taskId, owner, now);
+        return false;
     }
 
     private LocalDateTime utcNow() {

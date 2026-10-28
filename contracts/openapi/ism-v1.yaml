@@ -1958,19 +1958,21 @@ paths:
   /tasks/{id}/cancel:
     post:
       operationId: cancelMyTask
+      description: 仅当前租户的任务发起人可操作，需要 task:center:operate。排队任务立即取消并记录结束时间；运行任务登记取消请求，在执行器下一个安全检查点终结为 CANCELLED，此后不能发布成功结果。按任务版本校验，重复取消或状态变化返回 409；他人或其他租户的任务返回 404。
       tags: [Task Center]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskVersionCommand' } } } }
-      responses: { '200': { description: Cancellation requested, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Cancellation requested, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /tasks/{id}/retry:
     post:
       operationId: retryMyTask
+      description: 仅当前租户的任务发起人可操作，需要 task:center:operate。仅 FAILED 或 CANCELLED 可按当前版本重新排队，每次成功重试将 retryCount 加一，上限三次；清除旧结果引用、进度、取消标记、错误和执行时间。旧执行的租约不能影响重试任务；他人或其他租户的任务返回 404。
       tags: [Task Center]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TaskVersionCommand' } } } }
-      responses: { '200': { description: Failed task queued again, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Failed task queued again, content: { application/json: { schema: { $ref: '#/components/schemas/TaskResponse' } } } }, '404': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
   /print-templates:
     get:
       operationId: listPrintTemplates

@@ -74,23 +74,30 @@ public interface DispatchOperationMapper {
 
     @Update("""
         UPDATE ops_async_task SET lease_until=#{leaseUntil},version=version+1
-        WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now}
+        WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now} AND cancel_requested=0
         """)
     int renewTask(long id, String owner, LocalDateTime now, LocalDateTime leaseUntil);
 
     @Update("""
         UPDATE ops_async_task SET status='SUCCEEDED',progress=100,finished_at=#{now},
           lease_owner=NULL,lease_until=NULL,version=version+1
-        WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now}
+        WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now} AND cancel_requested=0
         """)
     int completeTask(long id, String owner, LocalDateTime now);
 
     @Update("UPDATE ops_async_task SET progress=#{progress},current_stage=#{stage},version=version+1 WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND cancel_requested=0 AND lease_until>#{now}")
     int updateTaskProgress(long id,String owner,int progress,String stage,LocalDateTime now);
 
-    @Update("UPDATE ops_async_task SET status='FAILED',error_code=#{code},error_message=#{message},finished_at=#{now},lease_owner=NULL,lease_until=NULL,retry_count=retry_count+1,version=version+1 WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now}")
+    @Update("UPDATE ops_async_task SET status='FAILED',result_file_id=NULL,error_code=#{code},error_message=#{message},finished_at=#{now},lease_owner=NULL,lease_until=NULL,version=version+1 WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now} AND cancel_requested=0")
     int failTask(long id,String owner,String code,String message,LocalDateTime now);
 
-    @Update("UPDATE ops_async_task SET result_file_id=#{fileId} WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now}")
+    @Update("UPDATE ops_async_task SET result_file_id=#{fileId} WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner} AND lease_until>#{now} AND cancel_requested=0")
     int attachTaskResult(long id,String owner,long fileId,LocalDateTime now);
+    @Update("""
+        UPDATE ops_async_task SET status='CANCELLED',finished_at=#{now},current_stage='已取消',
+          result_file_id=NULL,lease_owner=NULL,lease_until=NULL,version=version+1
+        WHERE id=#{id} AND status='RUNNING' AND lease_owner=#{owner}
+          AND lease_until>#{now} AND cancel_requested=1
+        """)
+    int settleTaskCancellation(long id,String owner,LocalDateTime now);
 }

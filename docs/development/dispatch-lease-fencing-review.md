@@ -25,10 +25,10 @@
 
 ## 验证
 
-隔离 Testcontainers MySQL，`DispatchLeaseIT` 5/5，无失败、错误或跳过，证据 `output/verification/dispatch-lease-tests.txt`。包含真实双连接竞争，不以 Mock 替代租约数据库验证。
+隔离 Testcontainers MySQL，`DispatchLeaseIT` 5/5，无失败、错误或跳过，证据 `output/playwright/task-delivery-2026-10-28/dispatch-lease-tests.txt`。包含真实双连接竞争，不以 Mock 替代租约数据库验证。
 
-复现：JDK 21 下运行 `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test -Dit.test=DispatchLeaseIT -Dfailsafe.failIfNoSpecifiedTests=false verify`。既有审计/幂等/Outbox/任务接管与租户初始化/真实打印 PDF 回归 2/2 通过，证据 `output/verification/dispatch-lease-regression.txt`。
+复现：JDK 21 下运行 `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test -Dit.test=DispatchLeaseIT -Dfailsafe.failIfNoSpecifiedTests=false verify`。既有审计/幂等/Outbox/任务接管与租户初始化/真实打印 PDF 回归 2/2 通过，证据 `output/playwright/task-delivery-2026-10-28/dispatch-lease-regression.txt`。
 
 ## 下一依赖
 
-运行中任务取消的阶段终结、取消后重试上限及旧结果清理仍需独立验收；共享时钟/长任务续租、容量压测、节点进程宕机压测、统一人工待办亦未由本轮覆盖。GAP-01/02/03 的完整跨租户支持、场站上下文及动态字段不能由本增量替代。
+运行中任务取消的阶段终结、重试上限及旧结果引用清理已追加独立验收，见 [取消重试闭环](task-cancellation-retry-review.md)；共享时钟/长任务续租、容量压测、节点进程宕机压测、统一人工待办亦未由本轮覆盖。GAP-01/02/03 的完整跨租户支持、场站上下文及动态字段不能由本增量替代。
