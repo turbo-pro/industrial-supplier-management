@@ -519,7 +519,7 @@ paths:
     post:
       operationId: publishAdmissionResult
       tags: [Supplier Portal]
-      description: Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Immutable snapshot; same source version and trimmed publicComment replay safely, changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled.
+      description: Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Original snapshot remains immutable. Separate correction/withdrawal events supply the effective public view. Same source version and original trimmed publicComment replay safely and return the current effective view; changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled.
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PublishAdmissionResult' } } } }
@@ -530,6 +530,57 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /admissions/{id}/public-results/{publicationId}/correct:
+    post:
+      operationId: correctPublishedAdmissionResult
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Requires admission view and review with application data scope. Uses publicationVersion, not the application version. Appends an immutable change; original decision and application never change. Same original version and normalized command replay safely; changed reuse conflicts. Withdrawal is terminal and masks prior public text; only staff history retains originals.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: publicationId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CorrectAdmissionResult' } } } }
+      responses:
+        '200': { description: Current effective publication; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /admissions/{id}/public-results/{publicationId}/withdraw:
+    post:
+      operationId: withdrawPublishedAdmissionResult
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Requires admission view and review with application data scope. Uses publicationVersion, not the application version. Appends an immutable change; original decision and application never change. Same original version and normalized command replay safely; changed reuse conflicts. Withdrawal is terminal and masks prior public text; only staff history retains originals.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: publicationId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WithdrawAdmissionResult' } } } }
+      responses:
+        '200': { description: Current effective publication; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /admissions/{id}/public-results/{publicationId}/history:
+    get:
+      operationId: readAdmissionResultChangeHistory
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      description: Employee admission view and data scope only. Original and prior corrected text are never part of the portal response.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: publicationId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200': { description: Scoped original and append-only change history; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultHistoryResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
   /portal/admission-results:
     get:
       operationId: listOwnPublishedAdmissionResults
@@ -3190,9 +3241,36 @@ components:
       type: object
       required: [version, publicComment]
       properties: { version: { type: integer, minimum: 0 }, publicComment: { type: string, minLength: 1, maxLength: 1000 } }
+    CorrectAdmissionResult:
+      type: object
+      required: [version, publicComment, reason]
+      properties: { version: { type: integer, minimum: 0, maximum: 2147483646 }, publicComment: { type: string, minLength: 1, maxLength: 1000 }, reason: { type: string, minLength: 1, maxLength: 500, description: Supplier-visible reason. } }
+    WithdrawAdmissionResult:
+      type: object
+      required: [version, reason]
+      properties: { version: { type: integer, minimum: 0, maximum: 2147483646 }, reason: { type: string, minLength: 1, maxLength: 500, description: Supplier-visible withdrawal reason. } }
+    AdmissionResultChange:
+      type: object
+      required: [version, kind, reason, changedAt]
+      properties:
+        version: { type: integer }
+        kind: { type: string, enum: [CORRECT, WITHDRAW] }
+        publicComment: { type: string, nullable: true }
+        reason: { type: string }
+        changedAt: { type: string, format: date-time }
+    AdmissionResultHistoryResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [originalComment, total, page, size, items]
+              properties: { originalComment: { type: string }, total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionResultChange' } } }
     AdmissionPublicResult:
       type: object
-      required: [id, applicationNo, purchaseCategory, result, publicComment, publishedAt]
+      required: [id, applicationNo, purchaseCategory, result, publicComment, publishedAt, publicationState, publicationVersion]
       properties:
         id: { type: string }
         applicationNo: { type: string }
@@ -3200,6 +3278,10 @@ components:
         result: { type: string, enum: [APPROVED, REJECTED, REVISION_REQUIRED] }
         publicComment: { type: string }
         publishedAt: { type: string, format: date-time, description: Explicit UTC publication instant with Z suffix, not a guessed conversion of legacy review timestamps. }
+        publicationState: { type: string, enum: [ACTIVE, WITHDRAWN] }
+        publicationVersion: { type: integer, minimum: 0 }
+        adjustmentReason: { type: string, nullable: true, description: Latest explicitly supplier-visible correction or withdrawal reason only. }
+        adjustedAt: { type: string, format: date-time, nullable: true }
     AdmissionResultResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AdmissionPublicResult' } } }]
     AdmissionResultEmployeeResponse:
@@ -3210,8 +3292,8 @@ components:
           properties:
             data:
               type: object
-              required: [canPublish, items]
-              properties: { canPublish: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionPublicResult' } } }
+              required: [canPublish, canAdjust, items]
+              properties: { canPublish: { type: boolean }, canAdjust: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionPublicResult' } } }
     AdmissionResultPageResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }

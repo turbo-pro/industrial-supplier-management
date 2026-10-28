@@ -34,6 +34,8 @@ class PerformanceMigrationUpgradeIT {
         Flyway.configure().dataSource(source).locations("classpath:db/migration").target("83").load().migrate();
         jdbc.update("INSERT INTO qua_admission_application(id,tenant_id,organization_id,supplier_id,application_no,purchase_category,admission_reason,status,version,created_by,updated_by) VALUES(9910,9901,9902,9903,'LEGACY-ADM','历史品类','PRIVATE_LEGACY_REASON','REJECTED',2,1,1)");
         jdbc.update("INSERT INTO qua_admission_review(id,tenant_id,application_id,action,from_status,to_status,comment_text,operator_id) VALUES(9911,9901,9910,'REJECT','SUBMITTED','REJECTED','PRIVATE_LEGACY_REVIEW',2)");
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").target("84").load().migrate();
+        jdbc.update("INSERT INTO qua_admission_public_result(id,tenant_id,supplier_id,application_id,review_id,source_version,application_no,purchase_category,result,public_comment,published_by) VALUES(9912,9901,9903,9910,9911,2,'LEGACY-ADM','历史品类','REJECTED','LEGACY_PUBLIC_NOTE',2)");
         var flyway=Flyway.configure().dataSource(source).locations("classpath:db/migration").load();
         flyway.migrate();flyway.validate();
         assertThat(jdbc.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='25'",Integer.class)).isEqualTo(1394665689);
@@ -45,9 +47,12 @@ class PerformanceMigrationUpgradeIT {
         assertThat(jdbc.queryForObject("SELECT status FROM qua_supplier_qualification WHERE id=9909",String.class)).isEqualTo("DRAFT");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_portal_request",Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE upload_id=9906 AND admission_request_id IS NULL AND qualification_id=9909",Long.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT comment_text FROM qua_admission_review WHERE id=9911",String.class)).isEqualTo("PRIVATE_LEGACY_REVIEW");
         assertThat(jdbc.queryForObject("SELECT application_version FROM qua_admission_review WHERE id=9911",Integer.class)).isNull();
+        assertThat(jdbc.queryForObject("SELECT change_version FROM qua_admission_public_result WHERE id=9912",Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT public_comment FROM qua_admission_public_result WHERE id=9912",String.class)).isEqualTo("LEGACY_PUBLIC_NOTE");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_result_change",Long.class)).isZero();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
 }

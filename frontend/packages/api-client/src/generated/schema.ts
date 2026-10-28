@@ -453,8 +453,59 @@ export interface paths {
         };
         get: operations["listPublishedAdmissionResults"];
         put?: never;
-        /** @description Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Immutable snapshot; same source version and trimmed publicComment replay safely, changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled. */
+        /** @description Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Original snapshot remains immutable. Separate correction/withdrawal events supply the effective public view. Same source version and original trimmed publicComment replay safely and return the current effective view; changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled. */
         post: operations["publishAdmissionResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}/public-results/{publicationId}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires admission view and review with application data scope. Uses publicationVersion, not the application version. Appends an immutable change; original decision and application never change. Same original version and normalized command replay safely; changed reuse conflicts. Withdrawal is terminal and masks prior public text; only staff history retains originals. */
+        post: operations["correctPublishedAdmissionResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}/public-results/{publicationId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requires admission view and review with application data scope. Uses publicationVersion, not the application version. Appends an immutable change; original decision and application never change. Same original version and normalized command replay safely; changed reuse conflicts. Withdrawal is terminal and masks prior public text; only staff history retains originals. */
+        post: operations["withdrawPublishedAdmissionResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admissions/{id}/public-results/{publicationId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Employee admission view and data scope only. Original and prior corrected text are never part of the portal response. */
+        get: operations["readAdmissionResultChangeHistory"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3927,6 +3978,35 @@ export interface components {
             version: number;
             publicComment: string;
         };
+        CorrectAdmissionResult: {
+            version: number;
+            publicComment: string;
+            /** @description Supplier-visible reason. */
+            reason: string;
+        };
+        WithdrawAdmissionResult: {
+            version: number;
+            /** @description Supplier-visible withdrawal reason. */
+            reason: string;
+        };
+        AdmissionResultChange: {
+            version: number;
+            /** @enum {string} */
+            kind: "CORRECT" | "WITHDRAW";
+            publicComment?: string | null;
+            reason: string;
+            /** Format: date-time */
+            changedAt: string;
+        };
+        AdmissionResultHistoryResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                originalComment: string;
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["AdmissionResultChange"][];
+            };
+        };
         AdmissionPublicResult: {
             id: string;
             applicationNo: string;
@@ -3939,6 +4019,13 @@ export interface components {
              * @description Explicit UTC publication instant with Z suffix
              */
             publishedAt: string;
+            /** @enum {string} */
+            publicationState: "ACTIVE" | "WITHDRAWN";
+            publicationVersion: number;
+            /** @description Latest explicitly supplier-visible correction or withdrawal reason only. */
+            adjustmentReason?: string | null;
+            /** Format: date-time */
+            adjustedAt?: string | null;
         };
         AdmissionResultResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["AdmissionPublicResult"];
@@ -3946,6 +4033,7 @@ export interface components {
         AdmissionResultEmployeeResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
                 canPublish: boolean;
+                canAdjust: boolean;
                 items: components["schemas"]["AdmissionPublicResult"][];
             };
         };
@@ -7935,6 +8023,100 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    correctPublishedAdmissionResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectAdmissionResult"];
+            };
+        };
+        responses: {
+            /** @description Current effective publication; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    withdrawPublishedAdmissionResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WithdrawAdmissionResult"];
+            };
+        };
+        responses: {
+            /** @description Current effective publication; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    readAdmissionResultChangeHistory: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped original and append-only change history; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultHistoryResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     listOwnPublishedAdmissionResults: {

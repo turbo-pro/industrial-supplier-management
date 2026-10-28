@@ -187,6 +187,15 @@ class PortalBrowserFixture {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_RESULT_PUBLISH'",Long.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result p JOIN qua_admission_review r ON r.id=p.review_id AND r.tenant_id=p.tenant_id WHERE p.tenant_id=21001 AND r.action='APPROVE' AND r.application_version=p.source_version AND r.comment_text='独立准入审核通过'",Long.class)).isEqualTo(1);
         }
+        if(submissions){
+            assertThat(jdbc.queryForObject("SELECT change_version FROM qua_admission_public_result WHERE application_id=21200",Integer.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_result_change WHERE tenant_id=21001",Long.class)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_result_change WHERE tenant_id=21001 AND change_no=2 AND kind='CORRECT' AND public_comment='更正后的合作说明，具体业务仍需逐项审批。' AND changed_by=21007",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_result_change WHERE tenant_id=21001 AND change_no=3 AND kind='WITHDRAW' AND public_comment IS NULL AND changed_by=21007",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_RESULT_CORRECT'",Long.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_RESULT_WITHDRAW'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_result_change WHERE tenant_id=21001 AND change_no=1 AND changed_by=21006 AND public_comment='其他审核人员的更新说明'",Long.class)).isEqualTo(1);
+        }
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT address FROM sup_supplier WHERE id=21005",String.class)).isEqualTo("批准后的工业园地址");
