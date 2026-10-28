@@ -2,6 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type components, type createIsmClient } from '@ism/api-client';
 import PortalProfileChanges from './PortalProfileChanges.vue';
+import PortalAdmissionResults from './PortalAdmissionResults.vue';
 import PortalAdmissionMaterials from './PortalAdmissionMaterials.vue';
 import PortalQualifications from './PortalQualifications.vue';
 import PortalCertificateSubmission from './PortalCertificateSubmission.vue';
@@ -67,6 +68,7 @@ onUnmounted(() => { disposed = true; request?.abort(); profile.value = undefined
       <ul v-if="profile.purchaseCategories.length" class="profile-categories"><li v-for="category in profile.purchaseCategories" :key="category.code">{{ category.name }} <span class="help">（{{ category.code }}）</span></li></ul>
       <p v-else class="help">暂无有效的已关联采购品类，请联系邀请方维护。</p>
       <PortalProfileChanges :client="client" :supplier="profile.supplier" @unauthorized="emit('unauthorized')" />
+      <PortalAdmissionResults :client="client" @unauthorized="emit('unauthorized')"/>
       <PortalAdmissionMaterials :client="client" @unauthorized="emit('unauthorized')" />
       <PortalQualifications :client="client" @unauthorized="emit('unauthorized')" @renew="submission?.beginRenewal($event)" />
       <PortalCertificateSubmission ref="submission" :client="client" @unauthorized="emit('unauthorized')" />

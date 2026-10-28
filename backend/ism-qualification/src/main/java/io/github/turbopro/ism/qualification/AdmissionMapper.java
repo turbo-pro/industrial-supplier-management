@@ -32,7 +32,7 @@ public interface AdmissionMapper extends TenantScopedMapper {
     int submit(long tenantId,long actorId,long id,int version);
     @Update("UPDATE qua_admission_application SET status=#{status},decided_at=CASE WHEN #{status} IN ('APPROVED','REJECTED') THEN CURRENT_TIMESTAMP(3) ELSE NULL END,updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND status='SUBMITTED' AND version=#{version}")
     int review(long tenantId,long actorId,long id,String status,int version);
-    @Insert("INSERT INTO qua_admission_review(id,tenant_id,application_id,action,from_status,to_status,comment_text,operator_id) VALUES(#{id},#{tenantId},#{applicationId},#{action},#{from},#{to},#{comment},#{actorId})")
+    @Insert("INSERT INTO qua_admission_review(id,tenant_id,application_id,action,from_status,to_status,comment_text,operator_id,application_version) VALUES(#{id},#{tenantId},#{applicationId},#{action},#{from},#{to},#{comment},#{actorId},(SELECT version FROM qua_admission_application WHERE tenant_id=#{tenantId} AND id=#{applicationId}))")
     int insertReview(long id,long tenantId,long applicationId,String action,String from,String to,String comment,long actorId);
     @Update("UPDATE sup_supplier SET status='ACTIVE',updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{supplierId} AND deleted=0 AND status='DRAFT'") int activateSupplier(long tenantId,long actorId,long supplierId);
 }

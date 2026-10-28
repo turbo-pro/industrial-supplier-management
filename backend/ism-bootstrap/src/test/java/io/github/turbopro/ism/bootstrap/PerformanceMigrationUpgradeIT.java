@@ -31,6 +31,9 @@ class PerformanceMigrationUpgradeIT {
         jdbc.update("INSERT INTO qua_qualification_type(id,tenant_id,type_code,type_name,category,created_by,updated_by) VALUES(9908,9901,'LEGACY','历史证照','LEGAL',1,1)");
         jdbc.update("INSERT INTO qua_supplier_qualification(id,tenant_id,organization_id,supplier_id,qualification_type_id,certificate_no,file_id,created_by,updated_by) VALUES(9909,9901,9902,9903,9908,'LEGACY-CERT',9907,9905,9905)");
         jdbc.update("INSERT INTO qua_portal_submission(qualification_id,tenant_id,supplier_id,account_id,request_key,upload_id,request_json,file_name) VALUES(9909,9901,9903,9905,'00000000-0000-0000-0000-000000000002',9906,'{}','legacy.pdf')");
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").target("83").load().migrate();
+        jdbc.update("INSERT INTO qua_admission_application(id,tenant_id,organization_id,supplier_id,application_no,purchase_category,admission_reason,status,version,created_by,updated_by) VALUES(9910,9901,9902,9903,'LEGACY-ADM','历史品类','PRIVATE_LEGACY_REASON','REJECTED',2,1,1)");
+        jdbc.update("INSERT INTO qua_admission_review(id,tenant_id,application_id,action,from_status,to_status,comment_text,operator_id) VALUES(9911,9901,9910,'REJECT','SUBMITTED','REJECTED','PRIVATE_LEGACY_REVIEW',2)");
         var flyway=Flyway.configure().dataSource(source).locations("classpath:db/migration").load();
         flyway.migrate();flyway.validate();
         assertThat(jdbc.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='25'",Integer.class)).isEqualTo(1394665689);
@@ -42,6 +45,9 @@ class PerformanceMigrationUpgradeIT {
         assertThat(jdbc.queryForObject("SELECT status FROM qua_supplier_qualification WHERE id=9909",String.class)).isEqualTo("DRAFT");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_portal_request",Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_portal_upload_use WHERE upload_id=9906 AND admission_request_id IS NULL AND qualification_id=9909",Long.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT comment_text FROM qua_admission_review WHERE id=9911",String.class)).isEqualTo("PRIVATE_LEGACY_REVIEW");
+        assertThat(jdbc.queryForObject("SELECT application_version FROM qua_admission_review WHERE id=9911",Integer.class)).isNull();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
 }

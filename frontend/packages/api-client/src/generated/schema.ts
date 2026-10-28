@@ -444,6 +444,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admissions/{id}/public-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPublishedAdmissionResults"];
+        put?: never;
+        /** @description Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Immutable snapshot; same source version and trimmed publicComment replay safely, changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled. */
+        post: operations["publishAdmissionResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portal/admission-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Only explicitly published snapshots for the authenticated enterprise with QUALIFICATION entitlement. No unpublished applications, current internal status, amount, file IDs, reviewer IDs or private review comments. Historical results do not assert current business eligibility. */
+        get: operations["listOwnPublishedAdmissionResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portal/qualifications": {
         parameters: {
             query?: never;
@@ -3887,6 +3921,40 @@ export interface components {
                 page: number;
                 size: number;
                 items: components["schemas"]["AdmissionMaterialRequest"][];
+            };
+        };
+        PublishAdmissionResult: {
+            version: number;
+            publicComment: string;
+        };
+        AdmissionPublicResult: {
+            id: string;
+            applicationNo: string;
+            purchaseCategory: string;
+            /** @enum {string} */
+            result: "APPROVED" | "REJECTED" | "REVISION_REQUIRED";
+            publicComment: string;
+            /**
+             * Format: date-time
+             * @description Explicit UTC publication instant with Z suffix
+             */
+            publishedAt: string;
+        };
+        AdmissionResultResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AdmissionPublicResult"];
+        };
+        AdmissionResultEmployeeResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                canPublish: boolean;
+                items: components["schemas"]["AdmissionPublicResult"][];
+            };
+        };
+        AdmissionResultPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: {
+                total: number;
+                page: number;
+                size: number;
+                items: components["schemas"]["AdmissionPublicResult"][];
             };
         };
         PortalCertificateSubmission: {
@@ -7811,6 +7879,88 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    listPublishedAdmissionResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Admission-scoped publication history and effective publication capability; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultEmployeeResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    publishAdmissionResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishAdmissionResult"];
+            };
+        };
+        responses: {
+            /** @description Published or identical replay; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnPublishedAdmissionResults: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own published snapshots; no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionResultPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     listOwnPortalQualifications: {

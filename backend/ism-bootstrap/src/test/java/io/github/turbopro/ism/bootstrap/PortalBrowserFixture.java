@@ -182,6 +182,11 @@ class PortalBrowserFixture {
             for(String action:List.of("ADMISSION_PORTAL_PUBLISH","ADMISSION_PORTAL_SUBMIT","ADMISSION_PORTAL_ACCEPT","ADMISSION_PORTAL_FILE_OPEN","ADMISSION_EMPLOYEE_FILE_OPEN"))assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action=?",Long.class,action)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT operator_id FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_REVIEW'",Long.class)).isEqualTo(21007);
         }
+        if(submissions){
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result WHERE tenant_id=21001 AND application_id=21200 AND source_version=3 AND result='APPROVED' AND published_by=21007 AND public_comment='本轮准入审核通过，后续合作以实际业务审批为准。'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE tenant_id=21001 AND action='ADMISSION_RESULT_PUBLISH'",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM qua_admission_public_result p JOIN qua_admission_review r ON r.id=p.review_id AND r.tenant_id=p.tenant_id WHERE p.tenant_id=21001 AND r.action='APPROVE' AND r.application_version=p.source_version AND r.comment_text='独立准入审核通过'",Long.class)).isEqualTo(1);
+        }
         if(changes){
             assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=21005",Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT address FROM sup_supplier WHERE id=21005",String.class)).isEqualTo("批准后的工业园地址");

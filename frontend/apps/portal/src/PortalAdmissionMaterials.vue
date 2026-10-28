@@ -10,7 +10,7 @@ const history=ref<components['schemas']['AdmissionMaterialRequestPageResponse'][
 const busy=ref(false),uploadBusy=ref(false),error=ref(''),notice=ref(''),confirmed=ref(false),pending=ref<Submit>();
 const groups=ref<Record<number,{items:{uploadId:string}[];pending:boolean;count:number}>>({});
 const panel=ref<HTMLElement>(),errorPanel=ref<HTMLElement>();let disposed=false;const calls=new Set<AbortController>();
-const names={OPEN:'待提交材料',SUBMITTED:'已提交，待员工采纳',ACCEPTED:'已采纳（准入结果另行确认）',CANCELLED:'索取已撤销'};
+const names={OPEN:'待提交材料',SUBMITTED:'已提交，待员工采纳',ACCEPTED:'已采纳（准入结果以发布为准）',CANCELLED:'索取已撤销'};
 async function fail(text:string){if(disposed)return;error.value=text;await nextTick();errorPanel.value?.focus();}
 function take<T>(result:{data?:{data:T};response:Response}):T{if(result.data)return result.data.data;if(result.response.status===401)emit('unauthorized');throw new Error(result.response.status===409?'索取或准入申请已变化，请刷新，联系邀请方重新确认。':result.response.status===403?'租户未开通准入材料协作。':result.response.status===404?'材料索取或文件当前不可访问。':'操作未成功，请稍后重试。');}
 async function load(page=0){if(busy.value||uploadBusy.value||disposed)return;busy.value=true;error.value='';const call=new AbortController();calls.add(call);try{const result=await props.client.GET('/portal/admission-material-requests',{params:{query:{page,size:10}},signal:call.signal});if(disposed)return;history.value=take(result);if(selected.value){const current=history.value.items.find(item=>item.id===selected.value?.id);if(current&&current.state!=='OPEN'){selected.value=undefined;pending.value=undefined;groups.value={};notice.value='记录已更新，请查看当前材料处理状态。';}}}catch(e){await fail(e instanceof Error?e.message:'读取失败。');}finally{calls.delete(call);if(!disposed)busy.value=false;}}

@@ -505,6 +505,45 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /admissions/{id}/public-results:
+    get:
+      operationId: listPublishedAdmissionResults
+      tags: [Supplier Portal]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Admission-scoped publication history and effective publication capability; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultEmployeeResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+    post:
+      operationId: publishAdmissionResult
+      tags: [Supplier Portal]
+      description: Requires admission view and review plus data scope. Explicitly publishes only the latest unchanged APPROVED/REJECTED/REVISION_REQUIRED review. Never copies internal comments. Immutable snapshot; same source version and trimmed publicComment replay safely, changed reuse conflicts. Publication and audit are atomic; historical reviews are not backfilled.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PublishAdmissionResult' } } } }
+      responses:
+        '200': { description: Published or identical replay; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /portal/admission-results:
+    get:
+      operationId: listOwnPublishedAdmissionResults
+      tags: [Supplier Portal]
+      description: Only explicitly published snapshots for the authenticated enterprise with QUALIFICATION entitlement. No unpublished applications, current internal status, amount, file IDs, reviewer IDs or private review comments. Historical results do not assert current business eligibility.
+      security: [{ portalBearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200': { description: Own published snapshots; no-store, content: { application/json: { schema: { $ref: '#/components/schemas/AdmissionResultPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /portal/qualifications:
     get:
       operationId: listOwnPortalQualifications
@@ -3147,6 +3186,42 @@ components:
               type: object
               required: [total, page, size, items]
               properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionMaterialRequest' } } }
+    PublishAdmissionResult:
+      type: object
+      required: [version, publicComment]
+      properties: { version: { type: integer, minimum: 0 }, publicComment: { type: string, minLength: 1, maxLength: 1000 } }
+    AdmissionPublicResult:
+      type: object
+      required: [id, applicationNo, purchaseCategory, result, publicComment, publishedAt]
+      properties:
+        id: { type: string }
+        applicationNo: { type: string }
+        purchaseCategory: { type: string }
+        result: { type: string, enum: [APPROVED, REJECTED, REVISION_REQUIRED] }
+        publicComment: { type: string }
+        publishedAt: { type: string, format: date-time, description: Explicit UTC publication instant with Z suffix, not a guessed conversion of legacy review timestamps. }
+    AdmissionResultResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AdmissionPublicResult' } } }]
+    AdmissionResultEmployeeResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [canPublish, items]
+              properties: { canPublish: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionPublicResult' } } }
+    AdmissionResultPageResponse:
+      allOf:
+        - { $ref: '#/components/schemas/SuccessEnvelope' }
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [total, page, size, items]
+              properties: { total: { type: integer }, page: { type: integer }, size: { type: integer }, items: { type: array, items: { $ref: '#/components/schemas/AdmissionPublicResult' } } }
     PortalCertificateSubmission:
       type: object
       required: [id, requestKey, typeName, certificateNo, status, fileName, submittedAt, typeId, permanent, version, correctionRootId, correctionRound, withdrawable]

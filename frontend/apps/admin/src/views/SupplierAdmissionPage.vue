@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import AdmissionPublicResults from '../components/AdmissionPublicResults.vue';
 import AdmissionPortalMaterials from '../components/AdmissionPortalMaterials.vue';
 import PersonalTableViews from '../components/PersonalTableViews.vue';
 import FileUploadField from '../components/FileUploadField.vue';
@@ -79,6 +80,7 @@ onMounted(async()=>{query.keyword=typeof route.query.keyword==='string'?route.qu
       <h3>申请材料</h3>
       <el-table :data="detail.materials" size="small"><el-table-column prop="name" label="材料" min-width="160"/><el-table-column prop="type" label="类型" min-width="150"/><el-table-column label="要求" width="90"><template #default="{row}">{{row.required?'必填':'选填'}}</template></el-table-column><el-table-column label="状态" width="90"><template #default="{row}">{{row.provided?'已提供':'未提供'}}</template></el-table-column><el-table-column label="文件" min-width="250"><template #default="{row}"><FileEvidenceActions :file-id="row.fileId"/></template></el-table-column></el-table>
       <AdmissionPortalMaterials :key="detail.id" :application="detail" @changed="showDetail(detail.id);load()"/>
+      <AdmissionPublicResults :key="detail.id" :application="detail"/>
       <h3>审核轨迹</h3>
       <el-table :data="detail.reviews" size="small"><el-table-column prop="operatedAt" label="时间" width="185"/><el-table-column prop="action" label="动作" width="130"/><el-table-column prop="operatorId" label="操作人" width="115"/><el-table-column prop="comment" label="意见" min-width="180" show-overflow-tooltip/></el-table>
       <template v-if="detail.status==='DRAFT'||detail.status==='REVISION_REQUIRED'"><el-button type="primary" style="margin-top:16px" @click="openEdit(detail)">补充资料</el-button></template>

@@ -293,10 +293,30 @@ async page => {
     const staffDownloadEvent=admin.waitForEvent('download');await staffMaterials.getByRole('button',{name:'下载索取材料',exact:true}).click();const admissionDownload=await staffDownloadEvent;if(admissionDownload.suggestedFilename()!=='admission-license.pdf')throw new Error('Admission business filename lost');
     await admin.setViewportSize({width:375,height:812});if(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Admission staff drawer mobile overflow');await staffMaterials.scrollIntoViewIfNeeded();await staffMaterials.getByRole('button',{name:'核对并采纳材料',exact:true}).scrollIntoViewIfNeeded();await admin.screenshot({path:'output/playwright/admin-admission-material-mobile.png'});await admin.setViewportSize({width:1440,height:900});
     await staffMaterials.getByRole('button',{name:'核对并采纳材料',exact:true}).click();await admin.getByRole('button',{name:'确定',exact:true}).click();await staffMaterials.getByText('已采纳 · ADM-BROWSER',{exact:true}).waitFor();
-    await admin.getByRole('button',{name:/^(Close this dialog|关闭此对话框)$/}).click();
+    await admin.getByRole('dialog',{name:'采纳准入材料',exact:true}).waitFor({state:'hidden'});
+    await admin.getByRole('dialog',{name:'准入申请 · ADM-BROWSER',exact:true}).getByRole('button',{name:/^(Close this dialog|关闭此对话框)$/}).click();
     await admin.getByRole('row').filter({hasText:'ADM-BROWSER'}).getByRole('button',{name:'提交',exact:true}).click();await admin.getByRole('button',{name:'确定',exact:true}).click();await admin.getByRole('row').filter({hasText:'ADM-BROWSER'}).getByText('待审核',{exact:true}).waitFor();
     await reader.goto('__ADMIN_URL__/suppliers/admissions');await reader.getByRole('row').filter({hasText:'ADM-BROWSER'}).getByRole('button',{name:'通过',exact:true}).click();
     await reader.getByRole('dialog',{name:'准入审核：通过',exact:true}).getByRole('textbox').fill('独立准入审核通过');await reader.getByRole('button',{name:'确定',exact:true}).click();await reader.getByRole('row').filter({hasText:'ADM-BROWSER'}).getByText('已通过',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'查看已发布准入结果',exact:true}).click();
+    await page.getByText('暂无对本企业发布的准入审核结果，请联系邀请方确认。',{exact:true}).waitFor();
+    await reader.getByRole('row').filter({hasText:'ADM-BROWSER'}).getByRole('button',{name:'详情',exact:true}).click();
+    const publishing=reader.locator('.public-admission-results');
+    await publishing.getByRole('textbox',{name:'供应商可见准入说明',exact:true}).fill('本轮准入审核通过，后续合作以实际业务审批为准。');
+    let lostResult=false;await reader.route('**/api/admissions/*/public-results',async route=>{if(route.request().method()!=='POST'||lostResult)return route.continue();lostResult=true;const committed=await route.fetch();if(committed.status()!==200)throw new Error('Result publication did not commit');await route.abort('failed');});
+    await publishing.getByRole('button',{name:'确认发布准入结果',exact:true}).click();await reader.getByRole('dialog',{name:'发布准入结果',exact:true}).getByRole('button',{name:'确定',exact:true}).click();
+    await publishing.getByRole('alert').filter({hasText:'结果未知'}).first().waitFor();
+    if(await publishing.getByRole('textbox',{name:'供应商可见准入说明',exact:true}).isEnabled())throw new Error('Uncertain publication allowed payload changes');
+    await publishing.getByRole('button',{name:'重试同一准入结果发布',exact:true}).click();
+    await publishing.getByRole('heading',{name:'ADM-BROWSER · 准入通过',exact:true}).waitFor();
+    await page.getByRole('button',{name:'刷新准入结果',exact:true}).click();
+    await page.locator('.admission-results').getByRole('heading',{name:'ADM-BROWSER · 准入通过',exact:true}).waitFor();
+    await page.locator('.admission-results').getByText('对外说明：本轮准入审核通过，后续合作以实际业务审批为准。',{exact:true}).waitFor();
+    const publicResultResponse=await page.request.get(new URL('/api/portal/admission-results',page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+    const resultText=await publicResultResponse.text();if(/PRIVATE_|applicationId|reviewId|sourceVersion|fileId|operatorId|publishedBy|expectedAnnualAmount/.test(resultText))throw new Error('Internal admission data leaked through result publication');
+    const publishedResults=JSON.parse(resultText).data;if(publishedResults.total!==1||publishedResults.items[0].result!=='APPROVED'||!publishedResults.items[0].publishedAt.endsWith('Z'))throw new Error('Public admission result mismatch');
+    await page.locator('.admission-results').screenshot({path:'output/playwright/portal-admission-result-mobile.png'});
+    await reader.setViewportSize({width:375,height:812});await publishing.scrollIntoViewIfNeeded();if(await reader.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Staff result publication mobile overflow');await reader.screenshot({path:'output/playwright/admin-admission-result-mobile.png'});
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('heading', { name: '本企业证照申请记录', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/portal-real-submissions-desktop.png' });
@@ -309,6 +329,7 @@ async page => {
     await page.getByRole('status').filter({ hasText: '已退出当前会话' }).waitFor();
     const stale = await page.request.get(new URL('/api/portal/certificate-submissions', page.url()).href, { headers: { Authorization: `Bearer ${session.accessToken}` } });
     if (stale.status() !== 401) throw new Error('Logged out portal still read submissions');
+    const staleResult=await page.request.get(new URL('/api/portal/admission-results',page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});if(staleResult.status()!==401)throw new Error('Logged out portal still read admission results');
     const staleMaterial=await page.request.get(new URL(`/api/portal/certificate-submissions/${renewed.id}/attachments/${entries[0].id}/content`,page.url()).href,{headers:{Authorization:`Bearer ${session.accessToken}`}});if(staleMaterial.status()!==401)throw new Error('Logged out portal still downloaded supporting material');
   } finally { await admin.close(); await reader.close(); }
 }
