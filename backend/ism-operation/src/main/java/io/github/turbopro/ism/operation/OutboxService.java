@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,6 +52,7 @@ public class OutboxService {
 
     @Transactional
     public boolean markPublished(long eventId, String nodeId) {
+        dispatchMapper.lockOutboxCheckpoint(eventId);
         return dispatchMapper.publishOutbox(eventId, nodeId, utcNow()) == 1;
     }
 
@@ -64,8 +64,10 @@ public class OutboxService {
         String nextStatus = retryCount >= maxRetries - 1 ? "DEAD" : "PENDING";
         String error = stableErrorCode == null ? "DISPATCH_FAILED"
                 : stableErrorCode.substring(0, Math.min(stableErrorCode.length(), 100));
+        dispatchMapper.lockOutboxCheckpoint(eventId);
+        LocalDateTime now = utcNow();
         return dispatchMapper.failOutbox(eventId, nodeId, nextStatus,
-                utcNow().plus(retryDelay), error, utcNow(), retryCount) == 1;
+                now.plus(retryDelay), error, now, retryCount) == 1;
     }
 
     @Transactional
@@ -80,6 +82,6 @@ public class OutboxService {
     }
 
     private LocalDateTime utcNow() {
-        return LocalDateTime.now(ZoneOffset.UTC);
+        return dispatchMapper.databaseNow();
     }
 }

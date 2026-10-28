@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -61,33 +60,33 @@ public class AsyncTaskService {
     @Transactional
     public boolean renew(long taskId, String nodeId, Duration leaseDuration) {
         DispatchLease.validateDuration(leaseDuration);
-        LocalDateTime now = utcNow();
+        LocalDateTime now = checkpointTime(taskId);
         return checkpoint(taskId, nodeId, now, dispatchMapper.renewTask(taskId, nodeId, now, now.plus(leaseDuration)));
     }
 
     @Transactional
     public boolean complete(long taskId, String nodeId) {
-        LocalDateTime now = utcNow();
+        LocalDateTime now = checkpointTime(taskId);
         return checkpoint(taskId, nodeId, now, dispatchMapper.completeTask(taskId, nodeId, now));
     }
 
     @Transactional
     public boolean progress(long taskId,String nodeId,int progress,String stage){
         if(progress<0||progress>99)throw new IllegalArgumentException("运行中进度必须在 0 到 99 之间");
-        LocalDateTime now = utcNow();
+        LocalDateTime now = checkpointTime(taskId);
         return checkpoint(taskId,nodeId,now,dispatchMapper.updateTaskProgress(taskId,nodeId,progress,stage,now));
     }
 
     @Transactional
     public boolean attachResult(long taskId,String nodeId,long fileId){
-        LocalDateTime now = utcNow();
+        LocalDateTime now = checkpointTime(taskId);
         return checkpoint(taskId,nodeId,now,dispatchMapper.attachTaskResult(taskId,nodeId,fileId,now));
     }
 
     @Transactional
     public boolean fail(long taskId,String nodeId,String errorCode,String message){
         String safe=message==null?null:message.substring(0,Math.min(message.length(),500));
-        LocalDateTime now = utcNow();
+        LocalDateTime now = checkpointTime(taskId);
         return checkpoint(taskId,nodeId,now,dispatchMapper.failTask(taskId,nodeId,errorCode,safe,now));
     }
 
@@ -98,7 +97,12 @@ public class AsyncTaskService {
         return false;
     }
 
+    private LocalDateTime checkpointTime(long taskId) {
+        dispatchMapper.lockTaskCheckpoint(taskId);
+        return utcNow();
+    }
+
     private LocalDateTime utcNow() {
-        return LocalDateTime.now(ZoneOffset.UTC);
+        return dispatchMapper.databaseNow();
     }
 }

@@ -6,6 +6,18 @@ import java.time.LocalDateTime;
 
 @Mapper
 public interface DispatchOperationMapper {
+    @Select("SELECT UTC_TIMESTAMP(3)")
+    @Options(useCache=false, flushCache=Options.FlushCachePolicy.TRUE)
+    LocalDateTime databaseNow();
+
+    @Select("SELECT id FROM ops_async_task WHERE id=#{id} FOR UPDATE")
+    @Options(useCache=false, flushCache=Options.FlushCachePolicy.TRUE)
+    Long lockTaskCheckpoint(long id);
+
+    @Select("SELECT id FROM sys_outbox_event WHERE id=#{id} FOR UPDATE")
+    @Options(useCache=false, flushCache=Options.FlushCachePolicy.TRUE)
+    Long lockOutboxCheckpoint(long id);
+
     @Select("""
         SELECT id,event_id,tenant_id,event_type,event_version,aggregate_type,aggregate_id,payload,status,
           retry_count,lease_owner,lease_until,trace_id

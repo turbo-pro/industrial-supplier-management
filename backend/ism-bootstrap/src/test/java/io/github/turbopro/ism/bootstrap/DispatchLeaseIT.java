@@ -40,6 +40,8 @@ class DispatchLeaseIT {
     @Autowired org.springframework.boot.test.web.client.TestRestTemplate http;
     @Autowired io.github.turbopro.ism.platform.tenant.TenantService tenants;
     @Autowired io.github.turbopro.ism.platform.packageplan.PackagePlanService plans;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired DispatchOperationMapper dispatch;
     @Autowired AsyncTaskService tasks;
     @Autowired OutboxService outbox;
     @Autowired JdbcTemplate jdbc;
@@ -338,6 +340,82 @@ class DispatchLeaseIT {
         jdbc.update("DELETE rp FROM iam_role_permission rp JOIN sys_permission p ON p.id=rp.permission_id WHERE rp.tenant_id=? AND p.permission_code='task:center:operate'", tenantId);
         var denied = http.postForEntity(path + "/cancel", new org.springframework.http.HttpEntity<>(Map.of("version", next.version()), headers), com.fasterxml.jackson.databind.JsonNode.class);
         assertThat(denied.getStatusCode().value()).isEqualTo(403);
+    }
+
+    @Test void taskCheckpointRechecksDatabaseTimeAfterActualRowLockWait() throws Exception {
+        for (int checkpoint = 0; checkpoint < 5; checkpoint++) {
+            long id = submit();
+            var claim = tasks.claimNext("node", Duration.ofMinutes(1)).orElseThrow();
+            final int operation = checkpoint;
+            assertThat(expireWhileWaiting("ops_async_task", id, () -> switch (operation) {
+                case 0 -> tasks.progress(id, claim.leaseOwner(), 80, "late");
+                case 1 -> tasks.renew(id, claim.leaseOwner(), Duration.ofMinutes(1));
+                case 2 -> tasks.attachResult(id, claim.leaseOwner(), 999);
+                case 3 -> tasks.fail(id, claim.leaseOwner(), "LATE", "late");
+                default -> tasks.complete(id, claim.leaseOwner());
+            })).isFalse();
+            assertThat(taskRow(id)).containsEntry("status", "RUNNING").containsEntry("progress", 0)
+                    .containsEntry("retry_count", 0).containsEntry("version", 1)
+                    .containsEntry("result_file_id", null).containsEntry("error_code", null);
+            jdbc.update("DELETE FROM ops_async_task WHERE id=?", id);
+        }
+    }
+
+    @Test void outboxAcknowledgmentsRecheckDatabaseTimeAfterActualRowLockWait() throws Exception {
+        for (int checkpoint = 0; checkpoint < 2; checkpoint++) {
+            enqueue();
+            var claim = outbox.claimNext("node", Duration.ofMinutes(1)).orElseThrow();
+            final boolean publish = checkpoint == 0;
+            assertThat(expireWhileWaiting("sys_outbox_event", claim.id(), () -> publish
+                    ? outbox.markPublished(claim.id(), claim.leaseOwner())
+                    : outbox.markFailed(claim.id(), claim.leaseOwner(), 0, 3, Duration.ZERO, "LATE"))).isFalse();
+            assertThat(eventRow(claim.id())).containsEntry("status", "PROCESSING")
+                    .containsEntry("retry_count", 0).containsEntry("published_at", null);
+            jdbc.update("DELETE FROM sys_outbox_event WHERE id=?", claim.id());
+        }
+    }
+
+    @Test void databaseClockIsNotReusedFromMyBatisTransactionCache() {
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            var before = dispatch.databaseNow();
+            jdbc.queryForObject("SELECT SLEEP(0.01)", Integer.class);
+            assertThat(dispatch.databaseNow()).isAfter(before);
+        });
+    }
+
+    boolean expireWhileWaiting(String table, long id, Callable<Boolean> checkpoint) throws Exception {
+        if (!Set.of("ops_async_task", "sys_outbox_event").contains(table)) throw new IllegalArgumentException("Unknown table");
+        var pool = Executors.newFixedThreadPool(2);
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try {
+            var holder = pool.submit(() -> new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status -> {
+                jdbc.queryForObject("SELECT id FROM " + table + " WHERE id=? FOR UPDATE", Long.class, id);
+                locked.countDown();
+                try {
+                    if (!release.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("release timeout");
+                } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+                // This timestamp is AFTER the waiting worker started, but BEFORE it obtains the lock.
+                jdbc.update("UPDATE " + table + " SET lease_until=UTC_TIMESTAMP(3) WHERE id=?", id);
+                return true;
+            }));
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+            var writing = pool.submit(checkpoint);
+            try (var connection = java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+                 var statement = connection.prepareStatement("SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA='dispatch_lease_it' AND l.OBJECT_NAME=?")) {
+                statement.setString(1, table);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                boolean waiting = false;
+                while (System.nanoTime() < deadline) {
+                    try (var rows = statement.executeQuery()) { rows.next(); if (rows.getLong(1) > 0) { waiting = true; break; } }
+                    Thread.sleep(10);
+                }
+                assertThat(waiting).as("checkpoint must actually wait on the InnoDB row lock").isTrue();
+            }
+            release.countDown();
+            assertThat(holder.get(20, TimeUnit.SECONDS)).isTrue();
+            return writing.get(20, TimeUnit.SECONDS);
+        } finally { release.countDown(); pool.shutdownNow(); }
     }
 
     @Test void invalidLeaseAndRetryPoliciesDoNotMutateOrClaimRows() {

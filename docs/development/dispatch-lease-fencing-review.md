@@ -31,4 +31,13 @@
 
 ## 下一依赖
 
-运行中任务取消的阶段终结、重试上限及旧结果引用清理已追加独立验收，见 [取消重试闭环](task-cancellation-retry-review.md)；共享时钟/长任务续租、容量压测、节点进程宕机压测、统一人工待办亦未由本轮覆盖。GAP-01/02/03 的完整跨租户支持、场站上下文及动态字段不能由本增量替代。
+运行中任务取消的阶段终结、重试上限及旧结果引用清理已追加独立验收，见 [取消重试闭环](task-cancellation-retry-review.md)；长任务持续续租、容量压测、节点进程宕机压测、统一人工待办亦未由本轮覆盖。GAP-01/02/03 的完整跨租户支持、场站上下文及动态字段不能由本增量替代。
+
+
+## 后续 Review：数据库时间与锁等待
+
+继续挂靠 B0-07 / GAP-15，增加 `LEASE-AT-007`。应用节点的系统时间不再用于任务/Outbox 租约，统一从 MySQL 读取 UTC 毫秒时间；所有写检查点先取得对应行锁，再取数据库时间判断租约，避免锁等待前的时间被用于等待结束后的回写。时钟查询和锁查询禁用 MyBatis 缓存并主动刷新本地查询缓存，防止同一事务重复取旧时间。
+
+该路径增加每个检查点的行锁与数据库时间查询，锁只持有到短事务结束，不包含 PDF 渲染或文件保存。容量影响仍需 GAP-15 压测，不能以本轮功能验证代替性能结论。
+
+验收使用真实 InnoDB 锁等待：测试事务持锁，观察 `performance_schema.data_lock_waits` 确认工作节点已等待后，才将租约改为当前数据库时间并释放。五类任务回写及两类 Outbox 确认都必须拒绝；另测同一事务中的时间查询确实前进，不能命中 MyBatis 旧缓存。最终包含既有取消/重试/HTTP权限的专项 15/15、既有任务/Outbox/真实打印回归 2/2、打印检查点 3/3 均通过，无失败、错误或跳过。证据为 `output/playwright/task-delivery-2026-10-28/dispatch-database-clock-tests.txt`、`dispatch-database-clock-regression.txt`、`dispatch-database-clock-print.txt`，日志为同目录 `dispatch-database-clock.log`。复现命令沿用取消重试 Review 的组合命令。Review 无本增量阻断，隔离容器与临时存储已清理。

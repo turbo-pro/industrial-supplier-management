@@ -30,7 +30,7 @@
 
 证据目录 `output/playwright/task-delivery-2026-10-28/`：`task-cancellation-final-tests.txt`、`task-cancellation-final-regression.txt`、`task-cancellation-print-checkpoints.txt`、`task-cancellation-client.log`、`task-cancellation-client-build.log`。复现命令：JDK 21 下运行 `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test '-Dit.test=DispatchLeaseIT,B0InfrastructureIT#shouldAuditSanitizeRetryIdempotentlyAndRecoverExpiredLeases+shouldProvisionTenantHeadquartersAndFirstAdministrator' -Dfailsafe.failIfNoSpecifiedTests=false verify`。
 
-Review：无待修复的本子任务阻断；测试容器和临时存储已清理，现有开发 MySQL 未修改。接口注释与生成类型同步，提交前运行生成一致性检查。
+Review：无待修复的本子任务阻断；测试容器和临时存储已清理，现有开发 MySQL 未修改。接口注释与生成类型同步，提交前生成一致性检查通过。数据库统一时间及真实锁等待补验追加后，最新专项为15/15，既有业务回归2/2、打印检查点3/3仍通过，详见 [后续租约 Review](dispatch-lease-fencing-review.md)。
 
 本轮没有改变旧库、修复迁移校验和或清库。升级/回滚沿用 [租约部署约定](dispatch-lease-fencing-review.md)：协调停止工作节点，禁止混用旧调度实现。回滚代码将恢复原取消/重试缺陷，应在无在途任务时执行。
 
