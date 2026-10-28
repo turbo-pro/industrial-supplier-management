@@ -17,12 +17,13 @@ public class PrintTaskExecutor {
     private static final Pattern VARIABLE=Pattern.compile("\\{\\{([a-zA-Z][a-zA-Z0-9_.-]{0,63})}}");
     private final PrintJobDispatchMapper mapper;private final PdfRenderer renderer;private final FileService files;private final AsyncTaskService tasks;private final ObjectMapper json;
     public PrintTaskExecutor(PrintJobDispatchMapper mapper,PdfRenderer renderer,FileService files,AsyncTaskService tasks,ObjectMapper json){this.mapper=mapper;this.renderer=renderer;this.files=files;this.tasks=tasks;this.json=json;}
-    public void execute(OperationModels.AsyncTask task,String nodeId){
+    public void execute(OperationModels.AsyncTask task){
+        String nodeId=task.leaseOwner();
         try(TenantContext.Scope ignored=TenantContext.open(task.tenantId(),task.requesterId())){
-            tasks.progress(task.id(),nodeId,10,"读取打印模板");var job=mapper.job(task.tenantId(),task.id());if(job==null)throw new IllegalStateException("打印任务明细不存在");
+            if(!tasks.progress(task.id(),nodeId,10,"读取打印模板"))return;var job=mapper.job(task.tenantId(),task.id());if(job==null)throw new IllegalStateException("打印任务明细不存在");
             Map<String,String> variables=readMap(job.renderPayload());Map<String,String> page=readMap(job.pageConfig());String rendered=replace(job.htmlContent(),variables);
-            tasks.progress(task.id(),nodeId,45,"渲染 PDF");byte[] pdf=renderer.render(rendered,page.get("pageSize"),page.get("orientation"),job.templateName());
-            tasks.progress(task.id(),nodeId,80,"保存打印文件");var file=files.createGenerated(safeFileName(job.templateName())+"-"+task.taskNo()+".pdf","application/pdf",pdf);
+            if(!tasks.progress(task.id(),nodeId,45,"渲染 PDF"))return;byte[] pdf=renderer.render(rendered,page.get("pageSize"),page.get("orientation"),job.templateName());
+            if(!tasks.progress(task.id(),nodeId,80,"保存打印文件"))return;var file=files.createGenerated(safeFileName(job.templateName())+"-"+task.taskNo()+".pdf","application/pdf",pdf);
             if(!tasks.attachResult(task.id(),nodeId,Long.parseLong(file.id()))||!tasks.complete(task.id(),nodeId))throw new IllegalStateException("打印任务租约已失效");
         }catch(Exception e){tasks.fail(task.id(),nodeId,"PRINT_RENDER_FAILED",rootMessage(e));}
     }

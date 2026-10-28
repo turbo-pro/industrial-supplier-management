@@ -35,6 +35,7 @@ public class AsyncTaskService {
         return id;
     }
 
+    /** Each claim has a unique leaseOwner; all writes must use the returned value, never the node name. */
     @Transactional
     public Optional<OperationModels.AsyncTask> claimNext(String nodeId, Duration leaseDuration) {
         return claim(null,nodeId,leaseDuration);
@@ -47,17 +48,19 @@ public class AsyncTaskService {
     }
 
     private Optional<OperationModels.AsyncTask> claim(String taskType,String nodeId,Duration leaseDuration){
+        String owner = DispatchLease.owner(nodeId, leaseDuration);
         LocalDateTime now = utcNow();
         OperationModels.AsyncTask task = taskType==null?dispatchMapper.lockNextTask(now):dispatchMapper.lockNextTaskOfType(taskType,now);
         if (task == null) {
             return Optional.empty();
         }
-        return dispatchMapper.claimTask(task.id(), nodeId, now, now.plus(leaseDuration)) == 1
-                ? Optional.of(task) : Optional.empty();
+        return dispatchMapper.claimTask(task.id(), owner, now, now.plus(leaseDuration)) == 1
+                ? Optional.of(dispatchMapper.claimedTask(task.id())) : Optional.empty();
     }
 
     @Transactional
     public boolean renew(long taskId, String nodeId, Duration leaseDuration) {
+        DispatchLease.validateDuration(leaseDuration);
         LocalDateTime now = utcNow();
         return dispatchMapper.renewTask(taskId, nodeId, now, now.plus(leaseDuration)) == 1;
     }
@@ -70,11 +73,11 @@ public class AsyncTaskService {
     @Transactional
     public boolean progress(long taskId,String nodeId,int progress,String stage){
         if(progress<0||progress>99)throw new IllegalArgumentException("运行中进度必须在 0 到 99 之间");
-        return dispatchMapper.updateTaskProgress(taskId,nodeId,progress,stage)==1;
+        return dispatchMapper.updateTaskProgress(taskId,nodeId,progress,stage,utcNow())==1;
     }
 
     @Transactional
-    public boolean attachResult(long taskId,String nodeId,long fileId){return dispatchMapper.attachTaskResult(taskId,nodeId,fileId)==1;}
+    public boolean attachResult(long taskId,String nodeId,long fileId){return dispatchMapper.attachTaskResult(taskId,nodeId,fileId,utcNow())==1;}
 
     @Transactional
     public boolean fail(long taskId,String nodeId,String errorCode,String message){

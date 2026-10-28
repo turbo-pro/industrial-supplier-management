@@ -3073,8 +3073,8 @@ class B0InfrastructureIT {
                     LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), nodeAEvent.id());
             OperationModels.OutboxEvent nodeBEvent = outboxService.claimNext("node-b", Duration.ofMinutes(1))
                     .orElseThrow();
-            assertThat(outboxService.markPublished(nodeAEvent.id(), "node-a")).isFalse();
-            assertThat(outboxService.markPublished(nodeBEvent.id(), "node-b")).isTrue();
+            assertThat(outboxService.markPublished(nodeAEvent.id(), nodeAEvent.leaseOwner())).isFalse();
+            assertThat(outboxService.markPublished(nodeBEvent.id(), nodeBEvent.leaseOwner())).isTrue();
 
             String retryEventId;
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
@@ -3083,12 +3083,12 @@ class B0InfrastructureIT {
             OperationModels.OutboxEvent failedAttempt = outboxService.claimNext("node-retry-a", Duration.ofMinutes(1))
                     .orElseThrow();
             assertThat(failedAttempt.eventId()).isEqualTo(retryEventId);
-            assertThat(outboxService.markFailed(failedAttempt.id(), "node-retry-a",
+            assertThat(outboxService.markFailed(failedAttempt.id(), failedAttempt.leaseOwner(),
                     failedAttempt.retryCount(), 3, Duration.ZERO, "MOCK_UNAVAILABLE")).isTrue();
             OperationModels.OutboxEvent retryAttempt = outboxService.claimNext("node-retry-b", Duration.ofMinutes(1))
                     .orElseThrow();
             assertThat(retryAttempt.retryCount()).isOne();
-            assertThat(outboxService.markPublished(retryAttempt.id(), "node-retry-b")).isTrue();
+            assertThat(outboxService.markPublished(retryAttempt.id(), retryAttempt.leaseOwner())).isTrue();
 
             assertThat(outboxService.consumeOnce(eventId, "sample-consumer", consumerExecutions::incrementAndGet))
                     .isTrue();
@@ -3103,9 +3103,9 @@ class B0InfrastructureIT {
                     LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), nodeATask.id());
             OperationModels.AsyncTask nodeBTask = asyncTaskService.claimNext("node-b", Duration.ofMinutes(1))
                     .orElseThrow();
-            assertThat(asyncTaskService.complete(nodeATask.id(), "node-a")).isFalse();
-            assertThat(asyncTaskService.progress(nodeBTask.id(), "node-b", 60, "生成导出文件")).isTrue();
-            assertThat(asyncTaskService.complete(nodeBTask.id(), "node-b")).isTrue();
+            assertThat(asyncTaskService.complete(nodeATask.id(), nodeATask.leaseOwner())).isFalse();
+            assertThat(asyncTaskService.progress(nodeBTask.id(), nodeBTask.leaseOwner(), 60, "生成导出文件")).isTrue();
+            assertThat(asyncTaskService.complete(nodeBTask.id(), nodeBTask.leaseOwner())).isTrue();
             try (TenantContext.Scope ignored = TenantContext.open(tenantId, actorId)) {
                 assertThat(taskCenterService.task(taskId).status()).isEqualTo("SUCCEEDED");
                 assertThat(taskCenterService.task(taskId).progress()).isEqualTo(100);

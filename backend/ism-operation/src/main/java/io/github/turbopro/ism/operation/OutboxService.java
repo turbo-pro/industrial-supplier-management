@@ -38,15 +38,17 @@ public class OutboxService {
         return eventId;
     }
 
+    /** Write acknowledgments using the returned unique leaseOwner, not the configured node name. */
     @Transactional
     public Optional<OperationModels.OutboxEvent> claimNext(String nodeId, Duration leaseDuration) {
+        String owner = DispatchLease.owner(nodeId, leaseDuration);
         LocalDateTime now = utcNow();
         OperationModels.OutboxEvent event = dispatchMapper.lockNextOutbox(now);
         if (event == null) {
             return Optional.empty();
         }
-        return dispatchMapper.claimOutbox(event.id(), nodeId, now, now.plus(leaseDuration)) == 1
-                ? Optional.of(event) : Optional.empty();
+        return dispatchMapper.claimOutbox(event.id(), owner, now, now.plus(leaseDuration)) == 1
+                ? Optional.of(dispatchMapper.claimedOutbox(event.id())) : Optional.empty();
     }
 
     @Transactional
@@ -57,11 +59,13 @@ public class OutboxService {
     @Transactional
     public boolean markFailed(long eventId, String nodeId, int retryCount, int maxRetries,
                               Duration retryDelay, String stableErrorCode) {
-        String nextStatus = retryCount + 1 >= maxRetries ? "DEAD" : "PENDING";
+        if (retryCount < 0 || maxRetries < 1 || retryDelay == null || retryDelay.isNegative() || retryDelay.compareTo(Duration.ofDays(1)) > 0)
+            throw new IllegalArgumentException("Invalid retry policy");
+        String nextStatus = retryCount >= maxRetries - 1 ? "DEAD" : "PENDING";
         String error = stableErrorCode == null ? "DISPATCH_FAILED"
                 : stableErrorCode.substring(0, Math.min(stableErrorCode.length(), 100));
         return dispatchMapper.failOutbox(eventId, nodeId, nextStatus,
-                utcNow().plus(retryDelay), error) == 1;
+                utcNow().plus(retryDelay), error, utcNow(), retryCount) == 1;
     }
 
     @Transactional
