@@ -50,6 +50,11 @@ public final class AccessModels {
     public record StatusTarget(@NotBlank String id,@PositiveOrZero int version) {}
     public record BatchChangeUserStatus(@NotBlank @Pattern(regexp="ACTIVE|DISABLED") String status,
                                         @NotEmpty @Size(max=100) List<@Valid StatusTarget> targets) {}
+    public record BatchAssignUserRoles(@NotEmpty @Size(max=100) Set<@NotBlank String> roleIds,
+                                       @NotEmpty @Size(max=100) List<@NotNull @Valid StatusTarget> targets) {}
+    public record BatchRolePreview(List<RoleImpactPreview> items,int changeCount,boolean canApply,Set<String> blockers) {}
+    public record UserRoleChange(String userId,Set<String> previousRoleIds,Set<String> roleIds,int version) {}
+    public record BatchRoleResult(List<UserView> users,List<UserRoleChange> changes,Set<String> unchangedUserIds) {}
     public record ResetUserPassword(@NotBlank @Size(min=12,max=128) String temporaryPassword,
                                     @PositiveOrZero int version) {}
     public record ChangeLoginLock(boolean locked, @NotBlank @Size(max=500) String reason,

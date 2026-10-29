@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { components } from '@ism/api-client';
 import { useSessionStore } from '../stores/session';
+import BatchUserRoles from '../components/BatchUserRoles.vue';
 
 const session = useSessionStore();
 const users = ref<components['schemas']['AccessUser'][]>([]);
@@ -267,7 +268,7 @@ onMounted(load);
 <template>
   <div class="page">
     <div class="page-heading"><div><h1>用户管理</h1><p>账号状态由后端按租户、权限和版本校验；不能停用自己或最后一名有效租户管理员。</p></div><div><el-button :loading="loading" @click="load">刷新</el-button><el-button type="primary" @click="showCreate=true">新建用户</el-button></div></div>
-    <div class="batch-actions"><span>已选择 {{selectedRows.length}} 个账号（单次最多 100 个）</span><el-button :disabled="saving||!selectedRows.some(user=>user.status==='ACTIVE')" @click="batchStatus('DISABLED')">批量停用</el-button><el-button :disabled="saving||!selectedRows.some(user=>user.status==='DISABLED')" @click="batchStatus('ACTIVE')">批量恢复</el-button></div>
+    <div class="batch-actions"><span>已选择 {{selectedRows.length}} 个账号（单次最多 100 个）</span><el-button :disabled="saving||!selectedRows.some(user=>user.status==='ACTIVE')" @click="batchStatus('DISABLED')">批量停用</el-button><el-button :disabled="saving||!selectedRows.some(user=>user.status==='DISABLED')" @click="batchStatus('ACTIVE')">批量恢复</el-button><BatchUserRoles :users="selectedRows" :roles="roles" :busy="saving || loading" @changed="load"/></div>
     <el-card shadow="never" v-loading="loading">
       <el-table :data="users" row-key="id" @selection-change="(rows: components['schemas']['AccessUser'][]) => selectedRows=rows">
         <el-table-column type="selection" width="48" :selectable="(row: components['schemas']['AccessUser']) => row.id!==session.actorId"/>
@@ -320,8 +321,9 @@ onMounted(load);
 </template>
 
 <style scoped>
-.batch-actions { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
 .role-impact-preview { margin: 16px 0; padding: 16px; border: 1px solid #d3e1e4; border-radius: 8px; background: #f7fafb; }
 .role-impact-preview p { margin: 8px 0; line-height: 1.5; overflow-wrap: anywhere; }
 .role-impact-preview .muted { color: #697a83; font-size: 12px; }
+@media(max-width:600px){.page-heading{flex-wrap:wrap;gap:12px;align-items:flex-start}.page-heading>div{min-width:0;max-width:100%}}
 </style>

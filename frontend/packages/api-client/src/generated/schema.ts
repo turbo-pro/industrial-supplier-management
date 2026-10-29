@@ -1781,6 +1781,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/users/batch-role-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 当前租户1至100个账号的角色替换预览；需要iam:user:manage，并按iam:user主组织数据范围逐目标校验。已相同角色的账号标为NO_CHANGE，整批不能包含本人。预览是时点信息，提交重新检查全部版本和管理员规则。 */
+        post: operations["previewBatchAccessUserRoles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/users/batch-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description 需要iam:user:manage及目标的iam:user数据范围，按所有账号版本原子替换角色，最多100个。禁止本人，管理员规则仍逐账号校验；不变账号不提升版本或撤销会话。变更账号逐个审计并撤销旧会话。重复/非法/跨租户目标、旧版本或任一失败整批回滚；相同幂等请求重放历史结果。 */
+        put: operations["batchAssignAccessUserRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/users/batch-status": {
         parameters: {
             query?: never;
@@ -6818,6 +6852,33 @@ export interface components {
             status: "ACTIVE" | "DISABLED";
             version: number;
         };
+        BatchAssignAccessUserRoles: {
+            roleIds: string[];
+            targets: components["schemas"]["AccessUserStatusTarget"][];
+        };
+        AccessBatchRolePreview: {
+            items: components["schemas"]["AccessRoleImpactPreview"][];
+            changeCount: number;
+            canApply: boolean;
+            blockers: ("NO_CHANGE" | "SELF_TARGET" | "ADMIN_GRANT_REQUIRES_ADMIN" | "LAST_ADMIN")[];
+        };
+        AccessUserRoleChange: {
+            userId: string;
+            previousRoleIds: string[];
+            roleIds: string[];
+            version: number;
+        };
+        AccessBatchRoleResult: {
+            users: components["schemas"]["AccessUser"][];
+            changes: components["schemas"]["AccessUserRoleChange"][];
+            unchangedUserIds: string[];
+        };
+        AccessBatchRolePreviewResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AccessBatchRolePreview"];
+        };
+        AccessBatchRoleResultResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["AccessBatchRoleResult"];
+        };
         AccessUserStatusTarget: {
             id: string;
             version: number;
@@ -10669,6 +10730,65 @@ export interface operations {
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    previewBatchAccessUserRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchAssignAccessUserRoles"];
+            };
+        };
+        responses: {
+            /** @description Read-only batch role preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessBatchRolePreviewResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    batchAssignAccessUserRoles: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchAssignAccessUserRoles"];
+            };
+        };
+        responses: {
+            /** @description Atomic role replacement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessBatchRoleResultResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     batchChangeAccessUserStatus: {

@@ -37,6 +37,19 @@ public class AccessController {
     ApiResponse<List<AccessModels.UserView>> users(){return responses.success(service.users());}
     @PostMapping("/users") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.UserView> createUser(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateUser command){return responses.success(once("USER_CREATE",key,command,AccessModels.UserView.class,()->{var r=service.createUser(command);append("USER_CREATE","USER",r.id(),Map.of(),Map.of("username",r.username()));return r;}));}
+    @PostMapping("/users/batch-role-impact") @RequiresPermission("iam:user:manage")
+    ApiResponse<AccessModels.BatchRolePreview> previewBatchRoles(@Valid @RequestBody AccessModels.BatchAssignUserRoles command){
+        return responses.success(service.previewBatchUserRoles(command));
+    }
+    @PutMapping("/users/batch-roles") @RequiresPermission("iam:user:manage")
+    ApiResponse<AccessModels.BatchRoleResult> batchRoles(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.BatchAssignUserRoles command){
+        return responses.success(once("USER_BATCH_ROLE_ASSIGN",key,command,AccessModels.BatchRoleResult.class,()->{
+            var result=service.batchAssignUserRoles(command);
+            for(var change:result.changes()) append("USER_BATCH_ROLE_ASSIGN","USER",change.userId(),
+                    Map.of("roleIds",change.previousRoleIds()),Map.of("roleIds",change.roleIds(),"version",change.version()));
+            return result;
+        }));
+    }
     @PutMapping("/users/batch-status") @RequiresPermission("iam:user:manage")
     ApiResponse<List<AccessModels.UserView>> batchStatus(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.BatchChangeUserStatus command){
         var rows=once("USER_BATCH_STATUS",key,command,AccessModels.UserView[].class,()->{

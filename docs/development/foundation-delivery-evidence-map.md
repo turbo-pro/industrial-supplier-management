@@ -50,3 +50,5 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 这是源码/依赖描述符检查，不是完整 Java 语义分析。反射、运行时代理、自定义SQL跨表、跨模块内部对象和多层目录仍需后续架构治理，不为历史越界查询建立隐式通过名单。已有跨表组织查询必须另外迁移为所属模块公开读取契约。
 
 本次 ModuleBoundaryTest 5/5、观察期策略2/2、公开读取契约2/2通过；真实MySQL的绩效/限制/解除完整流程及租户隔离/字段掩码2/2通过；现有API契约基线5/5通过。报告位于 `output/playwright/foundation-2026-10-29/`，无失败、错误或跳过。复现：JDK21下 `./mvnw -q -pl backend/ism-bootstrap -am -Pintegration-test '-Dit.test=B0InfrastructureIT#shouldPersistPerformanceRuleScorecardAndReview+shouldFailClosedAndIsolateTenantReadsWritesAndExports' -Dfailsafe.failIfNoSpecifiedTests=false verify`。Review确认未改变观察期规则、当前读与审批事务，未发现本子任务阻断。不会修改旧库、repair V25或清理客户数据。
+
+2026-10-29 后续交付：B1-05/06/07 已补 [批量账号角色闭环](b1-batch-user-roles-review.md)，含真实预览、版本竞争、响应丢失重放、数据范围与最终库验证。完整账号列表/单账号入口的数据范围一致性仍须联合复查，岗位、交接及跨租户支持会话继续待推进。

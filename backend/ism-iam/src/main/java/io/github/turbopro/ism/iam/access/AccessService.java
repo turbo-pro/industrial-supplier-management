@@ -189,6 +189,11 @@ public class AccessService {
 
     @Transactional
     public AccessModels.UserView assignUserRoles(long userId, AccessModels.AssignUserRoles command) {
+        updateUserRoles(userId,command);
+        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
+    }
+
+    private void updateUserRoles(long userId,AccessModels.AssignUserRoles command) {
         long tenantId=tenantId();
         if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
         AccessModels.UserRow user=mapper.userForStatusUpdate(tenantId,userId);
@@ -207,7 +212,6 @@ public class AccessService {
         assignRoles(tenantId,userId,command.roleIds());
         if(mapper.revokeUserSessions(tenantId,userId,command.version())!=1) throw new ApiException(CommonErrorCode.CONFLICT);
         mapper.revokeRefreshTokens(tenantId,userId,LocalDateTime.now(),"ROLE_CHANGED");
-        return users().stream().filter(row->row.id().equals(Long.toString(userId))).findFirst().orElseThrow();
     }
 
     @Transactional
@@ -253,6 +257,62 @@ public class AccessService {
         Map<String,AccessModels.UserView> changed=users().stream().filter(row->versions.containsKey(Long.parseLong(row.id())))
                 .collect(Collectors.toMap(AccessModels.UserView::id,row->row));
         return versions.keySet().stream().map(id->changed.get(Long.toString(id))).toList();
+    }
+
+    private Map<Long,Integer> batchRoleVersions(AccessModels.BatchAssignUserRoles command) {
+        if(command==null||command.targets()==null||command.targets().isEmpty()||command.targets().size()>100
+                ||command.roleIds()==null||command.roleIds().isEmpty()||command.roleIds().size()>100)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        if(parseIds(command.roleIds()).size()!=command.roleIds().size())
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"角色不能重复");
+        Map<Long,Integer> versions=new java.util.TreeMap<>();
+        for(var target:command.targets()) {
+            if(target==null||target.version()<0) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+            if(versions.putIfAbsent(parseId(target.id()),target.version())!=null)
+                throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"账号不能重复提交");
+        }
+        return versions;
+    }
+
+    @Transactional(readOnly=true)
+    public AccessModels.BatchRolePreview previewBatchUserRoles(AccessModels.BatchAssignUserRoles command) {
+        var versions=batchRoleVersions(command);
+        var items=new ArrayList<AccessModels.RoleImpactPreview>();
+        Set<String> blockers=new TreeSet<>();
+        if(versions.containsKey(TenantContext.require().actorId())) blockers.add("SELF_TARGET");
+        int changed=0;
+        for(var entry:versions.entrySet()) {
+            if(mapper.findUser(tenantId(),entry.getKey())==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+            var scope=AuthorizationContext.require().dataScope("iam:user");
+            if(scope.type()!=DataScope.Type.TENANT_ALL&&!scope.allows(
+                    new io.github.turbopro.ism.common.infrastructure.authorization.DataTarget(
+                            mapper.userPrimaryOrganization(tenantId(),entry.getKey()),null,null,null),TenantContext.require().actorId()))
+                throw new ApiException(CommonErrorCode.FORBIDDEN,"目标账号不在用户管理数据范围内");
+            var item=previewUserRoles(entry.getKey(),command.roleIds(),entry.getValue());
+            items.add(item);
+            if(!item.blockers().contains("NO_CHANGE")) changed++;
+            item.blockers().stream().filter(code->!code.equals("NO_CHANGE")).forEach(blockers::add);
+        }
+        if(changed==0) blockers.add("NO_CHANGE");
+        return new AccessModels.BatchRolePreview(items,changed,blockers.isEmpty(),blockers);
+    }
+
+    @Transactional
+    public AccessModels.BatchRoleResult batchAssignUserRoles(AccessModels.BatchAssignUserRoles command) {
+        var versions=batchRoleVersions(command);
+        if(mapper.lockTenant(tenantId())==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var preview=previewBatchUserRoles(command);
+        if(!preview.canApply()) throw new ApiException(CommonErrorCode.CONFLICT,"整批角色调整不可执行，请重新核对影响预览");
+        var changes=new ArrayList<AccessModels.UserRoleChange>();
+        Set<String> unchanged=new TreeSet<>();
+        for(var item:preview.items()) {
+            if(item.blockers().contains("NO_CHANGE")) { unchanged.add(item.userId()); continue; }
+            long userId=parseId(item.userId());
+            updateUserRoles(userId,new AccessModels.AssignUserRoles(command.roleIds(),versions.get(userId)));
+            changes.add(new AccessModels.UserRoleChange(item.userId(),item.currentRoleIds(),item.proposedRoleIds(),item.version()+1));
+        }
+        var result=users().stream().filter(user->versions.containsKey(parseId(user.id()))).toList();
+        return new AccessModels.BatchRoleResult(result,changes,unchanged);
     }
 
     @Transactional

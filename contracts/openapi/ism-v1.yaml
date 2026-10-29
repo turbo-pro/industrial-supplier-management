@@ -1648,6 +1648,33 @@ paths:
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/batch-role-impact:
+    post:
+      operationId: previewBatchAccessUserRoles
+      description: 当前租户1至100个账号的角色替换预览；需要iam:user:manage，并按iam:user主组织数据范围逐目标校验。已相同角色的账号标为NO_CHANGE，整批不能包含本人。预览是时点信息，提交重新检查全部版本和管理员规则。
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BatchAssignAccessUserRoles' } } } }
+      responses:
+        '200': { description: Read-only batch role preview, content: { application/json: { schema: { $ref: '#/components/schemas/AccessBatchRolePreviewResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /access/users/batch-roles:
+    put:
+      operationId: batchAssignAccessUserRoles
+      description: 需要iam:user:manage及目标的iam:user数据范围，按所有账号版本原子替换角色，最多100个。禁止本人，管理员规则仍逐账号校验；不变账号不提升版本或撤销会话。变更账号逐个审计并撤销旧会话。重复/非法/跨租户目标、旧版本或任一失败整批回滚；相同幂等请求重放历史结果。
+      tags: [Tenant Access]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BatchAssignAccessUserRoles' } } } }
+      responses:
+        '200': { description: Atomic role replacement, content: { application/json: { schema: { $ref: '#/components/schemas/AccessBatchRoleResultResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /access/users/batch-status:
     put:
       operationId: batchChangeAccessUserStatus
@@ -5039,6 +5066,39 @@ components:
       properties:
         status: { type: string, enum: [ACTIVE, DISABLED] }
         version: { type: integer, minimum: 0 }
+    BatchAssignAccessUserRoles:
+      type: object
+      required: [roleIds, targets]
+      properties:
+        roleIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string, minLength: 1 } }
+        targets: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/AccessUserStatusTarget' } }
+    AccessBatchRolePreview:
+      type: object
+      required: [items, changeCount, canApply, blockers]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AccessRoleImpactPreview' } }
+        changeCount: { type: integer, minimum: 0 }
+        canApply: { type: boolean }
+        blockers: { type: array, uniqueItems: true, items: { type: string, enum: [NO_CHANGE, SELF_TARGET, ADMIN_GRANT_REQUIRES_ADMIN, LAST_ADMIN] } }
+    AccessUserRoleChange:
+      type: object
+      required: [userId, previousRoleIds, roleIds, version]
+      properties:
+        userId: { type: string }
+        previousRoleIds: { type: array, uniqueItems: true, items: { type: string } }
+        roleIds: { type: array, uniqueItems: true, items: { type: string } }
+        version: { type: integer, minimum: 0 }
+    AccessBatchRoleResult:
+      type: object
+      required: [users, changes, unchangedUserIds]
+      properties:
+        users: { type: array, items: { $ref: '#/components/schemas/AccessUser' } }
+        changes: { type: array, items: { $ref: '#/components/schemas/AccessUserRoleChange' } }
+        unchangedUserIds: { type: array, uniqueItems: true, items: { type: string } }
+    AccessBatchRolePreviewResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AccessBatchRolePreview' } } }]
+    AccessBatchRoleResultResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/AccessBatchRoleResult' } } }]
     AccessUserStatusTarget:
       type: object
       required: [id, version]

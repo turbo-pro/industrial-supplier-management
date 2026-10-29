@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 
 @Mapper
 public interface AccessMapper extends TenantScopedMapper {
+    @Select("SELECT organization_id FROM iam_user_organization WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND is_primary=1")
+    Long userPrimaryOrganization(long tenantId,long userId);
+
     @Select("SELECT id,role_code,role_name,built_in,status,version FROM iam_role WHERE tenant_id=#{tenantId} ORDER BY built_in DESC,created_at,id")
     List<AccessModels.RoleRow> roles(long tenantId);
     @Select("SELECT id,role_code,role_name,built_in,status,version FROM iam_role WHERE tenant_id=#{tenantId} AND id=#{id}")

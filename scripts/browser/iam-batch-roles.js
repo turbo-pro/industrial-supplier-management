@@ -1,0 +1,60 @@
+async page => {
+  const fixture = __FIXTURE__;
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  await page.getByRole('textbox', { name: '租户编码', exact: true }).fill(fixture.code);
+  await page.getByRole('textbox', { name: '用户名', exact: true }).fill('batch-admin');
+  await page.getByLabel('密码', { exact: true }).fill('Batch#Pass123');
+  const login = page.waitForResponse(r => r.url().endsWith('/api/auth/login') && r.status() === 200);
+  await page.getByRole('button', { name: '登录系统', exact: true }).click();
+  const token = (await (await login).json()).data.accessToken;
+  await page.goto(new URL('/system/users', page.url()).href);
+  const choose = async () => { for (const name of ['batch-one', 'batch-two', 'batch-same']) await page.getByRole('row').filter({ has: page.getByText(name, { exact: true }) }).locator('.el-checkbox').click(); };
+  const inspect = async () => {
+    await page.getByRole('button', { name: '批量调整角色', exact: true }).click();
+    await page.getByRole('dialog', { name: '批量调整账号角色', exact: true }).locator('.el-select__wrapper').click();
+    await page.getByRole('option', { name: '目标角色', exact: true }).click();
+    await page.keyboard.press('Escape');
+    const preview = page.waitForResponse(r => r.url().endsWith('/access/users/batch-role-impact') && r.status() === 200);
+    await page.getByRole('button', { name: '预览整批影响', exact: true }).click(); await preview;
+    await page.getByText('将变更 2 个账号，1 个保持不变。', { exact: true }).waitFor();
+  };
+  const confirm = async () => { await page.getByRole('button', { name: '确认整批调整', exact: true }).click(); await page.getByRole('dialog', { name: '确认批量调整角色', exact: true }).getByRole('button', { name: '确定', exact: true }).click(); };
+  await choose(); await inspect();
+  // A second real request advances one account after the user's preview, without changing its role.
+  const changed = await page.request.put(new URL(`/api/access/users/${fixture.second}/roles`, page.url()).href, { headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': 'browser-external-change' }, data: { roleIds: [fixture.baseRole], version: 0 } });
+  check(changed.status() === 200, 'external role update failed');
+  const conflict = page.waitForResponse(r => r.url().endsWith('/access/users/batch-roles') && r.status() === 409);
+  await confirm(); await conflict;
+  await page.getByRole('alert').filter({ hasText: '请关闭后刷新列表核对并重新选择' }).waitFor();
+  await page.getByRole('dialog', { name: '批量调整账号角色', exact: true }).getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await page.getByText('已选择 0 个账号（单次最多 100 个）', { exact: true }).waitFor();
+  await choose(); await inspect();
+  let originalKey = '';
+  await page.route('**/api/access/users/batch-roles', async route => {
+    originalKey = route.request().headers()['idempotency-key'];
+    const response = await route.fetch(); check(response.status() === 200, 'batch must commit before response loss');
+    await route.abort('failed');
+  }, { times: 1 });
+  await confirm();
+  await page.getByText('结果不确定，原请求已保留；重试将使用同一幂等键。', { exact: true }).waitFor();
+  const retry = page.waitForRequest(r => r.url().endsWith('/access/users/batch-roles') && r.method() === 'PUT');
+  const acknowledged = page.waitForResponse(r => r.url().endsWith('/access/users/batch-roles') && r.status() === 200);
+  await page.getByRole('button', { name: '重试同一角色请求', exact: true }).click();
+  check((await retry).headers()['idempotency-key'] === originalKey, 'retry must keep the original key'); await acknowledged;
+  await page.getByRole('dialog', { name: '批量调整账号角色', exact: true }).waitFor({ state: 'hidden' });
+  await page.getByRole('row').filter({ has: page.getByText('batch-one', { exact: true }) }).getByText('目标角色', { exact: true }).waitFor();
+  await page.screenshot({ path: 'output/playwright/iam-batch-roles/desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('row').filter({ has: page.getByText('batch-same', { exact: true }) }).locator('.el-checkbox').click();
+  await page.getByRole('button', { name: '批量调整角色', exact: true }).click();
+  await page.getByRole('dialog', { name: '批量调整账号角色', exact: true }).locator('.el-select__wrapper').click();
+  await page.getByRole('option', { name: '目标角色', exact: true }).click(); await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '预览整批影响', exact: true }).click();
+  await page.getByText('将变更 0 个账号，1 个保持不变。', { exact: true }).waitFor();
+  check(await page.getByRole('button', { name: '确认整批调整', exact: true }).isDisabled(), 'unchanged batch must not save');
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'mobile page must not overflow');
+  await page.screenshot({ path: 'output/playwright/iam-batch-roles/mobile.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: '批量调整账号角色', exact: true }).waitFor({ state: 'hidden' });
+}
