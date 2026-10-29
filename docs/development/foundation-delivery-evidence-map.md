@@ -14,7 +14,7 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 | B0-04 | iam/auth 的 AuthService、JWT、刷新/退出 | B0InfrastructureIT 的认证回归为历史基础 | 补本次令牌族、安全事件及跨端矩阵，不能以门户会话代员工JWT验收 |
 | B0-05 | TenantContext、TenantIsolationInterceptor、TenantScopedMapper | 本次 shouldFailClosedAndIsolateTenantReadsWritesAndExports | 全业务 Mapper/下载/统计与后台任务的逐入口覆盖仍需归档 |
 | B0-06 | AuthorizationGrantLoader、数据范围和字段权限 | 同一隔离用例检查详情/导出掩码、越权、权限变更 | 全产品敏感字段用途/留存/导出治理未完成 |
-| B0-07 | operation 审计/Outbox/租约；dispatch-lease-fencing-review.md | 2026-10-28 租约15/15为历史专项证据 | 进程宕机/容量、全部副作用幂等及审计保留仍需专验 |
+| B0-07 | operation 审计/Outbox/租约；dispatch-lease-fencing-review.md | 2026-10-28 租约15/15为历史专项证据 | 本次[幂等键输入](idempotency-input-review.md)单测2/2、HTTP及并发集成各1/1；进程宕机/容量、全部副作用幂等及审计保留仍需专验 |
 | B0-08 | contracts、api-client、现有浏览器运行脚本 | 多个已有跨端专项 Review；本次没有替代性全量E2E | 四端完整矩阵缺移动H5，当前工作区有他人接口/客户端调整 |
 | B1-01 | iam/console 独立认证与平台权限 | b1-console-user-management-review.md 为历史证据 | GAP-01 支持会话不可由平台角色替代 |
 | B1-02 | platform/packageplan，IAM 套餐权限交集SPI | 套餐/有效期/额度/争用专项为历史证据 | 容量与全部降级影响、完整端到端门禁继续核对 |

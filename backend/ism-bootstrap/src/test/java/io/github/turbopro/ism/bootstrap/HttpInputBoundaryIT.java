@@ -86,9 +86,23 @@ class HttpInputBoundaryIT {
         assertThat(count("res_upload_session", tenantId)).isZero();
         assertThat(count("sys_idempotency_record", tenantId)).isZero();
 
-        headers.set("Idempotency-Key", "valid-upload-initialize");
+        for (String invalid : List.of("   ", "private-key-" + "x".repeat(129))) {
+            var invalidHeaders = new HttpHeaders(headers);
+            invalidHeaders.set("Idempotency-Key", invalid);
+            var rejected = http.postForEntity("/api/files/uploads", new HttpEntity<>(command, invalidHeaders), JsonNode.class);
+            assertThat(rejected.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(rejected.getBody().path("error").path("code").asText()).isEqualTo("COMMON_VALIDATION_FAILED");
+            assertThat(rejected.getBody().toString()).doesNotContain("private-key-", "private-customer-file", "DataIntegrityViolation", "SQL");
+            assertThat(count("res_upload_session", tenantId)).isZero();
+            assertThat(count("sys_idempotency_record", tenantId)).isZero();
+        }
+
+        headers.set("Idempotency-Key", "k".repeat(128));
         var initialized = http.postForEntity("/api/files/uploads", new HttpEntity<>(command, headers), JsonNode.class);
         assertThat(initialized.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var replayed = http.postForEntity("/api/files/uploads", new HttpEntity<>(command, headers), JsonNode.class);
+        assertThat(replayed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(replayed.getBody().path("data")).isEqualTo(initialized.getBody().path("data"));
         String uploadId = initialized.getBody().path("data").path("id").asText();
         assertThat(count("res_upload_session", tenantId)).isOne();
         var chunkHeaders = new HttpHeaders(headers);

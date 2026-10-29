@@ -37,6 +37,9 @@ public class IdempotencyService {
     public String execute(String operationCode, String idempotencyKey, String requestBody,
                           Duration retention, Supplier<String> action) {
         TenantContext.Identity identity = TenantContext.require();
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128
+                || idempotencyKey.chars().anyMatch(Character::isISOControl))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "幂等键须为1至128个字符，不能全为空白或包含控制字符");
         String requestHash = sha256(requestBody);
         long recordId = ids.nextId();
         try {
