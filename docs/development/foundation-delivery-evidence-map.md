@@ -10,7 +10,7 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 |---|---|---|---|
 | B0-01 | 父/子 pom.xml，四端 package.json，bootstrap 启动器 | 本次 ModuleBoundaryTest；见下文 | 仍需跨模块 SQL/内部对象治理；mobile 仅目录注册 |
 | B0-02 | bootstrap Flyway、MyBatis 配置，V1–V85 | 本次隔离 MySQL 应用启动；旧库升级证据见 v25-checksum-recovery.md | 独立重复启动/升级 Gate 不以有迁移目录替代 |
-| B0-03 | common-infrastructure/web 统一响应/异常/traceId | ApiContractTest；覆盖范围以本次报告为准 | 参数、校验及协议边界需补验；不能将兜底500当作输入校验正确 |
+| B0-03 | common-infrastructure/web 统一响应/异常/traceId | 本次[HTTP输入专项](http-input-boundary-review.md)契约13/13、真实上传下载1/1 | 缺头/原生参数误报500已修；全产品消息、请求大小与全部参数组合仍待映射 |
 | B0-04 | iam/auth 的 AuthService、JWT、刷新/退出 | B0InfrastructureIT 的认证回归为历史基础 | 补本次令牌族、安全事件及跨端矩阵，不能以门户会话代员工JWT验收 |
 | B0-05 | TenantContext、TenantIsolationInterceptor、TenantScopedMapper | 本次 shouldFailClosedAndIsolateTenantReadsWritesAndExports | 全业务 Mapper/下载/统计与后台任务的逐入口覆盖仍需归档 |
 | B0-06 | AuthorizationGrantLoader、数据范围和字段权限 | 同一隔离用例检查详情/导出掩码、越权、权限变更 | 全产品敏感字段用途/留存/导出治理未完成 |

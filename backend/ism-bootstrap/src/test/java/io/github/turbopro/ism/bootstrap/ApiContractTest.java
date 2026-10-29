@@ -128,6 +128,89 @@ class ApiContractTest {
                 .andExpect(jsonPath("$.traceId").isString());
     }
 
+    @Test
+    void missingRequiredHeaderReturnsInputErrorInsteadOfServerFailure() throws Exception {
+        mockMvc.perform(get("/api/v1/contract/header").header(TraceIdFilter.TRACE_ID_HEADER, "missing-key-trace"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.fieldErrors[0].field").value("Idempotency-Key"))
+                .andExpect(jsonPath("$.traceId").value("missing-key-trace"));
+    }
+
+    @Test
+    void nativeMvcMethodValidationReturnsInputError() throws Exception {
+        mockMvc.perform(get("/api/v1/contract/query").param("pageSize", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.fieldErrors[0].field").value("pageSize"));
+    }
+
+    @Test
+    void missingCookieAndMultipartPartReturnStableRequiredFields() throws Exception {
+        mockMvc.perform(get("/api/v1/contract/cookie"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.fieldErrors[0].field").value("device"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/contract/part"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.fieldErrors[0].field").value("attachment"));
+    }
+
+    @Test
+    void validNativeParametersContinueToWorkAndOutOfRangePathDoesNotExecute() throws Exception {
+        for (String size : java.util.List.of("1", "100")) {
+            mockMvc.perform(get("/api/v1/contract/query").param("pageSize", size))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data").value(Integer.parseInt(size)));
+        }
+        mockMvc.perform(get("/api/v1/contract/query").param("pageSize", "101"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.fieldErrors[0].code").value("Max"));
+        mockMvc.perform(get("/api/v1/contract/positive/0"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.fieldErrors[0].field").value("id"));
+    }
+
+    @Test
+    void invalidServerReturnValueRemainsInternalFailureWithoutRejectedData() throws Exception {
+        mockMvc.perform(get("/api/v1/contract/invalid-result"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.error.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.error.details").isEmpty());
+    }
+
+    @Test
+    void malformedBodyMissingQueryAndWrongTypeUseInputContractWithoutEchoingValues() throws Exception {
+        mockMvc.perform(post("/api/v1/contract/validate").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"sensitive-private-value\""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_VALIDATION_MALFORMED_REQUEST"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(not(containsString("sensitive-private-value"))));
+        mockMvc.perform(get("/api/v1/contract/query"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("COMMON_VALIDATION_FAILED"));
+        mockMvc.perform(get("/api/v1/contract/query").param("pageSize", "sensitive-private-value"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(not(containsString("sensitive-private-value"))));
+    }
+
+    @Test
+    void methodAndContentTypeErrorsPreserveTraceAndDeclaredCodes() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/v1/contract/success")
+                        .header(TraceIdFilter.TRACE_ID_HEADER, "method-error-trace"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.error.code").value("COMMON_METHOD_NOT_ALLOWED"))
+                .andExpect(jsonPath("$.traceId").value("method-error-trace"));
+        mockMvc.perform(post("/api/v1/contract/validate").contentType(MediaType.TEXT_PLAIN).content("private"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error.code").value("COMMON_MEDIA_TYPE_NOT_SUPPORTED"));
+    }
+
+    @Test
+    void routeDefinitionAndExecutableReturnConstraintsRemainServerErrors() throws Exception {
+        for (String route : java.util.List.of("/api/v1/contract/broken-route/1", "/api/v1/contract/executable-result")) {
+            mockMvc.perform(get(route))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_INTERNAL_ERROR"))
+                    .andExpect(jsonPath("$.error.fieldErrors").isEmpty())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(not(containsString("expectedId"))));
+        }
+    }
+
     @RestController
     @RequestMapping("/api/v1/contract")
     public static class ContractController {
@@ -136,6 +219,47 @@ class ApiContractTest {
 
         public ContractController(ApiResponseFactory responseFactory) {
             this.responseFactory = responseFactory;
+        }
+
+        @GetMapping("/header")
+        ApiResponse<String> header(@org.springframework.web.bind.annotation.RequestHeader("Idempotency-Key") String key) {
+            return responseFactory.success("accepted");
+        }
+
+        @GetMapping("/query")
+        ApiResponse<Integer> query(@org.springframework.web.bind.annotation.RequestParam("pageSize")
+                                  @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) int size) {
+            return responseFactory.success(size);
+        }
+
+        @GetMapping("/cookie")
+        ApiResponse<String> cookie(@org.springframework.web.bind.annotation.CookieValue("device") String device) {
+            return responseFactory.success("accepted");
+        }
+        @PostMapping("/part")
+        ApiResponse<String> part(@org.springframework.web.bind.annotation.RequestPart("attachment") org.springframework.web.multipart.MultipartFile file) {
+            return responseFactory.success("accepted");
+        }
+        @GetMapping("/positive/{id}")
+        ApiResponse<Long> positive(@org.springframework.web.bind.annotation.PathVariable("id") @jakarta.validation.constraints.Positive long id) {
+            return responseFactory.success(id);
+        }
+        @GetMapping("/invalid-result") @jakarta.validation.constraints.Positive
+        int invalidResult() { return 0; }
+
+        @GetMapping("/broken-route/{wrongId}")
+        ApiResponse<Long> brokenRoute(@org.springframework.web.bind.annotation.PathVariable("expectedId") long id) {
+            return responseFactory.success(id);
+        }
+        @GetMapping("/executable-result")
+        void executableResult() throws Exception {
+            try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+                var sample = new InvalidReturn();
+                var violations = factory.getValidator().forExecutables()
+                        .validateReturnValue(sample, InvalidReturn.class.getDeclaredMethod("value"), -99);
+                if (violations.isEmpty()) throw new IllegalStateException("Expected return constraint violation");
+                throw new jakarta.validation.ConstraintViolationException(violations);
+            }
         }
 
         @GetMapping("/success")
@@ -160,6 +284,10 @@ class ApiContractTest {
         void unexpected() {
             throw new IllegalStateException("jdbc:mysql://secret-host/db?password=secret");
         }
+    }
+
+    public static class InvalidReturn {
+        @jakarta.validation.constraints.Positive public int value() { return -99; }
     }
 
     record ValidationParam(@NotBlank(message = "名称不能为空") String name) {
