@@ -1506,6 +1506,24 @@ paths:
       responses:
         '200': { description: Suspended tenant cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /site-context:
+    post:
+      operationId: issueSiteContext
+      tags: [Site Context]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SelectSiteContext' } } } }
+      responses:
+        '200': { description: Credential-bound site preview context, content: { application/json: { schema: { $ref: '#/components/schemas/SiteContextIssuedResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+    get:
+      operationId: validateSiteContext
+      tags: [Site Context]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: X-Site-Context, in: header, required: true, schema: { type: string, maxLength: 4096 } }]
+      responses:
+        '200': { description: Current request context after live authorization validation, content: { application/json: { schema: { $ref: '#/components/schemas/SiteContextCurrentResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /site-preferences:
     get:
       operationId: getPersonalSitePreference
@@ -4881,6 +4899,28 @@ components:
         timezone: { type: string, example: Asia/Shanghai }
         locale: { type: string, example: zh-CN }
         packageVersionId: { type: string }
+    SelectSiteContext:
+      type: object
+      properties:
+        siteId: { type: string, nullable: true, pattern: '^[1-9][0-9]{0,18}$', description: Null selects a valid personal preference or the single eligible site. }
+    SiteContextIssued:
+      type: object
+      required: [site, contextToken, expiresAt, selectionReason]
+      properties:
+        site: { $ref: '#/components/schemas/PersonalSiteOption' }
+        contextToken: { type: string, format: password, description: Memory-only credential. Never log, persist, use as bearer, or attach to unintegrated endpoints. }
+        expiresAt: { type: string, format: date-time }
+        selectionReason: { type: string, enum: [EXPLICIT, PREFERRED, ONLY_SITE] }
+    SiteContextCurrent:
+      type: object
+      required: [site, expiresAt]
+      properties:
+        site: { $ref: '#/components/schemas/PersonalSiteOption' }
+        expiresAt: { type: string, format: date-time }
+    SiteContextIssuedResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SiteContextIssued' } } }]
+    SiteContextCurrentResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SiteContextCurrent' } } }]
     PersonalSiteOption:
       type: object
       required: [id, code, name]

@@ -23,6 +23,7 @@ public class SitePreferenceService {
         return new SitePreferenceModels.Page(mapper.options(who.tenantId(),who.actorId(),scope.type().name(),scope.organizationIds(),query,size,(long)page*size),mapper.count(who.tenantId(),who.actorId(),scope.type().name(),scope.organizationIds(),query),page,size);
     }
     public void requireTarget(String value){if(value!=null&&eligible(parseId(value))==null)throw new ApiException(CommonErrorCode.FORBIDDEN,"该场站当前不在可选范围内");}
+    public SitePreferenceModels.Option requireOption(long site){var option=eligible(site);if(option==null)throw new ApiException(CommonErrorCode.FORBIDDEN,"该场站当前不在可选范围内");return option;}
     private SitePreferenceModels.Option eligible(long site){var who=TenantContext.require();var scope=AuthorizationContext.require().dataScope("iam:site");return mapper.eligible(who.tenantId(),who.actorId(),scope.type().name(),scope.organizationIds(),site);}
     private long parseId(String value){try{long id=Long.parseLong(value);if(id<=0)throw new NumberFormatException();return id;}catch(NumberFormatException e){throw new ApiException(CommonErrorCode.VALIDATION_FAILED);}}
     @Transactional

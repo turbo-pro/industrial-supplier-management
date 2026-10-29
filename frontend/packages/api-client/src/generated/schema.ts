@@ -1601,6 +1601,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["validateSiteContext"];
+        put?: never;
+        post: operations["issueSiteContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/site-preferences": {
         parameters: {
             query?: never;
@@ -6691,6 +6707,33 @@ export interface components {
             locale: string;
             packageVersionId: string;
         };
+        SelectSiteContext: {
+            /** @description Null selects a valid personal preference or the single eligible site. */
+            siteId?: string | null;
+        };
+        SiteContextIssued: {
+            site: components["schemas"]["PersonalSiteOption"];
+            /**
+             * Format: password
+             * @description Memory-only credential. Never log
+             */
+            contextToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @enum {string} */
+            selectionReason: "EXPLICIT" | "PREFERRED" | "ONLY_SITE";
+        };
+        SiteContextCurrent: {
+            site: components["schemas"]["PersonalSiteOption"];
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        SiteContextIssuedResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SiteContextIssued"];
+        };
+        SiteContextCurrentResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SiteContextCurrent"];
+        };
         PersonalSiteOption: {
             id: string;
             code: string;
@@ -10445,6 +10488,55 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    validateSiteContext: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Site-Context": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current request context after live authorization validation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteContextCurrentResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    issueSiteContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectSiteContext"];
+            };
+        };
+        responses: {
+            /** @description Credential-bound site preview context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteContextIssuedResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     getPersonalSitePreference: {

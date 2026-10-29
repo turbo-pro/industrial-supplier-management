@@ -50,6 +50,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class ApiContractTest {
     @MockBean
+    private io.github.turbopro.ism.iam.site.SiteContextService siteContextService;
+    @MockBean
     private io.github.turbopro.ism.iam.portal.PortalAuthService portalAuthService;
 
     @Autowired

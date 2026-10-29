@@ -31,15 +31,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final ApiResponseFactory responses;
     private final ObjectMapper objectMapper;
     private final AuthorizationGrantLoader grantLoader;
+    private final io.github.turbopro.ism.iam.site.SiteContextService sites;
 
     public JwtAuthenticationFilter(JwtTokenService tokens, AuthService authService,
                                    ApiResponseFactory responses, ObjectMapper objectMapper,
-                                   AuthorizationGrantLoader grantLoader) {
+                                   AuthorizationGrantLoader grantLoader,io.github.turbopro.ism.iam.site.SiteContextService sites) {
         this.tokens = tokens;
         this.authService = authService;
         this.responses = responses;
         this.objectMapper = objectMapper;
         this.grantLoader = grantLoader;
+        this.sites = sites;
     }
 
     @Override
@@ -72,7 +74,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try (TenantContext.Scope ignored = TenantContext.open(principal.tenantId(), principal.userId())) {
                 PermissionSnapshot grants = grantLoader.load(principal.tenantId(), principal.userId());
                 try (AuthorizationContext.Scope ignoredGrants = AuthorizationContext.open(grants)) {
-                    chain.doFilter(request, response);
+                    var headers=java.util.Collections.list(request.getHeaders("X-Site-Context"));
+                    if(headers.isEmpty()){chain.doFilter(request,response);}
+                    else{
+                        if(headers.size()!=1)throw new ApiException(io.github.turbopro.ism.iam.site.SiteContextError.INVALID);
+                        if(!io.github.turbopro.ism.iam.site.SiteContextRoutes.supports(request.getMethod(),request.getServletPath()))
+                            throw new ApiException(io.github.turbopro.ism.iam.site.SiteContextError.UNSUPPORTED);
+                        var site=sites.resolve(headers.get(0),authorization.substring(7));
+                        try(var context=io.github.turbopro.ism.common.infrastructure.tenant.SiteContext.open(site.siteId(),site.expiresAt())){chain.doFilter(request,response);}
+                    }
                 }
             }
         } catch (JwtException | IllegalArgumentException | ApiException exception) {

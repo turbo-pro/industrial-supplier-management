@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import type { components } from '@ism/api-client';
+import SiteContextPreview from '../components/SiteContextPreview.vue';
 import { useSessionStore } from '../stores/session';
 const session=useSessionStore();
 type State=components['schemas']['SitePreference'];
@@ -56,6 +57,7 @@ onMounted(()=>{void load();void search();});
       </el-form>
       <p v-if="state&&!state.canManage">当前账号仅可查看个人首选场站。</p>
     </el-card>
+    <SiteContextPreview v-if="state" :options="choices" :initial-site-id="state.preferredSite?.id" />
   </section>
 </template>
 <style scoped>
