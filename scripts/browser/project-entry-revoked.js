@@ -1,0 +1,5 @@
+async page => {
+ await page.reload();await page.getByRole('heading',{name:'组织项目总览',exact:true}).waitFor();if(await page.getByRole('button',{name:'场站项目',exact:true}).count())throw new Error('Organization-only reader still received site workspace');const overview=page.locator('.organization-project-overview');await overview.getByText('当前仅有总览权限，项目详情需要单独授权。',{exact:true}).waitFor();
+ const buttons=overview.getByRole('button',{name:'查看详情',exact:true});if(await buttons.count()!==2)throw new Error('Expected two preserved projects');for(let i=0;i<2;i++)if(!await buttons.nth(i).isDisabled())throw new Error('Revoked organization detail remained enabled');
+ const status=await page.evaluate(async()=>{const authorization='Bearer '+sessionStorage.getItem('ism.admin.accessToken'),result=await fetch('/api/projects',{headers:{Authorization:authorization}}),data=(await result.json()).data;return(await fetch('/api/projects/'+data.items[0].id,{headers:{Authorization:authorization}})).status;});if(status!==403)throw new Error('Revoked organization detail was readable');await page.screenshot({path:'output/playwright/project-entry/revoked.png',fullPage:true});
+}

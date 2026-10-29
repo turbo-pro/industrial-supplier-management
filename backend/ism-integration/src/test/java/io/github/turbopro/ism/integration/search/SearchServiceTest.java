@@ -16,7 +16,7 @@ import static org.mockito.Mockito.*;
 
 class SearchServiceTest {
     private final SearchMapper mapper=mock(SearchMapper.class);
-    private final SearchService service=new SearchService(mapper,mock(OperationIdGenerator.class),new ObjectMapper().findAndRegisterModules());
+    private final SearchService service=new SearchService(mapper,mock(OperationIdGenerator.class),new ObjectMapper().findAndRegisterModules(),mock(io.github.turbopro.ism.common.infrastructure.tenant.TenantSiteOperationPolicy.class));
 
     @Test void admissionSearchRequiresIndependentPermissionAndScope(){
         var query=new SearchModels.SearchRequest("ADM-",Set.of(SearchModels.EntityType.SUPPLIER_ADMISSION),Set.of("SUBMITTED"),null,null,0,20);

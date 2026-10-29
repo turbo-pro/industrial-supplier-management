@@ -30,7 +30,7 @@ export default createRouter({history:createWebHistory(),routes:[
   {path:'/suppliers/admissions',component:SupplierAdmissionPage,meta:{title:'供应商准入'}},
   {path:'/suppliers/qualifications',component:SupplierQualificationPage,meta:{title:'资质证照'}},
   {path:'/projects/contracts',component:ContractProjectPage,meta:{title:'合同台账',tab:'contracts'}},
-  {path:'/projects/ledger',component:ContractProjectPage,meta:{title:'项目台账',tab:'projects'}},
+  {path:'/projects/ledger',component:()=>import('./views/ProjectEntryPage.vue'),meta:{title:'项目台账',tab:'projects'}},
   {path:'/resources/persons',component:SupplierResourcePage,meta:{title:'供应商人员',tab:'persons'}},
   {path:'/resources/assets',component:SupplierResourcePage,meta:{title:'车辆设备',tab:'assets'}},
   {path:'/safety/issues',component:SafetyIssuePage,meta:{title:'安全隐患整改'}},

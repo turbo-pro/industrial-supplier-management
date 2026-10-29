@@ -2474,27 +2474,27 @@ paths:
       tags: [ContractProject]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: keyword, in: query, schema: { type: string } }, { name: status, in: query, schema: { $ref: '#/components/schemas/ProjectStatus' } }, { name: page, in: query, schema: { type: integer, default: 0 } }, { name: size, in: query, schema: { type: integer, default: 20 } }]
-      responses: { '200': { description: Project page, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Project page, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectPageResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '401': { $ref: '#/components/responses/ApiFailure' }, '403': { $ref: '#/components/responses/ApiFailure' } , '422': { $ref: '#/components/responses/ApiFailure' } }
     post:
       operationId: createProject
       tags: [ContractProject]
       security: [{ bearerAuth: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveProject' } } } }
-      responses: { '200': { description: Project created, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Project created, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '400': { $ref: '#/components/responses/ApiFailure' }, '409': { $ref: '#/components/responses/ApiFailure' } , '403': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
   /projects/{id}:
     get:
       operationId: getProject
       tags: [ContractProject]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { description: Project detail, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } } }
+      responses: { '200': { description: Project detail, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } } , '403': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
     put:
       operationId: updateProject
       tags: [ContractProject]
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveProject' } } } }
-      responses: { '200': { description: Project updated, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Project updated, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } , '403': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
   /projects/{id}/status:
     post:
       operationId: changeProjectStatus
@@ -2502,7 +2502,18 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeProjectStatus' } } } }
-      responses: { '200': { description: Project status changed, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } }
+      responses: { '200': { description: Project status changed, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectResponse' } } } }, '409': { $ref: '#/components/responses/ApiFailure' } , '403': { $ref: '#/components/responses/ApiFailure' }, '422': { $ref: '#/components/responses/ApiFailure' } }
+  /projects/access-mode:
+    get:
+      operationId: getProjectEntryAccess
+      tags: [ContractProject]
+      description: Server-derived entry policy. Classified tenants use the site workspace for all mutations; organization summary and detail require independent permissions. No fallback on failure.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Project entry policy, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { type: object, required: [siteContextRequired, legacyWritesAllowed, canEnterSiteWorkspace, canViewOrganizationProjects, canViewOrganizationProjectDetails], properties: { siteContextRequired: { type: boolean }, legacyWritesAllowed: { type: boolean }, canEnterSiteWorkspace: { type: boolean }, canViewOrganizationProjects: { type: boolean }, canViewOrganizationProjectDetails: { type: boolean } } } } } ] } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /site-projects:
     get:
       operationId: siteListProjects

@@ -12,6 +12,8 @@ import java.util.List;
 
 @Mapper
 public interface TenantMapper {
+    @Select("SELECT operation_mode FROM plt_tenant WHERE id=#{tenantId}")
+    String siteOperationMode(long tenantId);
     record OperationState(String status,String initializationStatus,String operationMode,Long defaultSiteId,int version){}
     @Select("SELECT status,initialization_status,operation_mode,default_site_id,version FROM plt_tenant WHERE id=#{id} FOR UPDATE")
     @org.apache.ibatis.annotations.Options(useCache=false,flushCache=org.apache.ibatis.annotations.Options.FlushCachePolicy.TRUE)

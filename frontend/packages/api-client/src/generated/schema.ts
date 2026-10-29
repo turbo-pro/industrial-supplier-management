@@ -3001,6 +3001,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/access-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Server-derived entry policy. Classified tenants use the site workspace for all mutations; organization summary and detail require independent permissions. No fallback on failure. */
+        get: operations["getProjectEntryAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/site-projects": {
         parameters: {
             query?: never;
@@ -13383,6 +13400,7 @@ export interface operations {
             400: components["responses"]["ApiFailure"];
             401: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     createProject: {
@@ -13408,7 +13426,9 @@ export interface operations {
                 };
             };
             400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     getProject: {
@@ -13431,6 +13451,8 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     updateProject: {
@@ -13457,7 +13479,9 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     changeProjectStatus: {
@@ -13484,7 +13508,40 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    getProjectEntryAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project entry policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            siteContextRequired: boolean;
+                            legacyWritesAllowed: boolean;
+                            canEnterSiteWorkspace: boolean;
+                            canViewOrganizationProjects: boolean;
+                            canViewOrganizationProjectDetails: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     siteListProjects: {
