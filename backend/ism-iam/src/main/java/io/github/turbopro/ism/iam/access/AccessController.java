@@ -34,15 +34,16 @@ public class AccessController {
     @PutMapping("/roles/{id}/grants") @RequiresPermission("iam:role:manage")
     ApiResponse<AccessModels.RoleView> grantRole(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.GrantRole command){return responses.success(once("ROLE_GRANT:"+id,key,command,AccessModels.RoleView.class,()->{var r=service.grantRole(id,command);append("ROLE_GRANT","ROLE",r.id(),Map.of(),Map.of("permissionCount",command.permissionCodes().size(),"menuCount",command.menuCodes().size()));return r;}));}
     @GetMapping("/users") @RequiresPermission("iam:user:view")
-    ApiResponse<List<AccessModels.UserView>> users(){return responses.success(service.users());}
+    ApiResponse<List<AccessModels.UserView>> users(){return responses.success(service.visibleUsers());}
     @PostMapping("/users") @RequiresPermission("iam:user:manage")
-    ApiResponse<AccessModels.UserView> createUser(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateUser command){return responses.success(once("USER_CREATE",key,command,AccessModels.UserView.class,()->{var r=service.createUser(command);append("USER_CREATE","USER",r.id(),Map.of(),Map.of("username",r.username()));return r;}));}
+    ApiResponse<AccessModels.UserView> createUser(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.CreateUser command){service.requireUserCreationAccess(command.primaryOrganizationId());var result=once("USER_CREATE",key,command,AccessModels.UserView.class,()->{var r=service.createUser(command);append("USER_CREATE","USER",r.id(),Map.of(),Map.of("username",r.username()));return r;});service.requireUserAccess(Long.parseLong(result.id()));return responses.success(result);}
     @PostMapping("/users/batch-role-impact") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.BatchRolePreview> previewBatchRoles(@Valid @RequestBody AccessModels.BatchAssignUserRoles command){
         return responses.success(service.previewBatchUserRoles(command));
     }
     @PutMapping("/users/batch-roles") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.BatchRoleResult> batchRoles(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.BatchAssignUserRoles command){
+        service.requireUsersAccess(command.targets());
         return responses.success(once("USER_BATCH_ROLE_ASSIGN",key,command,AccessModels.BatchRoleResult.class,()->{
             var result=service.batchAssignUserRoles(command);
             for(var change:result.changes()) append("USER_BATCH_ROLE_ASSIGN","USER",change.userId(),
@@ -52,6 +53,7 @@ public class AccessController {
     }
     @PutMapping("/users/batch-status") @RequiresPermission("iam:user:manage")
     ApiResponse<List<AccessModels.UserView>> batchStatus(@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.BatchChangeUserStatus command){
+        service.requireUsersAccess(command.targets());
         var rows=once("USER_BATCH_STATUS",key,command,AccessModels.UserView[].class,()->{
             var changed=service.batchChangeUserStatus(command);
             changed.forEach(row->append("USER_STATUS_CHANGE","USER",row.id(),Map.of(),Map.of("status",row.status(),"version",row.version(),"batch",true)));
@@ -61,16 +63,17 @@ public class AccessController {
     }
     @GetMapping("/users/{id}/role-impact") @RequiresPermission("iam:user:manage")
     ApiResponse<AccessModels.RoleImpactPreview> previewUserRoles(@PathVariable long id,@RequestParam List<String> roleIds,@RequestParam int version){
+        service.requireUserAccess(id);
         return responses.success(service.previewUserRoles(id,Set.copyOf(roleIds),version));
     }
     @PutMapping("/users/{id}/roles") @RequiresPermission("iam:user:manage")
-    ApiResponse<AccessModels.UserView> assignRoles(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.AssignUserRoles command){return responses.success(once("USER_ROLE_ASSIGN:"+id,key,command,AccessModels.UserView.class,()->{var r=service.assignUserRoles(id,command);append("USER_ROLE_ASSIGN","USER",Long.toString(id),Map.of(),Map.of("roleIds",r.roleIds(),"version",r.version()));return r;}));}
+    ApiResponse<AccessModels.UserView> assignRoles(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.AssignUserRoles command){service.requireUserAccess(id);return responses.success(once("USER_ROLE_ASSIGN:"+id,key,command,AccessModels.UserView.class,()->{var r=service.assignUserRoles(id,command);append("USER_ROLE_ASSIGN","USER",Long.toString(id),Map.of(),Map.of("roleIds",r.roleIds(),"version",r.version()));return r;}));}
     @PutMapping("/users/{id}/status") @RequiresPermission("iam:user:manage")
-    ApiResponse<AccessModels.UserView> changeUserStatus(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ChangeUserStatus command){return responses.success(once("USER_STATUS:"+id,key,command,AccessModels.UserView.class,()->{var r=service.changeUserStatus(id,command);append("USER_STATUS_CHANGE","USER",r.id(),Map.of(),Map.of("status",r.status(),"version",r.version()));return r;}));}
+    ApiResponse<AccessModels.UserView> changeUserStatus(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ChangeUserStatus command){service.requireUserAccess(id);return responses.success(once("USER_STATUS:"+id,key,command,AccessModels.UserView.class,()->{var r=service.changeUserStatus(id,command);append("USER_STATUS_CHANGE","USER",r.id(),Map.of(),Map.of("status",r.status(),"version",r.version()));return r;}));}
     @PutMapping("/users/{id}/password-reset") @RequiresPermission("iam:user:manage")
-    ApiResponse<AccessModels.UserView> resetPassword(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ResetUserPassword command){return responses.success(once("USER_PASSWORD_RESET:"+id,key,command,AccessModels.UserView.class,()->{var r=service.resetUserPassword(id,command);append("USER_PASSWORD_RESET","USER",r.id(),Map.of(),Map.of("forcePasswordChange",r.passwordChangeRequired(),"version",r.version()));return r;}));}
+    ApiResponse<AccessModels.UserView> resetPassword(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ResetUserPassword command){service.requireUserAccess(id);return responses.success(once("USER_PASSWORD_RESET:"+id,key,command,AccessModels.UserView.class,()->{var r=service.resetUserPassword(id,command);append("USER_PASSWORD_RESET","USER",r.id(),Map.of(),Map.of("forcePasswordChange",r.passwordChangeRequired(),"version",r.version()));return r;}));}
     @PutMapping("/users/{id}/login-lock") @RequiresPermission("iam:user:manage")
-    ApiResponse<AccessModels.UserView> changeLoginLock(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ChangeLoginLock command){return responses.success(once("USER_LOGIN_LOCK:"+id,key,command,AccessModels.UserView.class,()->{var r=service.changeLoginLock(id,command);append(command.locked()?"USER_LOGIN_LOCK":"USER_LOGIN_UNLOCK","USER",r.id(),Map.of(),Map.of("locked",r.manualLocked(),"reason",command.reason(),"version",r.version()));return r;}));}
+    ApiResponse<AccessModels.UserView> changeLoginLock(@PathVariable long id,@RequestHeader("Idempotency-Key")String key,@Valid @RequestBody AccessModels.ChangeLoginLock command){service.requireUserAccess(id);return responses.success(once("USER_LOGIN_LOCK:"+id,key,command,AccessModels.UserView.class,()->{var r=service.changeLoginLock(id,command);append(command.locked()?"USER_LOGIN_LOCK":"USER_LOGIN_UNLOCK","USER",r.id(),Map.of(),Map.of("locked",r.manualLocked(),"reason",command.reason(),"version",r.version()));return r;}));}
     private void append(String action,String type,String id,Object before,Object after){audit.append(new AuditService.AuditCommand(action,type,Long.parseLong(id),null,before,after,null,null));}
     private <T>T once(String operation,String key,Object request,Class<T> type,Supplier<T> action){String value=idempotency.execute(operation,key,write(request),Duration.ofHours(24),()->write(action.get()));try{return json.readValue(value,type);}catch(Exception e){throw new IllegalStateException("幂等响应无法解析",e);}}
     private String write(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("请求无法序列化",e);}}

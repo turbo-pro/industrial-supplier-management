@@ -2179,6 +2179,7 @@ class B0InfrastructureIT {
             jdbcTemplate.update("INSERT INTO iam_role_permission(tenant_id,role_id,permission_id) VALUES(?,?,3004)",tenantId,tenantId+10);
             jdbcTemplate.update("INSERT INTO iam_role_menu(tenant_id,role_id,menu_id) VALUES(?,?,3102)",tenantId,tenantId+10);
             jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'supplier:master','TENANT_ALL')",tenantId,tenantId+10);
+            jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'iam:user','TENANT_ALL')",tenantId,tenantId+10);
             jdbcTemplate.update("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(?,?,'supplier:master','OWNED')",tenantId,tenantId+11);
             jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, adminId, tenantId + 10);
             jdbcTemplate.update("INSERT INTO iam_user_role(tenant_id,user_id,role_id) VALUES(?,?,?)", tenantId, memberId, tenantId + 11);
@@ -2203,7 +2204,7 @@ class B0InfrastructureIT {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.addedPermissions",org.hamcrest.Matchers.hasItem("iam:user:manage")))
                     .andExpect(jsonPath("$.data.addedMenus",org.hamcrest.Matchers.hasItem("USER_MANAGEMENT")))
-                    .andExpect(jsonPath("$.data.proposedScopeGrants.length()").value(2));
+                    .andExpect(jsonPath("$.data.proposedScopeGrants.length()").value(3));
             try (var context = TenantContext.open(tenantId, adminId)) {
                 var impact=accessService.previewUserRoles(memberId,
                         Set.of(Long.toString(tenantId+10),Long.toString(tenantId+11)),0);

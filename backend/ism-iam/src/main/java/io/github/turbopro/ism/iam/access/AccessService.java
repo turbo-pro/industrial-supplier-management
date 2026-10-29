@@ -119,6 +119,40 @@ public class AccessService {
         return mapper.users(tenantId).stream().map(row->userView(row,roleIds.getOrDefault(row.id(),Set.of()))).toList();
     }
 
+    /** Public account-list boundary; internal provisioning still uses users(). */
+    @Transactional(readOnly=true)
+    public List<AccessModels.UserView> visibleUsers() {
+        long tenantId=tenantId();var scope=AuthorizationContext.require().dataScope("iam:user");
+        var rows=mapper.visibleUsers(tenantId,scope.type().name(),scope.organizationIds());
+        if(rows.isEmpty()) return List.of();
+        Set<Long> ids=rows.stream().map(AccessModels.UserRow::id).collect(Collectors.toSet());
+        var roles=mapper.visibleUserRoles(tenantId,ids).stream().collect(Collectors.groupingBy(
+                AccessModels.UserRoleRow::userId,Collectors.mapping(row->Long.toString(row.roleId()),Collectors.toSet())));
+        return rows.stream().map(row->userView(row,roles.getOrDefault(row.id(),Set.of()))).toList();
+    }
+
+    /** Call before idempotency lookup as well as before any new public mutation. */
+    @Transactional(readOnly=true)
+    public void requireUserAccess(long userId) {
+        if(mapper.findUser(tenantId(),userId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        requireOrganizationAccess(mapper.userPrimaryOrganization(tenantId(),userId));
+    }
+    public void requireUserCreationAccess(String organizationId) { requireOrganizationAccess(parseId(organizationId)); }
+    private void requireOrganizationAccess(Long organizationId) {
+        var scope=AuthorizationContext.require().dataScope("iam:user");
+        if(!scope.allows(new io.github.turbopro.ism.common.infrastructure.authorization.DataTarget(organizationId,null,null,null),TenantContext.require().actorId()))
+            throw new ApiException(CommonErrorCode.FORBIDDEN,"目标账号不在用户管理数据范围内");
+    }
+    @Transactional(readOnly=true)
+    public void requireUsersAccess(List<AccessModels.StatusTarget> targets) {
+        if(targets==null||targets.isEmpty()||targets.size()>100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        Set<Long> ids=new HashSet<>();
+        for(var target:targets) {
+            if(target==null||!ids.add(parseId(target.id()))) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+            requireUserAccess(parseId(target.id()));
+        }
+    }
+
     @Transactional(readOnly=true)
     public AccessModels.RoleImpactPreview previewUserRoles(long userId,Set<String> roleIds,int version) {
         long tenantId=tenantId();
@@ -282,12 +316,7 @@ public class AccessService {
         if(versions.containsKey(TenantContext.require().actorId())) blockers.add("SELF_TARGET");
         int changed=0;
         for(var entry:versions.entrySet()) {
-            if(mapper.findUser(tenantId(),entry.getKey())==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
-            var scope=AuthorizationContext.require().dataScope("iam:user");
-            if(scope.type()!=DataScope.Type.TENANT_ALL&&!scope.allows(
-                    new io.github.turbopro.ism.common.infrastructure.authorization.DataTarget(
-                            mapper.userPrimaryOrganization(tenantId(),entry.getKey()),null,null,null),TenantContext.require().actorId()))
-                throw new ApiException(CommonErrorCode.FORBIDDEN,"目标账号不在用户管理数据范围内");
+            requireUserAccess(entry.getKey());
             var item=previewUserRoles(entry.getKey(),command.roleIds(),entry.getValue());
             items.add(item);
             if(!item.blockers().contains("NO_CHANGE")) changed++;

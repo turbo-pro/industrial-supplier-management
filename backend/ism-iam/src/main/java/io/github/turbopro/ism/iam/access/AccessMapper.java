@@ -13,6 +13,23 @@ public interface AccessMapper extends TenantScopedMapper {
     @Select("SELECT organization_id FROM iam_user_organization WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND is_primary=1")
     Long userPrimaryOrganization(long tenantId,long userId);
 
+    @Select("""
+        <script>SELECT u.id,u.username,u.display_name,u.status,u.force_password_change,u.manual_locked,u.manual_lock_reason,u.locked_until,u.version
+        FROM iam_user u WHERE u.tenant_id=#{tenantId} AND u.deleted=0
+        <choose><when test="scopeType == 'TENANT_ALL'"></when>
+        <when test="scopeType == 'ORGANIZATION_SET' and organizations != null and !organizations.isEmpty()">
+        AND EXISTS(SELECT 1 FROM iam_user_organization o WHERE o.tenant_id=#{tenantId} AND o.user_id=u.id AND o.is_primary=1
+        AND o.organization_id IN <foreach collection='organizations' item='org' open='(' separator=',' close=')'>#{org}</foreach>)
+        </when><otherwise>AND 1=0</otherwise></choose> ORDER BY u.created_at,u.id</script>
+        """)
+    List<AccessModels.UserRow> visibleUsers(long tenantId,String scopeType,Set<Long> organizations);
+    @Select("""
+        <script>SELECT ur.user_id,ur.role_id FROM iam_user_role ur JOIN iam_user u ON u.tenant_id=ur.tenant_id AND u.id=ur.user_id
+        WHERE ur.tenant_id=#{tenantId} AND u.deleted=0 AND ur.user_id IN
+        <foreach collection='userIds' item='user' open='(' separator=',' close=')'>#{user}</foreach> ORDER BY ur.user_id,ur.role_id</script>
+        """)
+    List<AccessModels.UserRoleRow> visibleUserRoles(long tenantId,Set<Long> userIds);
+
     @Select("SELECT id,role_code,role_name,built_in,status,version FROM iam_role WHERE tenant_id=#{tenantId} ORDER BY built_in DESC,created_at,id")
     List<AccessModels.RoleRow> roles(long tenantId);
     @Select("SELECT id,role_code,role_name,built_in,status,version FROM iam_role WHERE tenant_id=#{tenantId} AND id=#{id}")
