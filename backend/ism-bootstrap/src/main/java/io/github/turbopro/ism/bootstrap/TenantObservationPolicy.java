@@ -1,19 +1,18 @@
 package io.github.turbopro.ism.bootstrap;
 
 import io.github.turbopro.ism.common.api.error.*;
-import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
-import io.github.turbopro.ism.iam.configuration.ConfigurationMapper;
+import io.github.turbopro.ism.iam.configuration.TenantObservationSettings;
 import io.github.turbopro.ism.supplier.ObservationPolicy;
 import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 @Component
 public class TenantObservationPolicy implements ObservationPolicy {
-    public static final String KEY="restriction.watchPeriodDays";
-    private final ConfigurationMapper mapper;
-    public TenantObservationPolicy(ConfigurationMapper mapper){this.mapper=mapper;}
+    public static final String KEY=TenantObservationSettings.KEY;
+    private final TenantObservationSettings settings;
+    public TenantObservationPolicy(TenantObservationSettings settings){this.settings=settings;}
     @Override public Duration period(){
-        String value=mapper.currentSettingValue(TenantContext.require().tenantId(),KEY);
+        String value=settings.currentWatchPeriodDays();
         if(value==null)return Duration.ofDays(7);
         try{
             long days=Long.parseLong(value);
