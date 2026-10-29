@@ -84,6 +84,18 @@ public class TenantController {
         }));
     }
 
+    @PostMapping("/{id}/upgrade-to-multi-site")
+    @RequiresPermission("platform:tenant:upgrade")
+    ApiResponse<TenantModels.TenantView> upgradeToMultiSite(@PathVariable long id,
+            @RequestHeader("Idempotency-Key")String key,@Valid @RequestBody TenantModels.UpgradeToMultiSite command){
+        return responses.success(once("TENANT_SITE_UPGRADE:"+id,key,command,()->{
+            var result=service.upgradeToMultiSite(id,command);
+            audit("TENANT_SITE_UPGRADE",result,Map.of("operationMode","SINGLE_SITE","version",command.version()),
+                Map.of("operationMode",result.operationMode(),"defaultSiteId",result.defaultSiteId(),"version",result.version()));
+            return result;
+        }));
+    }
+
     @PostMapping("/{id}/suspend")
     @RequiresPermission("platform:tenant:suspend")
     ApiResponse<TenantModels.TenantView> suspend(@PathVariable long id,

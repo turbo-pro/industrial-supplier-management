@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [site-initialization, iam-batch-roles, console-reminder, portal-auth, portal-management, portal-exit, portal-password, portal-recovery, portal-changes, portal-certificates, portal-submissions]
+        scenario: [site-upgrade, site-initialization, iam-batch-roles, console-reminder, portal-auth, portal-management, portal-exit, portal-password, portal-recovery, portal-changes, portal-certificates, portal-submissions]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -80,7 +80,9 @@ jobs:
         env:
           SCENARIO: ${{ matrix.scenario }}
         run: |
-          if [ "$SCENARIO" = site-initialization ]; then
+          if [ "$SCENARIO" = site-upgrade ]; then
+            node scripts/verify-reminder-e2e.mjs --site-upgrade
+          elif [ "$SCENARIO" = site-initialization ]; then
             node scripts/verify-reminder-e2e.mjs --site-initialization
           elif [ "$SCENARIO" = iam-batch-roles ]; then
             node scripts/verify-reminder-e2e.mjs --iam-batch-roles

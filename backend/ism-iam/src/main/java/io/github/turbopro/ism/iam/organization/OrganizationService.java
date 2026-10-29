@@ -19,9 +19,11 @@ public class OrganizationService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Map<Type, List<Type>> ALLOWED_CHILDREN = allowedChildren();
     private final OrganizationMapper mapper;
+    private final OrganizationStructureLock structureLock;
 
-    public OrganizationService(OrganizationMapper mapper) {
+    public OrganizationService(OrganizationMapper mapper,OrganizationStructureLock structureLock) {
         this.mapper = mapper;
+        this.structureLock = structureLock;
     }
 
     public List<OrganizationModels.OrganizationNode> tree() {
@@ -37,6 +39,7 @@ public class OrganizationService {
     @Transactional
     public OrganizationModels.OrganizationNode create(OrganizationModels.CreateOrganization command) {
         long tenantId = TenantContext.require().tenantId();
+        structureLock.acquire();
         long parentId = parseId(command.parentId());
         OrganizationModels.OrganizationRow parent = require(tenantId, parentId);
         Type childType = parseType(command.type());

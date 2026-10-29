@@ -1537,6 +1537,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/tenants/{id}/upgrade-to-multi-site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upgradeTenantToMultiSite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/tenants/{id}/suspend": {
         parameters: {
             query?: never;
@@ -6643,6 +6659,10 @@ export interface components {
             locale: string;
             packageVersionId: string;
         };
+        UpgradeTenantToMultiSite: {
+            headquartersName: string;
+            version: number;
+        };
         InitializeTenant: {
             adminUsername: string;
             adminDisplayName: string;
@@ -10255,6 +10275,38 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    upgradeTenantToMultiSite: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpgradeTenantToMultiSite"];
+            };
+        };
+        responses: {
+            /** @description Upgraded without changing the original site identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     suspendTenant: {

@@ -12,6 +12,13 @@ import java.util.List;
 
 @Mapper
 public interface TenantMapper {
+    record OperationState(String status,String initializationStatus,String operationMode,Long defaultSiteId,int version){}
+    @Select("SELECT status,initialization_status,operation_mode,default_site_id,version FROM plt_tenant WHERE id=#{id} FOR UPDATE")
+    @org.apache.ibatis.annotations.Options(useCache=false,flushCache=org.apache.ibatis.annotations.Options.FlushCachePolicy.TRUE)
+    OperationState lockOperationState(long id);
+    @Update("UPDATE plt_tenant SET operation_mode='MULTI_SITE',version=version+1 WHERE id=#{id} AND operation_mode='SINGLE_SITE' AND status='ACTIVE' AND initialization_status='READY' AND version=#{version}")
+    int upgradeMode(long id,int version);
+
     record PortalTenantState(String status,String initializationStatus) {}
     @Select("SELECT status,initialization_status FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
     PortalTenantState lockForPortalRegistration(long tenantId);

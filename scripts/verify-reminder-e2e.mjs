@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--site-initialization','--iam-batch-roles','--portal','--portal-management','--portal-exit','--portal-password','--portal-recovery','--portal-changes','--portal-certificates','--portal-submissions'].includes(arg)))
-  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--site-initialization | --iam-batch-roles | --portal | --portal-management | --portal-exit | --portal-password | --portal-recovery | --portal-changes | --portal-certificates | --portal-submissions]');
+if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--site-upgrade','--site-initialization','--iam-batch-roles','--portal','--portal-management','--portal-exit','--portal-password','--portal-recovery','--portal-changes','--portal-certificates','--portal-submissions'].includes(arg)))
+  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--site-upgrade | --site-initialization | --iam-batch-roles | --portal | --portal-management | --portal-exit | --portal-password | --portal-recovery | --portal-changes | --portal-certificates | --portal-submissions]');
+const siteUpgrade = process.argv.includes('--site-upgrade');
 const siteInitialization = process.argv.includes('--site-initialization');
 const batchRoles = process.argv.includes('--iam-batch-roles');
 const submissions = process.argv.includes('--portal-submissions');
@@ -19,8 +20,8 @@ const password = process.argv.includes('--portal-password');
 const exit = process.argv.includes('--portal-exit');
 const management = process.argv.includes('--portal-management') || exit || recovery || changes || submissions;
 const portal = process.argv.includes('--portal') || management || password || certificates;
-const scenario = siteInitialization ? 'site-initialization' : batchRoles ? 'iam-batch-roles' : submissions ? 'portal-submissions' : certificates ? 'portal-certificates' : changes ? 'portal-changes' : recovery ? 'portal-recovery' : password ? 'portal-password' : exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
-const fixture = siteInitialization ? 'SiteInitializationBrowserFixture' : batchRoles ? 'IamBatchRolesBrowserFixture' : portal ? 'PortalBrowserFixture' : 'ConsoleReminderBrowserFixture';
+const scenario = siteUpgrade ? 'site-upgrade' : siteInitialization ? 'site-initialization' : batchRoles ? 'iam-batch-roles' : submissions ? 'portal-submissions' : certificates ? 'portal-certificates' : changes ? 'portal-changes' : recovery ? 'portal-recovery' : password ? 'portal-password' : exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
+const fixture = siteUpgrade ? 'SiteUpgradeBrowserFixture' : siteInitialization ? 'SiteInitializationBrowserFixture' : batchRoles ? 'IamBatchRolesBrowserFixture' : portal ? 'PortalBrowserFixture' : 'ConsoleReminderBrowserFixture';
 const control = mkdtempSync(join(tmpdir(), portal ? 'ism-portal-e2e-' : 'ism-reminder-e2e-'));
 const artifacts = join(root, 'output/playwright', `${scenario}-e2e-${Date.now()}`);
 mkdirSync(artifacts, { recursive: true });
@@ -95,7 +96,7 @@ try {
     await until(async () => {try{return (await fetch(adminUrl,{signal:AbortSignal.timeout(1000)})).ok;}catch{return false;}},admin,60_000);
   }
   console.log(`[run] real browser scenario: ${scenario}`);
-  const browser = siteInitialization ? start('browser',process.execPath,['scripts/verify-site-initialization-browser.mjs',control,frontendUrl]) : batchRoles ? start('browser',process.execPath,['scripts/verify-iam-batch-roles-browser.mjs',control,frontendUrl]) : portal
+  const browser = siteUpgrade ? start('browser',process.execPath,['scripts/verify-site-upgrade-browser.mjs',control,frontendUrl]) : siteInitialization ? start('browser',process.execPath,['scripts/verify-site-initialization-browser.mjs',control,frontendUrl]) : batchRoles ? start('browser',process.execPath,['scripts/verify-iam-batch-roles-browser.mjs',control,frontendUrl]) : portal
     ? start('browser', process.execPath, ['scripts/verify-portal-browser.mjs', control, frontendUrl, adminUrl, submissions ? 'submissions' : certificates ? 'certificates' : changes ? 'changes' : recovery ? 'recovery' : password ? 'password' : exit ? 'exit' : 'management'])
     : start('browser', 'bash', ['scripts/verify-reminder-browser.sh', control, frontendUrl]);
   await waitExit(browser, 180_000);

@@ -18,6 +18,8 @@ class SiteModeMigrationIT {
         var flyway=Flyway.configure().dataSource(source).locations("classpath:db/migration").load();flyway.migrate();flyway.validate();
         var row=jdbc.queryForMap("SELECT operation_mode,site_label,default_site_id FROM plt_tenant WHERE id=88001");assertThat(row.values()).containsOnlyNulls();
         assertThat(jdbc.queryForObject("SELECT organization_type FROM iam_organization WHERE id=88002",String.class)).isEqualTo("HEADQUARTERS");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_role_permission rp JOIN plt_role r ON r.id=rp.role_id JOIN plt_permission p ON p.id=rp.permission_id WHERE r.role_code='PLATFORM_ADMIN' AND p.permission_code='platform:tenant:upgrade'",Integer.class)).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_role_permission rp JOIN plt_role r ON r.id=rp.role_id JOIN plt_permission p ON p.id=rp.permission_id WHERE r.role_code='PLATFORM_SUPPORT' AND p.permission_code='platform:tenant:upgrade'",Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='25'",Integer.class)).isEqualTo(1394665689);
     }
 }

@@ -1459,6 +1459,20 @@ paths:
       responses:
         '200': { description: Tenant initialized, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{id}/upgrade-to-multi-site:
+    post:
+      operationId: upgradeTenantToMultiSite
+      tags: [Console Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpgradeTenantToMultiSite' } } } }
+      responses:
+        '200': { description: Upgraded without changing the original site identity, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /console/tenants/{id}/suspend:
     post:
       operationId: suspendTenant
@@ -4837,6 +4851,12 @@ components:
         timezone: { type: string, example: Asia/Shanghai }
         locale: { type: string, example: zh-CN }
         packageVersionId: { type: string }
+    UpgradeTenantToMultiSite:
+      type: object
+      required: [headquartersName, version]
+      properties:
+        headquartersName: { type: string, minLength: 1, maxLength: 200 }
+        version: { type: integer, minimum: 0 }
     InitializeTenant:
       type: object
       required: [adminUsername, adminDisplayName, initialPassword, operationMode, siteLabel, siteName]

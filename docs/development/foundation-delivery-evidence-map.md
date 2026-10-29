@@ -19,7 +19,7 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 | B1-01 | iam/console 独立认证与平台权限 | b1-console-user-management-review.md 为历史证据 | GAP-01 支持会话不可由平台角色替代 |
 | B1-02 | platform/packageplan，IAM 套餐权限交集SPI | 套餐/有效期/额度/争用专项为历史证据 | 容量与全部降级影响、完整端到端门禁继续核对 |
 | B1-03 | platform租户与IAM公开组织初始化契约 | [运营模式初始化](site-initialization-review.md)：后端8/8、真实Console及最终库1/1 | 初始化部分通过；完整新建租户页面、存量归类、GAP-02后续场站闭环仍缺 |
-| B1-04 | iam/organization 组织树/闭包及新模式初始化 | [运营模式初始化](site-initialization-review.md)，旧总部保留升级验证 | 单转多/场站停用/经营场站上下文及现场业务归属仍待；总部不得冒充场站 |
+| B1-04 | IAM组织树/闭包、初始化及结构升级公开契约 | [初始化](site-initialization-review.md)及[单转多升级](site-upgrade-review.md)：15/15后端、真实Console及最终库1/1 | 场站停用/经营场站上下文及现场业务归属仍待；总部不得冒充场站 |
 | B1-05 | iam/access 的 AccessService；账号生命周期 Review | 已有停用/角色/改密/锁定/批量状态证据 | 岗位、邀请交接、安全事件、全部留存规则尚未全映射 |
 | B1-06 | AccessService、NavigationService，角色菜单按钮/API | b1-tenant-role-management-review.md 等历史证据 | 支持临时授权、完整权限依赖与场站分权仍缺 |
 | B1-07 | 数据范围/字段权限及 IAM 套餐范围约束 | 基础租户/范围/掩码样板；[账号公开入口范围一致性](b1-user-scope-consistency-review.md) | 总部汇总/明细/编辑分权及支持会话字段交集仍缺 |

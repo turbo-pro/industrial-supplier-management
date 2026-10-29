@@ -10,6 +10,21 @@ import java.util.List;
 
 @Mapper
 public interface OrganizationMapper extends TenantScopedMapper {
+    @Select("SELECT id,parent_id,organization_code,organization_name,organization_type,status,sort_order,version FROM iam_organization WHERE tenant_id=#{tenantId} ORDER BY id FOR UPDATE")
+    @org.apache.ibatis.annotations.Options(useCache=false,flushCache=org.apache.ibatis.annotations.Options.FlushCachePolicy.TRUE)
+    List<OrganizationModels.OrganizationRow> structureForUpdate(long tenantId);
+
+    record ClosureRow(long ancestorId,long descendantId,int depth){}
+    @Select("SELECT ancestor_id,descendant_id,depth FROM iam_organization_closure WHERE tenant_id=#{tenantId} ORDER BY ancestor_id,descendant_id FOR UPDATE")
+    @org.apache.ibatis.annotations.Options(useCache=false,flushCache=org.apache.ibatis.annotations.Options.FlushCachePolicy.TRUE)
+    List<ClosureRow> closureForUpdate(long tenantId);
+
+    @Update("UPDATE iam_organization SET parent_id=#{headquartersId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{siteId} AND parent_id IS NULL AND organization_type='SITE' AND status='ACTIVE' AND version=#{version}")
+    int reparentSite(long tenantId,long siteId,long headquartersId,int version);
+
+    @Insert("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) SELECT #{tenantId},#{headquartersId},descendant_id,depth+1 FROM iam_organization_closure WHERE tenant_id=#{tenantId} AND ancestor_id=#{siteId}")
+    int attachSubtree(long tenantId,long siteId,long headquartersId);
+
     @Select("SELECT id,parent_id,organization_code,organization_name,organization_type,status,sort_order,version FROM iam_organization WHERE tenant_id=#{tenantId} ORDER BY sort_order,created_at,id")
     List<OrganizationModels.OrganizationRow> list(long tenantId);
 

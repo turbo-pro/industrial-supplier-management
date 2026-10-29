@@ -31,6 +31,9 @@ public final class TenantModels {
         }
     }
 
+    public record UpgradeToMultiSite(@NotBlank @Size(max=200) String headquartersName,
+                                     @NotNull @jakarta.validation.constraints.PositiveOrZero Integer version){}
+
     public record UpdateTenant(
             @NotBlank @Size(max = 200) String name,
             @NotBlank String timezone,

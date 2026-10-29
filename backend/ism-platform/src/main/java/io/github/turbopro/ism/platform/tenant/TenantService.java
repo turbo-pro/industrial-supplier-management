@@ -102,6 +102,22 @@ public class TenantService {
     }
 
     @Transactional
+    public TenantModels.TenantView upgradeToMultiSite(long id,TenantModels.UpgradeToMultiSite command){
+        if(command.version()==null||command.version()<0)throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var state=mapper.lockOperationState(id);
+        if(state==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(state.version()!=command.version())throw new ApiException(CommonErrorCode.CONFLICT);
+        if(!"ACTIVE".equals(state.status())||!"READY".equals(state.initializationStatus())
+            ||!"SINGLE_SITE".equals(state.operationMode())||state.defaultSiteId()==null)
+            throw new ApiException(CommonErrorCode.RULE_BLOCKED,"仅支持已明确为单场站的有效租户升级，不自动归类旧租户或执行降级");
+        if(command.headquartersName()==null||command.headquartersName().isBlank()||command.headquartersName().length()>200)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        organizations.upgrade(id,io.github.turbopro.ism.common.infrastructure.tenant.TenantContext.require().actorId(),state.defaultSiteId(),ids.nextId(),command.headquartersName());
+        if(mapper.upgradeMode(id,command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+        return get(id);
+    }
+
+    @Transactional
     public TenantModels.TenantView suspend(long id) {
         return transition(id, "ACTIVE", "SUSPENDED", "SUSPENDED", "SUSPENDED");
     }
