@@ -21,7 +21,15 @@ public final class TenantModels {
             @NotBlank @Pattern(regexp = "[a-zA-Z][a-zA-Z0-9._-]{2,99}") String adminUsername,
             @NotBlank @Size(max = 100) String adminDisplayName,
             @NotBlank @Size(min = 12, max = 128) String initialPassword,
-            @NotBlank @Size(max = 200) String headquartersName) {}
+            @Size(max = 200) String headquartersName,
+            @NotBlank @Pattern(regexp="SINGLE_SITE|MULTI_SITE") String operationMode,
+            @NotBlank @Size(max=20) String siteLabel,
+            @NotBlank @Size(max=200) String siteName) {
+        /** Legacy trusted callers retain the original unclassified structure; HTTP requires a mode. */
+        public InitializeTenant(String username,String displayName,String password,String headquartersName){
+            this(username,displayName,password,headquartersName,null,null,null);
+        }
+    }
 
     public record UpdateTenant(
             @NotBlank @Size(max = 200) String name,
@@ -31,9 +39,9 @@ public final class TenantModels {
 
     public record TenantRow(long id, String tenantCode, String tenantName, String status,
                             String initializationStatus, String timezone, String locale,
-                            Long packageVersionId, int version, LocalDateTime initializedAt) {}
+                            Long packageVersionId, int version, LocalDateTime initializedAt, String operationMode, String siteLabel, Long defaultSiteId) {}
 
     public record TenantView(String id, String code, String name, String status,
                              String initializationStatus, String timezone, String locale,
-                             String packageVersionId, int version, LocalDateTime initializedAt) {}
+                             String packageVersionId, int version, LocalDateTime initializedAt, String operationMode, String siteLabel, String defaultSiteId) {}
 }

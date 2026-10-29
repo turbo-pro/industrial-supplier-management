@@ -19,11 +19,13 @@ public class TenantService {
     private final TenantMapper mapper;
     private final OperationIdGenerator ids;
     private final PasswordEncoder passwords;
+    private final io.github.turbopro.ism.iam.organization.OrganizationProvisioner organizations;
 
-    public TenantService(TenantMapper mapper, OperationIdGenerator ids, PasswordEncoder passwords) {
+    public TenantService(TenantMapper mapper, OperationIdGenerator ids, PasswordEncoder passwords, io.github.turbopro.ism.iam.organization.OrganizationProvisioner organizations) {
         this.mapper = mapper;
         this.ids = ids;
         this.passwords = passwords;
+        this.organizations = organizations;
     }
 
     public List<TenantModels.TenantView> list() {
@@ -71,13 +73,15 @@ public class TenantService {
         if (!"PENDING".equals(tenant.initializationStatus())) {
             throw new ApiException(TenantErrorCode.INVALID_STATE);
         }
+        validateStructure(command);
         try {
             mapper.insertIamTenant(tenant.id(), tenant.tenantCode(), tenant.tenantName(), tenant.timezone(),
                     tenant.locale());
-            long headquartersId = ids.nextId();
             long administratorId = ids.nextId();
-            mapper.insertHeadquarters(headquartersId, tenant.id(), command.headquartersName());
-            mapper.insertOrganizationClosure(tenant.id(), headquartersId);
+            var structure=organizations.initialize(tenant.id(),administratorId,ids.nextId(),ids.nextId(),command.operationMode(),command.headquartersName(),command.siteName());
+            long headquartersId=structure.primaryOrganizationId();
+            if(mapper.operationStructure(id,command.operationMode(),command.siteLabel(),structure.defaultSiteId())!=1)
+                throw new ApiException(CommonErrorCode.CONFLICT);
             mapper.insertAdmin(administratorId, tenant.id(), command.adminUsername(), command.adminDisplayName(),
                     passwords.encode(command.initialPassword()));
             mapper.insertAdminOrganization(tenant.id(), administratorId, headquartersId);
@@ -139,7 +143,23 @@ public class TenantService {
         return new TenantModels.TenantView(Long.toString(row.id()), row.tenantCode(), row.tenantName(),
                 row.status(), row.initializationStatus(), row.timezone(), row.locale(),
                 row.packageVersionId() == null ? null : row.packageVersionId().toString(),
-                row.version(), row.initializedAt());
+                row.version(), row.initializedAt(), row.operationMode(), row.siteLabel(), row.defaultSiteId()==null?null:row.defaultSiteId().toString());
+    }
+
+    private void validateStructure(TenantModels.InitializeTenant command){
+        String mode=command.operationMode();
+        if(mode==null){
+            if(command.headquartersName()==null||command.headquartersName().isBlank())throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+            return;
+        }
+        if(!io.github.turbopro.ism.iam.auth.PasswordPolicy.isStrong(command.initialPassword())
+            ||command.initialPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"初始密码须包含大小写字母、数字、符号且至少12位，UTF-8不超过72字节");
+        if(!java.util.Set.of("SINGLE_SITE","MULTI_SITE").contains(mode)
+            || command.siteLabel()==null||command.siteLabel().isBlank()||command.siteLabel().length()>20
+            || command.siteName()==null||command.siteName().isBlank()||command.siteName().length()>200
+            || ("MULTI_SITE".equals(mode)&&(command.headquartersName()==null||command.headquartersName().isBlank())))
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"请选择运营模式并填写场站名称；多场站模式须填写总部名称");
     }
 
     private long parseId(String value) {

@@ -6651,7 +6651,12 @@ export interface components {
              * @description Requires uppercase, lowercase, digit, and non-alphanumeric character.
              */
             initialPassword: string;
-            headquartersName: string;
+            /** @description Required for MULTI_SITE. */
+            headquartersName?: string;
+            /** @enum {string} */
+            operationMode: "SINGLE_SITE" | "MULTI_SITE";
+            siteLabel: string;
+            siteName: string;
         };
         UpdateTenant: {
             name: string;
@@ -6660,6 +6665,13 @@ export interface components {
             version: number;
         };
         Tenant: {
+            /**
+             * @description Null means legacy structure not yet classified.
+             * @enum {string|null}
+             */
+            operationMode?: "SINGLE_SITE" | "MULTI_SITE" | null;
+            siteLabel?: string | null;
+            defaultSiteId?: string | null;
             id: string;
             code: string;
             name: string;

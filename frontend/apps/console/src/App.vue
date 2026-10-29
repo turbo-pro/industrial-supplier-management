@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
+import TenantInitialization from './TenantInitialization.vue';
 
 const form = reactive({ username: '', password: '' });
 const TOKEN_KEY = 'ism.console.accessToken';
@@ -16,6 +17,7 @@ const showPasswordForm = ref(false);
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
+const initializeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const subscriptionTenant = ref<components['schemas']['Tenant'] | null>(null);
 const currentUser = ref<components['schemas']['ConsoleUserSummary'] | null>(null);
 const users = ref<components['schemas']['ConsoleUser'][]>([]);
@@ -279,11 +281,12 @@ if (accessToken.value) {
     </section>
     <section class="panel">
       <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button type="button">新建租户</button></div>
-      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>订阅</th></tr></thead>
-        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
-        <tr v-if="tenants.length === 0"><td colspan="5" class="empty">尚未创建租户</td></tr></tbody>
+      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="initializeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
+        <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
       </table>
     </section>
+    <TenantInitialization v-if="initializeTarget" :key="initializeTarget.id" :tenant="initializeTarget" :token="accessToken" @close="initializeTarget = null" @done="initializeTarget = null; message = '租户初始化已完成'; loadWorkspace()" />
     <SubscriptionPlans v-if="subscriptionTenant" :key="subscriptionTenant.id" :tenant-id="subscriptionTenant.id"
       :tenant-name="subscriptionTenant.name" :token="accessToken" :can-manage="currentUser?.permissions.includes('platform:package:assign') ?? false"
       @close="subscriptionTenant = null" />

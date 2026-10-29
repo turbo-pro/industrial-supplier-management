@@ -1,0 +1,21 @@
+package io.github.turbopro.ism.bootstrap;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import io.github.turbopro.ism.platform.tenant.TenantModels;
+import java.util.*;
+import static org.assertj.core.api.Assertions.*;
+class SiteInitializationIT extends SiteInitializationSupport {
+    @Test void singleSiteHasNoHeadquartersAndReplayDoesNotDuplicate(){long id=pending();String token=login(true);var b=body("SINGLE_SITE");b.remove("headquartersName");var r=initialize(id,token,"single",b);assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);assertStructure(id,true);assertThat(r.getBody().path("data").path("operationMode").asText()).isEqualTo("SINGLE_SITE");assertThat(initialize(id,token,"single",b).getBody().path("data")).isEqualTo(r.getBody().path("data"));assertStructure(id,true);assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='TENANT_INITIALIZE' AND object_id=?",Integer.class,id)).isOne();}
+    @Test void multiSiteCreatesHeadquartersAndFirstSite(){long id=pending();var b=body("MULTI_SITE");b.put("siteLabel","门店");assertThat(initialize(id,login(true),"multi",b).getStatusCode()).isEqualTo(HttpStatus.OK);assertStructure(id,false);assertThat(jdbc.queryForObject("SELECT site_label FROM plt_tenant WHERE id=?",String.class,id)).isEqualTo("门店");}
+    @Test void invalidInputsAndUnprivilegedCallerDoNotWrite(){long id=pending();String token=login(true);for(String mode:List.of("UNKNOWN","SINGLE_SITE","MULTI_SITE")){var b=body(mode);if(mode.equals("SINGLE_SITE"))b.remove("operationMode");if(mode.equals("MULTI_SITE"))b.put("headquartersName","");assertThat(initialize(id,token,"invalid-"+mode,b).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);}assertThat(initialize(id,login(false),"forbidden",body("SINGLE_SITE")).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);assertThat(count("iam_organization",id)).isZero();assertThat(jdbc.queryForObject("SELECT initialization_status FROM plt_tenant WHERE id=?",String.class,id)).isEqualTo("PENDING");}
+    @Test void auditFailureRollsBackEntireStructureAndCanRetry()throws Exception{long id=pending();String token=login(true);trigger("CREATE TRIGGER site_init_audit_failure BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.action='TENANT_INITIALIZE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic audit failure'; END IF; END");try{assertThat(initialize(id,token,"rollback",body("MULTI_SITE")).getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);assertThat(count("iam_organization",id)).isZero();assertThat(count("iam_user",id)).isZero();assertThat(jdbc.queryForObject("SELECT operation_mode FROM plt_tenant WHERE id=?",String.class,id)).isNull();}finally{trigger("DROP TRIGGER site_init_audit_failure");}assertThat(initialize(id,token,"rollback",body("MULTI_SITE")).getStatusCode()).isEqualTo(HttpStatus.OK);assertStructure(id,false);}
+    void trigger(String sql)throws Exception{try(var connection=java.sql.DriverManager.getConnection(MYSQL.getJdbcUrl(),"root",MYSQL.getPassword());var statement=connection.createStatement()){statement.execute(sql);}}
+    @Test void concurrentInitializationsCreateOneCoherentStructure()throws Exception{
+        long id=pending();String token=login(true);
+        var first=java.util.concurrent.CompletableFuture.supplyAsync(()->initialize(id,token,"race-one",body("SINGLE_SITE")));
+        var second=java.util.concurrent.CompletableFuture.supplyAsync(()->initialize(id,token,"race-two",body("MULTI_SITE")));
+        assertThat(List.of(first.get().getStatusCode(),second.get().getStatusCode())).containsExactlyInAnyOrder(HttpStatus.OK,HttpStatus.CONFLICT);
+        boolean single="SINGLE_SITE".equals(jdbc.queryForObject("SELECT operation_mode FROM plt_tenant WHERE id=?",String.class,id));assertStructure(id,single);
+    }
+    @Test void legacyTrustedCallerRemainsUnclassified(){long id=pending();var r=tenants.initialize(id,new TenantModels.InitializeTenant("legacy-admin","旧初始化","Legacy#Pass123","旧总部"));assertThat(r.operationMode()).isNull();assertThat(r.defaultSiteId()).isNull();assertThat(count("iam_organization",id)).isOne();assertThat(jdbc.queryForObject("SELECT organization_type FROM iam_organization WHERE tenant_id=?",String.class,id)).isEqualTo("HEADQUARTERS");}
+}

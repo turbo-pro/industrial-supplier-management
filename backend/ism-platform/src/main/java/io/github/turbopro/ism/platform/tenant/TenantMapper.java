@@ -15,10 +15,10 @@ public interface TenantMapper {
     record PortalTenantState(String status,String initializationStatus) {}
     @Select("SELECT status,initialization_status FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
     PortalTenantState lockForPortalRegistration(long tenantId);
-    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at FROM plt_tenant t ORDER BY t.created_at,t.id")
+    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at,t.operation_mode,t.site_label,t.default_site_id FROM plt_tenant t ORDER BY t.created_at,t.id")
     List<TenantModels.TenantRow> list();
 
-    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at FROM plt_tenant t WHERE t.id=#{id}")
+    @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at,t.operation_mode,t.site_label,t.default_site_id FROM plt_tenant t WHERE t.id=#{id}")
     TenantModels.TenantRow find(long id);
 
     @Select("SELECT COUNT(*) FROM plt_package_version WHERE id=#{id} AND status='PUBLISHED'")
@@ -36,14 +36,8 @@ public interface TenantMapper {
     @Insert("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status,timezone,locale) VALUES(#{id},#{code},#{name},'ACTIVE',#{timezone},#{locale})")
     int insertIamTenant(long id, String code, String name, String timezone, String locale);
 
-    @Insert("INSERT INTO iam_organization(id,tenant_id,parent_id,organization_code,organization_name,organization_type,status) VALUES(#{id},#{tenantId},NULL,'HEADQUARTERS',#{name},'HEADQUARTERS','ACTIVE')")
-    int insertHeadquarters(long id, long tenantId, String name);
-
     @Insert("INSERT INTO iam_user(id,tenant_id,username,display_name,password_hash,status,force_password_change) VALUES(#{id},#{tenantId},#{username},#{displayName},#{passwordHash},'ACTIVE',1)")
     int insertAdmin(long id, long tenantId, String username, String displayName, String passwordHash);
-
-    @Insert("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(#{tenantId},#{organizationId},#{organizationId},0)")
-    int insertOrganizationClosure(long tenantId, long organizationId);
 
     @Insert("INSERT INTO iam_user_organization(tenant_id,user_id,organization_id,is_primary) VALUES(#{tenantId},#{userId},#{organizationId},1)")
     int insertAdminOrganization(long tenantId, long userId, long organizationId);
@@ -65,6 +59,9 @@ public interface TenantMapper {
 
     @Insert("INSERT INTO iam_role_data_scope(tenant_id,role_id,resource_code,scope_type) VALUES(#{tenantId},#{roleId},'iam:organization','TENANT_ALL'),(#{tenantId},#{roleId},'iam:user','TENANT_ALL'),(#{tenantId},#{roleId},'resource:file','TENANT_ALL'),(#{tenantId},#{roleId},'print:template','TENANT_ALL'),(#{tenantId},#{roleId},'supplier:master','TENANT_ALL'),(#{tenantId},#{roleId},'supplier:admission','TENANT_ALL'),(#{tenantId},#{roleId},'supplier:qualification','TENANT_ALL'),(#{tenantId},#{roleId},'contract','TENANT_ALL'),(#{tenantId},#{roleId},'project','TENANT_ALL'),(#{tenantId},#{roleId},'resource:person','TENANT_ALL'),(#{tenantId},#{roleId},'resource:asset','TENANT_ALL'),(#{tenantId},#{roleId},'safety:issue','TENANT_ALL'),(#{tenantId},#{roleId},'safety:credential','TENANT_ALL'),(#{tenantId},#{roleId},'safety:attendance','TENANT_ALL'),(#{tenantId},#{roleId},'quality:ncr','TENANT_ALL'),(#{tenantId},#{roleId},'performance:evaluation','TENANT_ALL')")
     int grantAdminDataScopes(long tenantId, long roleId);
+
+    @Update("UPDATE plt_tenant SET operation_mode=#{mode},site_label=#{label},default_site_id=#{siteId} WHERE id=#{id} AND initialization_status='PENDING'")
+    int operationStructure(long id,String mode,String label,Long siteId);
 
     @Update("UPDATE plt_tenant SET status='ACTIVE',initialization_status='READY',initialized_at=#{now},version=version+1 WHERE id=#{id} AND status='PROVISIONING' AND initialization_status='PENDING'")
     int markReady(long id, LocalDateTime now);

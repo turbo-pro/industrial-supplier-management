@@ -17,7 +17,7 @@ public interface OrganizationMapper extends TenantScopedMapper {
     OrganizationModels.OrganizationRow find(long tenantId, long id);
 
     @Insert("INSERT INTO iam_organization(id,tenant_id,parent_id,organization_code,organization_name,organization_type,status,sort_order) VALUES(#{id},#{tenantId},#{parentId},#{code},#{name},#{type},'ACTIVE',#{sortOrder})")
-    int insert(long tenantId, long id, long parentId, String code, String name, String type, int sortOrder);
+    int insert(long tenantId, long id, Long parentId, String code, String name, String type, int sortOrder);
 
     @Insert("INSERT INTO iam_organization_closure(tenant_id,ancestor_id,descendant_id,depth) VALUES(#{tenantId},#{id},#{id},0)")
     int insertSelf(long tenantId, long id);

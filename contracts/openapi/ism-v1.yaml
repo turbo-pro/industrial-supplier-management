@@ -4839,12 +4839,15 @@ components:
         packageVersionId: { type: string }
     InitializeTenant:
       type: object
-      required: [adminUsername, adminDisplayName, initialPassword, headquartersName]
+      required: [adminUsername, adminDisplayName, initialPassword, operationMode, siteLabel, siteName]
       properties:
         adminUsername: { type: string, pattern: '^[a-zA-Z][a-zA-Z0-9._-]{2,99}$' }
         adminDisplayName: { type: string, maxLength: 100 }
         initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128, description: 'Requires uppercase, lowercase, digit, and non-alphanumeric character.' }
-        headquartersName: { type: string, maxLength: 200 }
+        headquartersName: { type: string, maxLength: 200, description: Required for MULTI_SITE. }
+        operationMode: { type: string, enum: [SINGLE_SITE, MULTI_SITE] }
+        siteLabel: { type: string, minLength: 1, maxLength: 20 }
+        siteName: { type: string, minLength: 1, maxLength: 200 }
     UpdateTenant:
       type: object
       required: [name, timezone, locale, version]
@@ -4857,6 +4860,9 @@ components:
       type: object
       required: [id, code, name, status, initializationStatus, timezone, locale, packageVersionId, version]
       properties:
+        operationMode: { type: string, nullable: true, enum: [SINGLE_SITE, MULTI_SITE], description: Null means legacy structure not yet classified. }
+        siteLabel: { type: string, nullable: true }
+        defaultSiteId: { type: string, nullable: true }
         id: { type: string }
         code: { type: string }
         name: { type: string }
