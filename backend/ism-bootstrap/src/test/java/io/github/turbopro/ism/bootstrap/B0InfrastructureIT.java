@@ -1730,7 +1730,7 @@ class B0InfrastructureIT {
                     "iam:user:manage", "iam:role:manage");
             assertThat(grants.dataScope("iam:organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("SYSTEM_MANAGEMENT"))
-                    .singleElement().satisfies(menu -> assertThat(menu.children()).hasSize(5));
+                    .singleElement().satisfies(menu -> assertThat(menu.children()).extracting("code").containsExactly("ORGANIZATION_MANAGEMENT","USER_MANAGEMENT","ROLE_MANAGEMENT","DICTIONARY_MANAGEMENT","TENANT_SETTING","SITE_PREFERENCE"));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
                     .singleElement().satisfies(menu -> assertThat(menu.children())
                             .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER", "PRINT_TEMPLATE", "ADVANCED_SEARCH"));

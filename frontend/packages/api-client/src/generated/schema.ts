@@ -1601,6 +1601,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPersonalSitePreference"];
+        put: operations["savePersonalSitePreference"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/site-preferences/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPersonalSiteOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/tree": {
         parameters: {
             query?: never;
@@ -6659,6 +6691,34 @@ export interface components {
             locale: string;
             packageVersionId: string;
         };
+        PersonalSiteOption: {
+            id: string;
+            code: string;
+            name: string;
+        };
+        SitePreference: {
+            preferredSite: components["schemas"]["PersonalSiteOption"] | null;
+            unavailable: boolean;
+            version: number;
+            canManage: boolean;
+        };
+        SaveSitePreference: {
+            siteId?: string | null;
+            version: number;
+        };
+        PersonalSitePage: {
+            items: components["schemas"]["PersonalSiteOption"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        SitePreferenceResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SitePreference"];
+        };
+        SiteOptionsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PersonalSitePage"];
+        };
         UpgradeTenantToMultiSite: {
             headquartersName: string;
             version: number;
@@ -10385,6 +10445,81 @@ export interface operations {
                 };
             };
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPersonalSitePreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current personal preference */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitePreferenceResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    savePersonalSitePreference: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSitePreference"];
+            };
+        };
+        responses: {
+            /** @description Preference saved without changing authorization or organization context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitePreferenceResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    listPersonalSiteOptions: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized active sites intersected with organization membership */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteOptionsResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
         };
     };
     getOrganizationTree: {

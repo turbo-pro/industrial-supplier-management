@@ -1506,6 +1506,36 @@ paths:
       responses:
         '200': { description: Suspended tenant cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/TenantResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /site-preferences:
+    get:
+      operationId: getPersonalSitePreference
+      tags: [Site Preferences]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current personal preference, content: { application/json: { schema: { $ref: '#/components/schemas/SitePreferenceResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+    put:
+      operationId: savePersonalSitePreference
+      tags: [Site Preferences]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveSitePreference' } } } }
+      responses:
+        '200': { description: Preference saved without changing authorization or organization context, content: { application/json: { schema: { $ref: '#/components/schemas/SitePreferenceResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+  /site-preferences/options:
+    get:
+      operationId: listPersonalSiteOptions
+      tags: [Site Preferences]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100, default: '' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Authorized active sites intersected with organization membership, content: { application/json: { schema: { $ref: '#/components/schemas/SiteOptionsResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /organizations/tree:
     get:
       operationId: getOrganizationTree
@@ -4851,6 +4881,39 @@ components:
         timezone: { type: string, example: Asia/Shanghai }
         locale: { type: string, example: zh-CN }
         packageVersionId: { type: string }
+    PersonalSiteOption:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+    SitePreference:
+      type: object
+      required: [preferredSite, unavailable, version, canManage]
+      properties:
+        preferredSite: { nullable: true, allOf: [{ $ref: '#/components/schemas/PersonalSiteOption' }] }
+        unavailable: { type: boolean }
+        version: { type: integer }
+        canManage: { type: boolean }
+    SaveSitePreference:
+      type: object
+      required: [version]
+      properties:
+        siteId: { type: string, nullable: true, pattern: '^[1-9][0-9]{0,18}$' }
+        version: { type: integer, minimum: 0 }
+    PersonalSitePage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PersonalSiteOption' } }
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+    SitePreferenceResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SitePreference' } } }]
+    SiteOptionsResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PersonalSitePage' } } }]
     UpgradeTenantToMultiSite:
       type: object
       required: [headquartersName, version]

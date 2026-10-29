@@ -22,7 +22,7 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 | B1-04 | IAM组织树/闭包、初始化及结构升级公开契约 | [初始化](site-initialization-review.md)及[单转多升级](site-upgrade-review.md)：15/15后端、真实Console及最终库1/1 | 场站停用/经营场站上下文及现场业务归属仍待；总部不得冒充场站 |
 | B1-05 | iam/access 的 AccessService；账号生命周期 Review | 已有停用/角色/改密/锁定/批量状态证据 | 岗位、邀请交接、安全事件、全部留存规则尚未全映射 |
 | B1-06 | AccessService、NavigationService，角色菜单按钮/API | b1-tenant-role-management-review.md 等历史证据 | 支持临时授权、完整权限依赖与场站分权仍缺 |
-| B1-07 | 数据范围/字段权限及 IAM 套餐范围约束 | 基础租户/范围/掩码样板；[账号公开入口范围一致性](b1-user-scope-consistency-review.md) | 总部汇总/明细/编辑分权及支持会话字段交集仍缺 |
+| B1-07 | 数据范围/字段权限及 IAM 套餐范围约束 | 基础租户/范围/掩码样板；[账号范围](b1-user-scope-consistency-review.md)、[个人场站候选/首选](site-preference-review.md)专项 | 总部汇总/明细/编辑分权及支持会话字段交集仍缺 |
 | B1-08 | iam/navigation、套餐菜单交集 | b1-package-permission-entitlement-review.md 历史证据 | 新模块/新增入口纳入菜单和后端联动验证 |
 | B1-09 | IAM 字典系统项/租户覆盖/自定义项 | ConfigurationService/Test 和初始化历史流程 | GAP-03 核心/扩展字段、表单布局、发布/历史版本未落地 |
 | B1-10 | IAM 配置、租户品牌和受控普通用户品牌读取 | b1-tenant-branding-review.md 历史证据 | Console 平台品牌、公告与完整配置分层仍缺 |

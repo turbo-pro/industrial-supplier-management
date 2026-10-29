@@ -39,6 +39,7 @@ export default createRouter({history:createWebHistory(),routes:[
   {path:'/quality/nonconformances',component:QualityNonconformancePage,meta:{title:'质量不符合项'}},
   {path:'/performance/evaluations',component:PerformanceEvaluationPage,meta:{title:'供应商绩效'}},
   {path:'/system/settings',component:TenantSettingPage,meta:{title:'租户配置'}},
+  {path:'/system/site-preference',component:()=>import('./views/SitePreferencePage.vue'),meta:{title:'首选场站'}},
   {path:'/system/users',component:UserManagementPage,meta:{title:'用户管理'}},
   {path:'/system/roles',component:RoleManagementPage,meta:{title:'角色权限'}},
   {path:'/coming-soon',component:ComingSoonPage,meta:{title:'功能建设中'}},
