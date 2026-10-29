@@ -34,6 +34,13 @@ public class SupplierReferenceService {
         if(evaluation.decision()==SupplierRestrictionEvaluator.Decision.DENY)return null;
         return new Reference(row.organizationId(),row.supplierCode(),row.supplierName());
     }
+    /** A reference selected for new business must still be visible under the supplier grant. */
+    @Transactional public void requireVisibleForSelection(long supplierId){
+        var i=TenantContext.require();var grants=io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext.require();
+        if(!grants.hasAction("supplier:master:view"))throw new io.github.turbopro.ism.common.api.error.ApiException(io.github.turbopro.ism.common.api.error.CommonErrorCode.FORBIDDEN);
+        var row=mapper.findForNewBusiness(i.tenantId(),supplierId);
+        if(row==null||!grants.dataScope("supplier:master").allows(new io.github.turbopro.ism.common.infrastructure.authorization.DataTarget(row.organizationId(),null,row.createdBy(),row.createdBy()),i.actorId()))throw new io.github.turbopro.ism.common.api.error.ApiException(io.github.turbopro.ism.common.api.error.CommonErrorCode.NOT_FOUND);
+    }
     public record Reference(long organizationId, String code, String name) {}
     public boolean lockForExitVerification(long supplierId) {
         long tenant=TenantContext.require().tenantId();

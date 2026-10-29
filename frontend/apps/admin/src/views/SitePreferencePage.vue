@@ -38,7 +38,7 @@ onMounted(()=>{void load();void search();});
 </script>
 <template>
   <section class="site-preference-page">
-    <h1>首选场站</h1><p>保存个人首选，不改变账号组织、当前组织或业务访问权限。</p>
+    <h1>首选场站</h1><router-link to="/projects/site-ledger">进入场站项目工作区</router-link><p>保存个人首选，不改变账号组织、当前组织或业务访问权限。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <p v-if="notice" role="status">{{ notice }}</p>
     <el-card shadow="never">
