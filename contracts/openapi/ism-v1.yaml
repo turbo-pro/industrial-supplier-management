@@ -1412,6 +1412,18 @@ paths:
       responses:
         '200': { description: Current quota usage, content: { application/json: { schema: { $ref: '#/components/schemas/QuotaUsageResponse' } } } }
         '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/package-options:
+    get:
+      operationId: listTenantCreationPackageOptions
+      tags: [Console Tenants]
+      description: Minimal published-version picker under tenant-create permission. Saving rechecks current active package and published version.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: q, in: query, schema: { type: string, maxLength: 100 } }, { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }, { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }]
+      responses:
+        '200': { description: Minimal creation choices, content: { application/json: { schema: { $ref: '#/components/schemas/TenantPackageOptionsResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
   /console/tenants:
     get:
       operationId: listTenants
@@ -4948,15 +4960,34 @@ components:
         hardLimited: { type: boolean }
     QuotaUsageResponse:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/QuotaUsage' } } }]
+    TenantPackageOption:
+      type: object
+      required: [id, packageCode, packageName, versionNo, versionName]
+      properties:
+        id: { type: string }
+        packageCode: { type: string }
+        packageName: { type: string }
+        versionNo: { type: integer }
+        versionName: { type: string }
+    TenantPackageOptions:
+      type: object
+      required: [total, page, size, items]
+      properties:
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/TenantPackageOption' } }
+    TenantPackageOptionsResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/TenantPackageOptions' } } }]
     CreateTenant:
       type: object
       required: [code, name, timezone, locale, packageVersionId]
       properties:
         code: { type: string, pattern: '^[A-Z][A-Z0-9_-]{1,49}$' }
         name: { type: string, maxLength: 200 }
-        timezone: { type: string, example: Asia/Shanghai }
-        locale: { type: string, example: zh-CN }
-        packageVersionId: { type: string }
+        timezone: { type: string, maxLength: 50, example: Asia/Shanghai }
+        locale: { type: string, maxLength: 20, example: zh-CN }
+        packageVersionId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
     SelectSiteContext:
       type: object
       properties:
@@ -5034,8 +5065,8 @@ components:
       required: [name, timezone, locale, version]
       properties:
         name: { type: string, maxLength: 200 }
-        timezone: { type: string }
-        locale: { type: string }
+        timezone: { type: string, maxLength: 50 }
+        locale: { type: string, maxLength: 20 }
         version: { type: integer, minimum: 0 }
     Tenant:
       type: object

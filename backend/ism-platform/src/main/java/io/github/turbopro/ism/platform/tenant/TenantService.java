@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.zone.ZoneRulesException;
 import java.util.List;
 import java.util.Locale;
 
@@ -28,6 +27,10 @@ public class TenantService {
         this.organizations = organizations;
     }
 
+    public TenantModels.PackageOptions packageOptions(String q,int page,int size){
+        String keyword=q==null||q.isBlank()?null:"%"+q.trim().replace("=","==").replace("%","=%").replace("_","=_")+"%";
+        return new TenantModels.PackageOptions(mapper.countPackageOptions(keyword),page,size,mapper.packageOptions(keyword,Math.multiplyExact(page,size),size));
+    }
     public List<TenantModels.TenantView> list() {
         return mapper.list().stream().map(this::view).toList();
     }
@@ -44,7 +47,7 @@ public class TenantService {
     public TenantModels.TenantView create(TenantModels.CreateTenant command) {
         validateLocaleAndTimezone(command.locale(), command.timezone());
         long packageVersionId = parseId(command.packageVersionId());
-        if (mapper.publishedPackageExists(packageVersionId) != 1) {
+        if (mapper.lockAvailablePackageVersion(packageVersionId) == null) {
             throw new ApiException(TenantErrorCode.PACKAGE_UNAVAILABLE);
         }
         long tenantId = ids.nextId();
@@ -190,13 +193,13 @@ public class TenantService {
 
     private void validateLocaleAndTimezone(String locale, String timezone) {
         try {
+            if(timezone==null||timezone.isBlank())throw new java.time.DateTimeException("Missing timezone");
             java.time.ZoneId.of(timezone);
-        } catch (ZoneRulesException exception) {
+        } catch (java.time.DateTimeException exception) {
             throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "时区无效");
         }
-        if (Locale.forLanguageTag(locale).getLanguage().isBlank()) {
-            throw new ApiException(CommonErrorCode.VALIDATION_FAILED, "语言区域无效");
-        }
+        try{if(locale==null||locale.isBlank()||new Locale.Builder().setLanguageTag(locale).build().getLanguage().isBlank())throw new java.util.IllformedLocaleException();}
+        catch(java.util.IllformedLocaleException e){throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"语言区域无效");}
     }
 
     private LocalDateTime utcNow() {

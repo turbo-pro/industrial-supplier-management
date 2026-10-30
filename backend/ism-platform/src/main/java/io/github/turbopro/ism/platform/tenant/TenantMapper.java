@@ -30,8 +30,13 @@ public interface TenantMapper {
     @Select("SELECT t.id,t.tenant_code,t.tenant_name,t.status,t.initialization_status,t.timezone,t.locale," + EffectiveSubscriptionSql.VERSION + " AS package_version_id,t.version,t.initialized_at,t.operation_mode,t.site_label,t.default_site_id FROM plt_tenant t WHERE t.id=#{id}")
     TenantModels.TenantRow find(long id);
 
-    @Select("SELECT COUNT(*) FROM plt_package_version WHERE id=#{id} AND status='PUBLISHED'")
-    int publishedPackageExists(long id);
+    @Select("SELECT v.id FROM plt_package_version v JOIN plt_package p ON p.id=v.package_id WHERE v.id=#{id} AND v.status='PUBLISHED' AND p.status='ACTIVE' FOR UPDATE")
+    Long lockAvailablePackageVersion(long id);
+    String PACKAGE_OPTIONS_FILTER=" FROM plt_package_version v JOIN plt_package p ON p.id=v.package_id WHERE v.status='PUBLISHED' AND p.status='ACTIVE' <if test='keyword != null'> AND (p.package_code LIKE #{keyword} ESCAPE '=' OR p.package_name LIKE #{keyword} ESCAPE '=' OR v.version_name LIKE #{keyword} ESCAPE '=')</if>";
+    @Select("<script>SELECT COUNT(*)"+PACKAGE_OPTIONS_FILTER+"</script>")
+    long countPackageOptions(String keyword);
+    @Select("<script>SELECT v.id,p.package_code,p.package_name,v.version_no,v.version_name"+PACKAGE_OPTIONS_FILTER+" ORDER BY p.package_code,v.version_no DESC,v.id DESC LIMIT #{size} OFFSET #{offset}</script>")
+    List<TenantModels.PackageOption> packageOptions(String keyword,int offset,int size);
 
     @Insert("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,initialization_status,timezone,locale,package_version_id) VALUES(#{id},#{code},#{name},'PROVISIONING','PENDING',#{timezone},#{locale},#{packageVersionId})")
     int insert(long id, String code, String name, String timezone, String locale, long packageVersionId);

@@ -7,6 +7,9 @@ import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
 import io.github.turbopro.ism.operation.AuditService;
 import io.github.turbopro.ism.operation.IdempotencyService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +25,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 @RestController
+@Validated
 @RequestMapping("/api/console/tenants")
 public class TenantController {
     private final TenantService service;
@@ -44,6 +48,10 @@ public class TenantController {
     ApiResponse<List<TenantModels.TenantView>> list() {
         return responses.success(service.list());
     }
+
+    @GetMapping("/package-options")
+    @RequiresPermission("platform:tenant:create")
+    ApiResponse<TenantModels.PackageOptions> packageOptions(@RequestParam(defaultValue="") @Size(max=100) String q,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){return responses.success(service.packageOptions(q,page,size));}
 
     @GetMapping("/{id}")
     @RequiresPermission("platform:tenant:view")

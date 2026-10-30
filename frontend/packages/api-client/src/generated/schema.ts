@@ -1487,6 +1487,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/tenants/package-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Minimal published-version picker under tenant-create permission. Saving rechecks current active package and published version. */
+        get: operations["listTenantCreationPackageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/tenants": {
         parameters: {
             query?: never;
@@ -6779,6 +6796,23 @@ export interface components {
         QuotaUsageResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["QuotaUsage"];
         };
+        TenantPackageOption: {
+            id: string;
+            packageCode: string;
+            packageName: string;
+            versionNo: number;
+            versionName: string;
+        };
+        TenantPackageOptions: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["TenantPackageOption"][];
+        };
+        TenantPackageOptionsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["TenantPackageOptions"];
+        };
         CreateTenant: {
             code: string;
             name: string;
@@ -10327,6 +10361,33 @@ export interface operations {
                 };
             };
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    listTenantCreationPackageOptions: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Minimal creation choices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPackageOptionsResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
         };
     };
     listTenants: {

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class TenantModels {
     private TenantModels() {}
@@ -13,10 +14,12 @@ public final class TenantModels {
     public record CreateTenant(
             @NotBlank @Pattern(regexp = "[A-Z][A-Z0-9_-]{1,49}") String code,
             @NotBlank @Size(max = 200) String name,
-            @NotBlank String timezone,
-            @NotBlank String locale,
-            @NotNull String packageVersionId) {}
+            @NotBlank @Size(max=50) String timezone,
+            @NotBlank @Size(max=20) String locale,
+            @NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String packageVersionId) {}
 
+    public record PackageOption(String id,String packageCode,String packageName,int versionNo,String versionName){}
+    public record PackageOptions(long total,int page,int size,List<PackageOption> items){}
     public record InitializeTenant(
             @NotBlank @Pattern(regexp = "[a-zA-Z][a-zA-Z0-9._-]{2,99}") String adminUsername,
             @NotBlank @Size(max = 100) String adminDisplayName,
@@ -36,8 +39,8 @@ public final class TenantModels {
 
     public record UpdateTenant(
             @NotBlank @Size(max = 200) String name,
-            @NotBlank String timezone,
-            @NotBlank String locale,
+            @NotBlank @Size(max=50) String timezone,
+            @NotBlank @Size(max=20) String locale,
             int version) {}
 
     public record TenantRow(long id, String tenantCode, String tenantName, String status,

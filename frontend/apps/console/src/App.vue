@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
 import TenantInitialization from './TenantInitialization.vue';
+import TenantCreation from './TenantCreation.vue';
 import TenantSiteUpgrade from './TenantSiteUpgrade.vue';
 
 const form = reactive({ username: '', password: '' });
@@ -18,6 +19,7 @@ const showPasswordForm = ref(false);
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
+const createTenantOpen=ref(false);
 const upgradeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const initializeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const subscriptionTenant = ref<components['schemas']['Tenant'] | null>(null);
@@ -64,17 +66,27 @@ async function login() {
 
 async function loadWorkspace() {
   if (!accessToken.value || passwordChangeRequired.value) return;
-  const [meResult, packageResult, tenantResult] = await Promise.all([
-    client.GET('/console/auth/me'), client.GET('/console/packages'), client.GET('/console/tenants'),
-  ]);
-  if (meResult.error || packageResult.error || tenantResult.error) {
-    logout('登录状态已失效，请重新登录');
-    return;
-  }
-  packages.value = packageResult.data?.data ?? [];
-  tenants.value = tenantResult.data?.data ?? [];
-  currentUser.value = meResult.data?.data ?? null;
-  if (currentUser.value?.permissions.includes('platform:user:view')) await loadUsers();
+  const token=accessToken.value;
+  try{
+    const meResult=await client.GET('/console/auth/me');if(token!==accessToken.value)return;
+    if(meResult.error){if(meResult.response.status===401)logout('登录状态已失效，请重新登录');else message.value=meResult.error.error.message;return;}
+    currentUser.value=meResult.data.data;
+    const [packageResult,tenantResult]=await Promise.all([
+      currentUser.value.permissions.includes('platform:package:view')?client.GET('/console/packages'):Promise.resolve(null),
+      currentUser.value.permissions.includes('platform:tenant:view')?client.GET('/console/tenants'):Promise.resolve(null),
+    ]);if(token!==accessToken.value)return;
+    if([packageResult,tenantResult].some(r=>r?.response.status===401)){logout('登录状态已失效，请重新登录');return;}
+    packages.value=packageResult?.data?.data??[];tenants.value=tenantResult?.data?.data??[];
+    if(packageResult?.error||tenantResult?.error)message.value='部分控制面资料读取失败，请稍后重新登录或刷新；已有操作结果不变';
+    if(currentUser.value.permissions.includes('platform:user:view'))await loadUsers();else users.value=[];
+  }catch{if(token===accessToken.value)message.value='控制面资料读取失败，请刷新重试；已有操作结果不变';}
+}
+async function tenantCreated(tenant:components['schemas']['Tenant']){
+  createTenantOpen.value=false;message.value=`租户 ${tenant.code} 已创建，初始化组织和首管理员后即可开通`;
+  const token=accessToken.value;await loadWorkspace();if(!token||token!==accessToken.value)return;
+  const current=tenants.value.find(t=>t.id===tenant.id)??tenant;
+  if(current.initializationStatus==='PENDING'&&currentUser.value?.permissions.includes('platform:tenant:initialize'))initializeTarget.value=current;
+  else if(current.initializationStatus==='PENDING')message.value=`租户 ${tenant.code} 已创建，待有初始化权限的管理员继续开通`;
 }
 
 async function loadUsers() {
@@ -220,6 +232,7 @@ function logout(reason = '') {
   packages.value = [];
   tenants.value = [];
   subscriptionTenant.value = null;
+  createTenantOpen.value=false;initializeTarget.value=null;upgradeTarget.value=null;
   users.value = [];
   resetTarget.value = null;
   temporaryPassword.value = '';
@@ -274,20 +287,21 @@ if (accessToken.value) {
       <p>至少 12 位，包含大小写字母、数字和特殊字符。</p>
       <button :disabled="changingPassword" type="submit">确认修改</button>
     </form>
-    <section class="panel">
+    <section v-if="currentUser?.permissions.includes('platform:package:view')" class="panel">
       <div class="panel-title"><div><h2>套餐版本</h2><p>发布后的版本不可覆盖，变更必须创建新版本。</p></div><button type="button">新建套餐</button></div>
       <table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th></tr></thead>
         <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.status }}</td><td>{{ item.versions.length }}</td></tr>
         <tr v-if="packages.length === 0"><td colspan="4" class="empty">尚未创建套餐</td></tr></tbody>
       </table>
     </section>
-    <section class="panel">
-      <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button type="button">新建租户</button></div>
-      <table><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
+    <section class="panel tenant-opening">
+      <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button v-if="currentUser?.permissions.includes('platform:tenant:create')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="createTenantOpen=true">新建租户</button></div>
+      <div class="tenant-list-scroll"><table v-if="currentUser?.permissions.includes('platform:tenant:view')"><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
         <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
-      </table>
+      </table><p v-else>当前没有租户列表查看权限，创建操作仍需单独授权。</p></div><p v-if="currentUser?.permissions.includes('platform:tenant:view') && tenants.length===0" class="tenant-empty">当前未加载到租户记录。</p>
     </section>
+    <TenantCreation v-if="createTenantOpen" :token="accessToken" @close="createTenantOpen=false" @created="tenantCreated" />
     <TenantSiteUpgrade v-if="upgradeTarget" :key="upgradeTarget.id" :tenant="upgradeTarget" :token="accessToken" @close="upgradeTarget = null; loadWorkspace()" @done="upgradeTarget = null; message = '已升级为多场站，原场站及历史归属保持不变'; loadWorkspace()" />
     <TenantInitialization v-if="initializeTarget" :key="initializeTarget.id" :tenant="initializeTarget" :token="accessToken" @close="initializeTarget = null" @done="initializeTarget = null; message = '租户初始化已完成'; loadWorkspace()" />
     <SubscriptionPlans v-if="subscriptionTenant" :key="subscriptionTenant.id" :tenant-id="subscriptionTenant.id"
@@ -335,3 +349,8 @@ if (accessToken.value) {
     </section>
   </main>
 </template>
+
+<style scoped>
+.tenant-list-scroll{max-width:100%;overflow-x:auto;}.tenant-list-scroll table{min-width:720px;}.tenant-opening .panel-title{flex-wrap:wrap;gap:12px;}.tenant-opening .panel-title>div{flex:1 1 240px;}
+@media(max-width:600px){.workspace header{flex-direction:column;align-items:flex-start;gap:12px;}.workspace header>div:last-child{flex-wrap:wrap;gap:8px;width:100%;}.workspace header [role=status]{flex-basis:100%;}}
+</style>

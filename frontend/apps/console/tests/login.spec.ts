@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('platform operator logs in through the isolated Console endpoint', async ({ page }) => {
   await page.route('**/api/console/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: {
     id: '1', username: 'platform-admin', displayName: '平台管理员', passwordChangeRequired: false,
-    passwordChangeRecommended: false, permissions: ['platform:tenant:view'],
+    passwordChangeRecommended: false, permissions: ['platform:tenant:view', 'platform:package:view'],
   } }) }));
   await page.route('**/api/console/auth/login', async route => {
     expect(route.request().postDataJSON()).toMatchObject({ username: 'platform-admin' });
@@ -11,7 +11,7 @@ test('platform operator logs in through the isolated Console endpoint', async ({
       success: true,
       data: { accessToken: 'console-access', refreshToken: 'console-refresh', expiresIn: 900,
         user: { id: '1', username: 'platform-admin', displayName: '平台管理员',
-          passwordChangeRequired: false, passwordChangeRecommended: false, permissions: ['platform:tenant:view'] } },
+          passwordChangeRequired: false, passwordChangeRecommended: false, permissions: ['platform:tenant:view', 'platform:package:view'] } },
       traceId: 'console-login', timestamp: new Date().toISOString(),
     }) });
   });
