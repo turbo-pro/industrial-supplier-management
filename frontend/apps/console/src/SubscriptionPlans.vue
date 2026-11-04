@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
+import SupplierQuotaSummary from './SupplierQuotaSummary.vue';
 
 const props = defineProps<{ tenantId: string; tenantName: string; token: string; canManage: boolean }>();
 defineEmits<{ close: [] }>();
@@ -153,6 +154,7 @@ onMounted(load);
         <button type="button" :disabled="reminderLoading || reminderSending" @click="loadReminders">刷新提醒记录</button>
       </section>
     </template>
+    <SupplierQuotaSummary :key="tenantId" :tenant-id="tenantId" :token="token" />
     <button type="button" :disabled="loading || saving || reminderSending" @click="load">刷新计划</button>
   </section>
 </template>

@@ -1512,6 +1512,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description SUPPLIER_COUNT reads the actual tenant-wide nondeleted supplier master count, including drafts, suspended and exited records. Other codes retain their existing usage-ledger source. Zero or missing capacity does not mean unlimited. Requires platform:package:view. */
         get: operations["getTenantQuotaUsage"];
         put?: never;
         post?: never;
@@ -10460,6 +10461,8 @@ export interface operations {
                     "application/json": components["schemas"]["QuotaUsageResponse"];
                 };
             };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
         };
     };

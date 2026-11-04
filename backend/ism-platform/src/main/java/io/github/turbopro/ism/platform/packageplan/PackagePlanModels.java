@@ -56,6 +56,8 @@ public final class PackagePlanModels {
     public record SubscriptionPage(String tenantId,int tenantVersion,String currentPackageVersionId,
                                    LocalDateTime asOf,long total,int page,int size,List<SubscriptionView> items) {}
     public record SubscriptionCancellation(String subscriptionId,int tenantVersion,String state) {}
+    public record QuotaTenant(long id,String status,Long packageVersionId) {}
+    public record QuotaSubscription(long packageVersionId,LocalDateTime effectiveTo) {}
     public record QuotaUsage(String quotaCode, long limit, long used, long remaining,
                              boolean warning, boolean hardLimited) {}
 }

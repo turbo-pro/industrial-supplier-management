@@ -17,8 +17,9 @@ import java.util.*;
 public class PackagePlanService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private final PackagePlanMapper mapper; private final ObjectMapper json;
+    private final Map<String,io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader> usageReaders;
     private final AuditService audit;
-    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json,AuditService audit) { this.mapper=mapper; this.json=json; this.audit=audit; }
+    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json,AuditService audit,List<io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader> readers) { this.mapper=mapper; this.json=json; this.audit=audit;this.usageReaders=readers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader::quotaCode,r->r)); }
 
     @Transactional(readOnly=true)
     public PackagePlanModels.SubscriptionPage subscriptions(long tenantId,int page,int size) {
@@ -125,6 +126,7 @@ public class PackagePlanService {
         return versionView(mapper.lockVersion(versionId),mapper.lockModules(versionId));
     }
     public PackagePlanModels.SubscriptionPreview preview(long tenantId,long targetVersionId) {
+        requireQuotaTenant(tenantId);
         PackagePlanModels.VersionRow target=requirePublished(targetVersionId); Long currentId=mapper.findTenantPackageVersion(tenantId);
         Map<String,PackagePlanModels.ModuleGrant> current=currentId==null?Map.of():grantMap(currentId); Map<String,PackagePlanModels.ModuleGrant> next=grantMap(target.id());
         Set<String> removed=current.entrySet().stream().filter(e->e.getValue().enabled()).map(Map.Entry::getKey)
@@ -133,7 +135,7 @@ public class PackagePlanService {
         Map<String,PackagePlanModels.QuotaChange> changes=new TreeMap<>();
         Map<String,Long> oldQ=flatten(current.values()), newQ=flatten(next.values());
         Set<String> quotaCodes=new TreeSet<>(oldQ.keySet());
-        quotaCodes.addAll(newQ.keySet()); quotaCodes.addAll(mapper.usedQuotaCodes(tenantId));
+        quotaCodes.addAll(newQ.keySet()); quotaCodes.addAll(mapper.usedQuotaCodes(tenantId));quotaCodes.addAll(usageReaders.keySet());
         for(String code:quotaCodes){ long old=oldQ.getOrDefault(code,0L), limit=newQ.getOrDefault(code,0L), used=used(tenantId,code); if(limit<old || used>limit) changes.put(code,new PackagePlanModels.QuotaChange(old,limit,used,used>limit)); }
         List<String> advice=new ArrayList<>(); if(!removed.isEmpty()) advice.add("确认失效模块的数据只读保留策略");
         if(changes.values().stream().anyMatch(PackagePlanModels.QuotaChange::exceedsTarget)) advice.add("先清理超出目标额度的资源或确认只读保留");
@@ -159,8 +161,8 @@ public class PackagePlanService {
         if(mapper.updateTenantPackage(tenantId,targetVersionId)!=1) throw new ApiException(CommonErrorCode.NOT_FOUND); return preview;
     }
     public void requireModule(long tenantId,String moduleCode){ if(!mapper.enabledTenantModules(tenantId).contains(moduleCode)) throw new ApiException(PackagePlanErrorCode.MODULE_UNAVAILABLE); }
-    public PackagePlanModels.QuotaUsage quota(long tenantId,String quotaCode){ Long version=mapper.findTenantPackageVersion(tenantId); long limit=version==null?0:flatten(grantMap(version).values()).getOrDefault(quotaCode,0L),used=used(tenantId,quotaCode); return new PackagePlanModels.QuotaUsage(quotaCode,limit,used,Math.max(0,limit-used),limit>0&&used*100>=limit*80,used>=limit); }
-    public void requireQuota(long tenantId,String quotaCode,long delta){ var q=quota(tenantId,quotaCode); if(q.limit()<=0||q.used()+delta>q.limit()) throw new ApiException(PackagePlanErrorCode.QUOTA_EXCEEDED); }
+    public PackagePlanModels.QuotaUsage quota(long tenantId,String quotaCode){ requireQuotaTenant(tenantId);if(quotaCode==null||!quotaCode.matches("[A-Z][A-Z0-9_]{0,63}"))throw new ApiException(CommonErrorCode.VALIDATION_FAILED);Long version=mapper.findTenantPackageVersion(tenantId); long limit=version==null?0:flatten(grantMap(version).values()).getOrDefault(quotaCode,0L),used=used(tenantId,quotaCode); return new PackagePlanModels.QuotaUsage(quotaCode,limit,used,Math.max(0,limit-used),limit>0&&used>=limit-limit/5,used>=limit); }
+    public void requireQuota(long tenantId,String quotaCode,long delta){ var q=quota(tenantId,quotaCode); if(q.limit()<=0||delta<0||delta>q.limit()||q.used()>q.limit()-delta) throw new ApiException(PackagePlanErrorCode.QUOTA_EXCEEDED); }
 
     private PackagePlanModels.PackageView view(PackagePlanModels.PackageRow row){return new PackagePlanModels.PackageView(Long.toString(row.id()),row.packageCode(),row.packageName(),row.status(),row.version(),mapper.listVersions(row.id()).stream().map(this::versionView).toList());}
     private PackagePlanModels.VersionView versionView(PackagePlanModels.VersionRow r){return versionView(r,mapper.listModules(r.id()));}
@@ -168,8 +170,9 @@ public class PackagePlanService {
     private PackagePlanModels.VersionRow requireVersion(long id){var r=mapper.findVersion(id);if(r==null)throw new ApiException(CommonErrorCode.NOT_FOUND);return r;}
     private PackagePlanModels.VersionRow requirePublished(long id){var r=requireVersion(id);if(!"PUBLISHED".equals(r.status()))throw new ApiException(PackagePlanErrorCode.INVALID,"只能分配已发布版本");return r;}
     private Map<String,PackagePlanModels.ModuleGrant> grantMap(long id){Map<String,PackagePlanModels.ModuleGrant> map=new HashMap<>();for(var m:mapper.listModules(id))map.put(m.moduleCode(),new PackagePlanModels.ModuleGrant(m.moduleCode(),m.enabled(),readQuotas(m.quotaJson())));return map;}
-    private Map<String,Long> flatten(Collection<PackagePlanModels.ModuleGrant> grants){Map<String,Long> r=new HashMap<>();grants.stream().filter(PackagePlanModels.ModuleGrant::enabled).forEach(g->g.quotas().forEach((k,v)->r.merge(k,v,Math::max)));return r;}
-    private long used(long tenant,String code){Long v=mapper.quotaUsed(tenant,code,"CURRENT");return v==null?0:v;}
+    private Map<String,Long> flatten(Collection<PackagePlanModels.ModuleGrant> grants){Map<String,Long> r=new HashMap<>();Set<String> active=mapper.moduleOptions().stream().map(PackagePlanModels.ModuleOption::code).collect(java.util.stream.Collectors.toSet());grants.stream().filter(g->g.enabled()&&active.contains(g.moduleCode())).forEach(g->g.quotas().forEach((k,v)->r.merge(k,v,Math::max)));return r;}
+    private void requireQuotaTenant(long id){if(id<=0||mapper.subscriptionTenant(id)==null)throw new ApiException(CommonErrorCode.NOT_FOUND);}
+    private long used(long tenant,String code){if(usageReaders.containsKey(code))return usageReaders.get(code).used(tenant);Long v=mapper.quotaUsed(tenant,code,"CURRENT");return v==null?0:v;}
     private String write(Object v){try{return json.writeValueAsString(v);}catch(JsonProcessingException e){throw new IllegalArgumentException(e);}}
     private Map<String,Long> readQuotas(String v){try{return json.readValue(v,new TypeReference<>(){});}catch(JsonProcessingException e){throw new IllegalStateException(e);}}
     private static long id(){return RANDOM.nextLong(Long.MAX_VALUE-1)+1;}

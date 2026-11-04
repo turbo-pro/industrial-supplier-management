@@ -6,6 +6,10 @@ import java.util.*;
 
 @Mapper
 public interface SupplierMapper extends TenantScopedMapper {
+    @Select("SELECT COUNT(*) FROM sup_supplier WHERE tenant_id=#{tenantId} AND deleted=0")
+    long quotaCount(long tenantId);
+    @Select("SELECT COUNT(*) FROM sup_supplier WHERE tenant_id=#{tenantId} AND deleted=0 FOR UPDATE")
+    long lockQuotaCount(long tenantId);
     @Select("SELECT id FROM sup_exit_application WHERE tenant_id=#{tenantId} AND supplier_id=#{supplierId} AND status='SUBMITTED' FOR UPDATE")
     List<Long> currentPendingExits(long tenantId,long supplierId);
     @Update("UPDATE sup_supplier SET status='EXITED',updated_by=#{actorId},version=version+1 WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0 AND status IN ('DRAFT','ACTIVE','SUSPENDED') AND version=#{version}")

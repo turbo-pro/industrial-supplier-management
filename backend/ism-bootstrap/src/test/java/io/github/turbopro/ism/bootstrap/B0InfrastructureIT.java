@@ -1411,6 +1411,12 @@ class B0InfrastructureIT {
         }
     }
 
+    private void seedSupplierQuotaUsage(long tenantId,int count){
+        jdbcTemplate.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(?,?,?,'ACTIVE')",tenantId,"QUOTA-"+tenantId,"真实用量回归");
+        long org=tenantId+500000;
+        jdbcTemplate.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(?,?,'QUOTA-ORG','真实用量组织','SITE','ACTIVE')",org,tenantId);
+        for(int n=0;n<count;n++)jdbcTemplate.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(?,?,?,?,?,'MANUFACTURER',9,9)",tenantId*1000+n,tenantId,org,"QUOTA-"+n,"真实用量供应商"+n);
+    }
     @Test
     void shouldPublishImmutablePackagesPreviewDowngradeAndEnforceQuota() {
         var plan = packagePlanService.create(new PackagePlanModels.CreatePackage("CHEMICAL_ENTERPRISE", "化工企业版"));
@@ -1441,6 +1447,7 @@ class B0InfrastructureIT {
         jdbcTemplate.update("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(?,?,?,?,?)",
                 9201L, tenantId, "SUPPLIER_COUNT", "CURRENT", 12L);
 
+        seedSupplierQuotaUsage(tenantId,12);
         var preview = packagePlanService.preview(tenantId, Long.parseLong(basic.id()));
         assertThat(preview.removedModules()).contains("QUALITY");
         assertThat(preview.quotaChanges().get("SUPPLIER_COUNT").exceedsTarget()).isTrue();
@@ -1499,6 +1506,7 @@ class B0InfrastructureIT {
         assertThat(packagePlanService.quota(tenantId,"SUPPLIER_COUNT").limit()).isZero();
         assertThat(platformTenantService.get(tenantId).packageVersionId()).isNull();
         jdbcTemplate.update("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(9211,?,'SUPPLIER_COUNT','CURRENT',30)",tenantId);
+        seedSupplierQuotaUsage(tenantId,30);
         assertThat(packagePlanService.preview(tenantId,Long.parseLong(quality.id())).quotaChanges()
                 .get("SUPPLIER_COUNT").exceedsTarget()).isTrue();
         assertThatThrownBy(()->packagePlanService.assign(tenantId,Long.parseLong(quality.id()),new PackagePlanModels.AssignSubscription(

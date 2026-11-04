@@ -70,6 +70,16 @@ public interface PackagePlanMapper {
     int insertSubscription(long id, long tenantId, long versionId, LocalDateTime from, LocalDateTime to, String exceptions);
     @Update("UPDATE plt_tenant SET package_version_id=#{versionId},version=version+1 WHERE id=#{tenantId}")
     int updateTenantPackage(long tenantId, long versionId);
+    @Select("SELECT id,status,package_version_id FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
+    PackagePlanModels.QuotaTenant lockQuotaTenant(long tenantId);
+    @Select("SELECT package_version_id,effective_to FROM plt_subscription WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND effective_from <= #{now} ORDER BY effective_from DESC,assignment_sequence DESC,created_at DESC,id DESC LIMIT 1 FOR SHARE")
+    PackagePlanModels.QuotaSubscription lockQuotaSubscription(long tenantId,LocalDateTime now);
+    @Select("SELECT id FROM plt_subscription WHERE tenant_id=#{tenantId} LIMIT 1 FOR SHARE")
+    Long lockAnySubscription(long tenantId);
+    @Select("SELECT pm.package_version_id,pm.module_id,m.module_code,m.module_name,pm.enabled,pm.quota_json FROM plt_package_version v JOIN plt_package_module pm ON pm.package_version_id=v.id AND pm.enabled=1 JOIN plt_module m ON m.id=pm.module_id AND m.status='ACTIVE' WHERE v.id=#{id} AND v.status='PUBLISHED' ORDER BY m.id FOR SHARE")
+    List<PackagePlanModels.ModuleRow> lockQuotaModules(long id);
+    @Insert("INSERT INTO plt_quota_usage(id,tenant_id,quota_code,period_key,used_value) VALUES(#{id},#{tenantId},#{code},'CURRENT',#{used}) ON DUPLICATE KEY UPDATE used_value=#{used},version=version+1")
+    int recordQuotaUsage(long id,long tenantId,String code,long used);
     @Select("SELECT COALESCE(used_value,0) FROM plt_quota_usage WHERE tenant_id=#{tenantId} AND quota_code=#{quotaCode} AND period_key=#{periodKey}")
     Long quotaUsed(long tenantId, String quotaCode, String periodKey);
     @Select("SELECT quota_code FROM plt_quota_usage WHERE tenant_id=#{tenantId} AND period_key='CURRENT' AND used_value>0")
