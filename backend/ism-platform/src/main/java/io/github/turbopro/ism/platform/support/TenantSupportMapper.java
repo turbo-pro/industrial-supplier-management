@@ -1,0 +1,18 @@
+package io.github.turbopro.ism.platform.support;
+import org.apache.ibatis.annotations.*;
+import java.time.LocalDateTime;
+import java.util.List;
+@Mapper
+public interface TenantSupportMapper {
+ @Select("SELECT tenant_id,enabled,role_id,allowed_fields_json,max_minutes,version FROM plt_tenant_support_policy WHERE tenant_id=#{tenant} FOR UPDATE") TenantSupportModels.PolicyRow policy(long tenant);
+ @Insert("INSERT INTO plt_tenant_support_policy(tenant_id,enabled,role_id,allowed_fields_json,max_minutes,version,updated_by,updated_at) VALUES(#{tenant},#{enabled},#{role},#{fields},#{minutes},1,#{actor},#{now})") int insertPolicy(long tenant,boolean enabled,Long role,String fields,int minutes,long actor,LocalDateTime now);
+ @Update("UPDATE plt_tenant_support_policy SET enabled=#{enabled},role_id=#{role},allowed_fields_json=#{fields},max_minutes=#{minutes},version=version+1,updated_by=#{actor},updated_at=#{now} WHERE tenant_id=#{tenant} AND version=#{version}") int updatePolicy(long tenant,boolean enabled,Long role,String fields,int minutes,long actor,LocalDateTime now,int version);
+ String ELIGIBLE="r.target_tenant_id=#{tenant} AND r.submitted_at IS NOT NULL AND (r.status='PLATFORM_APPROVED' OR EXISTS(SELECT 1 FROM plt_support_tenant_decision d WHERE d.request_id=r.id AND d.tenant_id=#{tenant}))";
+ @Select("SELECT COUNT(*)"+SupportRequestMapper.FROM+"WHERE "+ELIGIBLE) long count(long tenant);
+ @Select("SELECT "+SupportRequestMapper.COLUMNS+SupportRequestMapper.FROM+"WHERE "+ELIGIBLE+" ORDER BY r.created_at DESC,r.id DESC LIMIT #{size} OFFSET #{offset}") List<SupportRequestModels.Row> requests(long tenant,int offset,int size);
+ @Select("SELECT * FROM plt_support_tenant_decision WHERE tenant_id=#{tenant} AND request_id=#{request} AND policy_version=#{policy} FOR UPDATE") TenantSupportModels.ConsentRow consent(long tenant,long request,int policy);
+ @Select("SELECT * FROM plt_support_tenant_decision WHERE tenant_id=#{tenant} AND request_id=#{request} ORDER BY policy_version DESC") List<TenantSupportModels.ConsentRow> history(long tenant,long request);
+ @Insert("INSERT INTO plt_support_tenant_decision(id,request_id,tenant_id,policy_version,request_version,status,role_id,scope_json,expires_at,reviewer_user_id,reviewer_name,comment,decided_at) VALUES(#{id},#{request},#{tenant},#{policy},#{requestVersion},#{status},#{role},#{scope},#{expires},#{actor},#{name},#{comment},#{now})") int decide(long id,long request,long tenant,int policy,int requestVersion,String status,Long role,String scope,LocalDateTime expires,long actor,String name,String comment,LocalDateTime now);
+ @Update("UPDATE plt_support_tenant_decision SET status='REVOKED',version=version+1,revoked_by=#{actor},revoke_reason=#{comment},revoked_at=#{now} WHERE tenant_id=#{tenant} AND id=#{id} AND version=#{version} AND status='APPROVED'") int revoke(long tenant,long id,int version,long actor,String comment,LocalDateTime now);
+ @Select("SELECT u.id FROM plt_user u JOIN plt_user_role ur ON ur.user_id=u.id JOIN plt_role r ON r.id=ur.role_id AND r.status='ACTIVE' JOIN plt_role_permission rp ON rp.role_id=r.id JOIN plt_permission p ON p.id=rp.permission_id AND p.status='ACTIVE' AND p.permission_code='platform:support:request' WHERE u.id=#{id} AND u.status='ACTIVE' AND u.force_password_change=0 AND u.manual_locked=0 AND (u.locked_until IS NULL OR u.locked_until <= #{now}) LIMIT 1 FOR SHARE") Long eligibleOperator(long id,LocalDateTime now);
+}

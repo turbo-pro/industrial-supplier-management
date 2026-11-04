@@ -6,6 +6,335 @@ info:
 servers:
   - url: /api
 paths:
+  /tenant-support/policy:
+    get:
+      operationId: getTenantSupportPolicy
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:view. Own authenticated tenant. Absent policy is disabled; no automatic consent.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportPolicyResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+    put:
+      operationId: saveTenantSupportPolicy
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:manage. Own tenant role only; fixed basic fields and 5-60 minute cap. Optimistic policy version
+        and idempotency. Every policy change invalidates older consent.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportPolicyResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTenantSupportPolicy'
+  /tenant-support/role-options:
+    get:
+      operationId: listTenantSupportRoles
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:manage. Only active own roles with effective supplier view and TENANT_ALL or nonempty ORGANIZATION_SET.
+        Role is a permission cap, never impersonation.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportRolesResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+  /tenant-support/requests:
+    get:
+      operationId: listTenantSupportRequests
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:view. Own submitted platform-approved requests or own decision history only.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportPageResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+      - name: size
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+  /tenant-support/requests/{id}:
+    get:
+      operationId: getTenantSupportRequest
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:view. Foreign/draft request is 404. Snapshot hash and database UTC bound must be copied to approval.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportRequestResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - &id001
+        name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tenant-support/requests/{id}/approve:
+    post:
+      operationId: approveTenantSupport
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions.
+        Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access.
+        Atomic audit/idempotency. Revoke may target historical policy version.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportRequestResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSupportDecision'
+  /tenant-support/requests/{id}/reject:
+    post:
+      operationId: rejectTenantSupport
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions.
+        Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access.
+        Atomic audit/idempotency. Revoke may target historical policy version.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportRequestResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSupportDecision'
+  /tenant-support/requests/{id}/revoke:
+    post:
+      operationId: revokeTenantSupport
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions.
+        Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access.
+        Atomic audit/idempotency. Revoke may target historical policy version.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSupportRequestResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSupportDecision'
+  /console/support-requests/{id}/authorization:
+    get:
+      operationId: getSupportAuthorization
+      tags:
+      - Tenant Support
+      security:
+      - bearerAuth: []
+      description: Console realm only, platform:support:view, own request or independent reviewer submitted visibility. Final
+        intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled is ALWAYS
+        false; no JWT, entry token, business data, search or download.
+      responses:
+        '200':
+          description: Governance metadata only; never enables a support session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportAuthorizationResponse'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '409':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+        '500':
+          $ref: '#/components/responses/ApiFailure'
+      parameters:
+      - *id001
   /suppliers/{supplierId}/portal-accounts/{id}/password-recovery:
     parameters:
       - { name: supplierId, in: path, required: true, schema: { type: string } }
@@ -3248,6 +3577,392 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/FailureResponse' }
   schemas:
+    TenantSupportRole:
+      type: object
+      required:
+      - id
+      - name
+      - version
+      - tenantAll
+      - organizations
+      properties:
+        id: &id001
+          type: string
+        name: *id001
+        version: &id003
+          type: integer
+          minimum: 0
+        tenantAll: &id002
+          type: boolean
+        organizations:
+          type: array
+          items: *id001
+    TenantSupportScope:
+      type: object
+      required:
+      - tenantAll
+      - organizations
+      - fields
+      properties:
+        tenantAll: *id002
+        organizations:
+          type: array
+          items: *id001
+        fields:
+          type: array
+          items: *id001
+    SaveTenantSupportPolicy:
+      type: object
+      required:
+      - enabled
+      - fields
+      - maxMinutes
+      - version
+      properties:
+        enabled: *id002
+        roleId:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          nullable: true
+        fields: &id004
+          type: array
+          uniqueItems: true
+          minItems: 1
+          maxItems: 5
+          items:
+            type: string
+            enum:
+            - id
+            - code
+            - name
+            - type
+            - status
+        maxMinutes:
+          type: integer
+          minimum: 5
+          maximum: 60
+        version: *id003
+    TenantSupportPolicy:
+      type: object
+      required:
+      - enabled
+      - roleId
+      - role
+      - fields
+      - maxMinutes
+      - version
+      - canManage
+      - canReview
+      properties:
+        enabled: *id002
+        roleId:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/TenantSupportRole'
+          nullable: true
+        fields: *id004
+        maxMinutes:
+          type: integer
+        version: *id003
+        canManage: *id002
+        canReview: *id002
+    TenantSupportDecision:
+      type: object
+      required:
+      - requestVersion
+      - policyVersion
+      - decisionVersion
+      - comment
+      properties:
+        requestVersion: *id003
+        policyVersion: *id003
+        decisionVersion: *id003
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        scopeHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expiresAt: &id005
+          type: string
+          format: date-time
+    TenantSupportConsent:
+      type: object
+      required:
+      - id
+      - policyVersion
+      - requestVersion
+      - status
+      - roleId
+      - scope
+      - expiresAt
+      - reviewerId
+      - reviewerName
+      - comment
+      - decidedAt
+      - version
+      - revokedBy
+      - revokeReason
+      - revokedAt
+      properties:
+        id: *id001
+        policyVersion: *id003
+        requestVersion: *id003
+        status:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          - REVOKED
+        roleId:
+          type: string
+          nullable: true
+        scope:
+          $ref: '#/components/schemas/TenantSupportScope'
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        reviewerId: *id001
+        reviewerName: *id001
+        comment: *id001
+        decidedAt: *id005
+        version: *id003
+        revokedBy:
+          type: string
+          nullable: true
+        revokeReason:
+          type: string
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+    TenantSupportRequest:
+      type: object
+      required:
+      - id
+      - bizNo
+      - operatorName
+      - ticketNo
+      - reason
+      - status
+      - requestedExpireAt
+      - version
+      - policyVersion
+      - consent
+      - history
+      - proposedScope
+      - scopeHash
+      - proposedExpiresAt
+      - canApprove
+      - canReject
+      - canRevoke
+      properties:
+        id: *id001
+        bizNo: *id001
+        operatorName: *id001
+        ticketNo: *id001
+        reason: *id001
+        status: *id001
+        requestedExpireAt: *id005
+        version: *id003
+        policyVersion: *id003
+        consent:
+          $ref: '#/components/schemas/TenantSupportConsent'
+          nullable: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantSupportConsent'
+        proposedScope:
+          $ref: '#/components/schemas/TenantSupportScope'
+          nullable: true
+        scopeHash:
+          type: string
+          nullable: true
+        proposedExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        canApprove: *id002
+        canReject: *id002
+        canRevoke: *id002
+    TenantSupportPage:
+      type: object
+      required:
+      - total
+      - page
+      - size
+      - items
+      properties:
+        total:
+          type: integer
+        page: *id003
+        size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantSupportRequest'
+    SupportAuthorization:
+      type: object
+      required:
+      - requestId
+      - authorizationReady
+      - sessionEnabled
+      - reason
+      - scope
+      - expiresAt
+      properties:
+        requestId: *id001
+        authorizationReady: *id002
+        sessionEnabled:
+          type: boolean
+          enum:
+          - false
+        reason: *id001
+        scope:
+          $ref: '#/components/schemas/TenantSupportScope'
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    TenantSupportRoleResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportRole'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportScopeResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportScope'
+        traceId: *id001
+        timestamp: *id005
+    SaveTenantSupportPolicyResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/SaveTenantSupportPolicy'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportPolicyResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportPolicy'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportDecisionResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportDecision'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportConsentResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportConsent'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportRequestResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportRequest'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportPageResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/TenantSupportPage'
+        traceId: *id001
+        timestamp: *id005
+    SupportAuthorizationResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          $ref: '#/components/schemas/SupportAuthorization'
+        traceId: *id001
+        timestamp: *id005
+    TenantSupportRolesResponse:
+      type: object
+      required:
+      - success
+      - data
+      - traceId
+      - timestamp
+      properties:
+        success: *id002
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantSupportRole'
+        traceId: *id001
+        timestamp: *id005
     CorrectionAttachmentListResponse:
       allOf:
         - { $ref: '#/components/schemas/SuccessEnvelope' }

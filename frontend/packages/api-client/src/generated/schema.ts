@@ -4,6 +4,143 @@
  */
 
 export interface paths {
+    "/tenant-support/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description iam:support:view. Own authenticated tenant. Absent policy is disabled; no automatic consent. */
+        get: operations["getTenantSupportPolicy"];
+        /** @description iam:support:manage. Own tenant role only; fixed basic fields and 5-60 minute cap. Optimistic policy version and idempotency. Every policy change invalidates older consent. */
+        put: operations["saveTenantSupportPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/role-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description iam:support:manage. Only active own roles with effective supplier view and TENANT_ALL or nonempty ORGANIZATION_SET. Role is a permission cap, never impersonation. */
+        get: operations["listTenantSupportRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description iam:support:view. Own submitted platform-approved requests or own decision history only. */
+        get: operations["listTenantSupportRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description iam:support:view. Foreign/draft request is 404. Snapshot hash and database UTC bound must be copied to approval. */
+        get: operations["getTenantSupportRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions. Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access. Atomic audit/idempotency. Revoke may target historical policy version. */
+        post: operations["approveTenantSupport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions. Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access. Atomic audit/idempotency. Revoke may target historical policy version. */
+        post: operations["rejectTenantSupport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenant-support/requests/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description iam:support:review plus view. Actual tenant principal reviewer. Optimistic request/policy/decision versions. Approve requires current scopeHash and explicit expiresAt, frozen scope cannot expand; reject/revoke never grant access. Atomic audit/idempotency. Revoke may target historical policy version. */
+        post: operations["revokeTenantSupport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}/authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Console realm only, platform:support:view, own request or independent reviewer submitted visibility. Final intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled is ALWAYS false; no JWT, entry token, business data, search or download. */
+        get: operations["getSupportAuthorization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/suppliers/{supplierId}/portal-accounts/{id}/password-recovery": {
         parameters: {
             query?: never;
@@ -4094,6 +4231,172 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TenantSupportRole: {
+            id: string;
+            name: string;
+            version: number;
+            tenantAll: boolean;
+            organizations: string[];
+        };
+        TenantSupportScope: {
+            tenantAll: boolean;
+            organizations: string[];
+            fields: string[];
+        };
+        SaveTenantSupportPolicy: {
+            enabled: boolean;
+            roleId?: string | null;
+            fields: ("id" | "code" | "name" | "type" | "status")[];
+            maxMinutes: number;
+            version: number;
+        };
+        TenantSupportPolicy: {
+            enabled: boolean;
+            roleId: string | null;
+            role: components["schemas"]["TenantSupportRole"];
+            fields: ("id" | "code" | "name" | "type" | "status")[];
+            maxMinutes: number;
+            version: number;
+            canManage: boolean;
+            canReview: boolean;
+        };
+        TenantSupportDecision: {
+            requestVersion: number;
+            policyVersion: number;
+            decisionVersion: number;
+            comment: string;
+            scopeHash?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
+        TenantSupportConsent: {
+            id: string;
+            policyVersion: number;
+            requestVersion: number;
+            /** @enum {string} */
+            status: "APPROVED" | "REJECTED" | "REVOKED";
+            roleId: string | null;
+            scope: components["schemas"]["TenantSupportScope"];
+            /** Format: date-time */
+            expiresAt: string | null;
+            reviewerId: string;
+            reviewerName: string;
+            comment: string;
+            /** Format: date-time */
+            decidedAt: string;
+            version: number;
+            revokedBy: string | null;
+            revokeReason: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+        };
+        TenantSupportRequest: {
+            id: string;
+            bizNo: string;
+            operatorName: string;
+            ticketNo: string;
+            reason: string;
+            status: string;
+            /** Format: date-time */
+            requestedExpireAt: string;
+            version: number;
+            policyVersion: number;
+            consent: components["schemas"]["TenantSupportConsent"];
+            history: components["schemas"]["TenantSupportConsent"][];
+            proposedScope: components["schemas"]["TenantSupportScope"];
+            scopeHash: string | null;
+            /** Format: date-time */
+            proposedExpiresAt: string | null;
+            canApprove: boolean;
+            canReject: boolean;
+            canRevoke: boolean;
+        };
+        TenantSupportPage: {
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["TenantSupportRequest"][];
+        };
+        SupportAuthorization: {
+            requestId: string;
+            authorizationReady: boolean;
+            /** @enum {boolean} */
+            sessionEnabled: false;
+            reason: string;
+            scope: components["schemas"]["TenantSupportScope"];
+            /** Format: date-time */
+            expiresAt: string | null;
+        };
+        TenantSupportRoleResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportRole"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportScopeResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportScope"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        SaveTenantSupportPolicyResponse: {
+            success: boolean;
+            data: components["schemas"]["SaveTenantSupportPolicy"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportPolicyResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportPolicy"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportDecisionResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportDecision"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportConsentResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportConsent"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportRequestResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportRequest"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportPageResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportPage"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        SupportAuthorizationResponse: {
+            success: boolean;
+            data: components["schemas"]["SupportAuthorization"];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        TenantSupportRolesResponse: {
+            success: boolean;
+            data: components["schemas"]["TenantSupportRole"][];
+            traceId: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
         CorrectionAttachmentListResponse: components["schemas"]["SuccessEnvelope"] & {
             data: {
                 id: string;
@@ -7603,6 +7906,290 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getTenantSupportPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportPolicyResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    saveTenantSupportPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveTenantSupportPolicy"];
+            };
+        };
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportPolicyResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    listTenantSupportRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportRolesResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    listTenantSupportRequests: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    getTenantSupportRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    approveTenantSupport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantSupportDecision"];
+            };
+        };
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    rejectTenantSupport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantSupportDecision"];
+            };
+        };
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    revokeTenantSupport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantSupportDecision"];
+            };
+        };
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupportAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Governance metadata only; never enables a support session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportAuthorizationResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
+        };
+    };
     getPortalPasswordRecovery: {
         parameters: {
             query?: never;

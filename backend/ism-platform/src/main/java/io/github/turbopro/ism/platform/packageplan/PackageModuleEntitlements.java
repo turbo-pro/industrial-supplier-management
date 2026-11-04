@@ -13,6 +13,12 @@ public class PackageModuleEntitlements implements TenantModuleEntitlements {
     }
 
     @Override
+    public Set<String> currentEnabledModules(long tenantId) {
+        // Current locking reads stay in the caller transaction; no nested pool connection.
+        return Set.copyOf(mapper.currentEnabledTenantModules(tenantId));
+    }
+
+    @Override
     public Set<String> enabledModules(long tenantId) {
         return Set.copyOf(mapper.enabledTenantModules(tenantId));
     }

@@ -16,6 +16,16 @@ public interface PackagePlanMapper {
         WHERE t.id=#{tenantId}
         """)
     List<String> enabledTenantModules(long tenantId);
+    @Select("""
+        SELECT m.module_code FROM plt_tenant t
+        JOIN plt_package_version v ON v.id=(
+        """ + EffectiveSubscriptionSql.CURRENT_VERSION + """
+        ) AND v.status='PUBLISHED'
+        JOIN plt_package_module pm ON pm.package_version_id=v.id AND pm.enabled=1
+        JOIN plt_module m ON m.id=pm.module_id AND m.status='ACTIVE'
+        WHERE t.id=#{tenantId} FOR SHARE
+        """)
+    List<String> currentEnabledTenantModules(long tenantId);
     @Select("SELECT id,package_code,package_name,status,version FROM plt_package ORDER BY created_at,id")
     List<PackagePlanModels.PackageRow> listPackages();
     @Select("SELECT id,package_code,package_name,status,version FROM plt_package WHERE id=#{id}")
