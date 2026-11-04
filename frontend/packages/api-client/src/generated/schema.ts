@@ -1288,6 +1288,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/package-modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Active platform modules; requires platform:package:manage. Quota codes use the existing extensible contract; a configured code alone does not implement metering. */
+        get: operations["listPackageModuleOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/package-versions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Replace draft name and grants atomically with optimistic locking; published versions are immutable. Requires platform:package:manage. */
+        put: operations["updatePackageVersion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/packages": {
         parameters: {
             query?: never;
@@ -6609,6 +6643,18 @@ export interface components {
         SettingResponse: components["schemas"]["SuccessEnvelope"] & {
             data: components["schemas"]["TenantSetting"];
         };
+        PackageModuleOptionsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PackageModuleOption"][];
+        };
+        PackageModuleOption: {
+            code: string;
+            name: string;
+        };
+        UpdatePackageVersion: {
+            name: string;
+            modules: components["schemas"]["PackageModuleGrant"][];
+            version: number;
+        };
         CreatePackage: {
             code: string;
             name: string;
@@ -9983,6 +10029,58 @@ export interface operations {
             409: components["responses"]["ApiFailure"];
         };
     };
+    listPackageModuleOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active module options */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageModuleOptionsResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    updatePackageVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePackageVersion"];
+            };
+        };
+        responses: {
+            /** @description Draft saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageVersionResponse"];
+                };
+            };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
     listPackages: {
         parameters: {
             query?: never;
@@ -10117,10 +10215,7 @@ export interface operations {
     validatePackageVersion: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 id: string;
             };
@@ -10137,12 +10232,17 @@ export interface operations {
                     "application/json": components["schemas"]["ValidationResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     publishPackageVersion: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 id: string;
             };

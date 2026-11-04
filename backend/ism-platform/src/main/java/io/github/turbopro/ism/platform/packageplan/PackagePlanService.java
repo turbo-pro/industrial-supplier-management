@@ -64,6 +64,7 @@ public class PackagePlanService {
         return new PackagePlanModels.SubscriptionCancellation(Long.toString(subscriptionId),tenant.version()+1,"CANCELLED");
     }
 
+    public List<PackagePlanModels.ModuleOption> moduleOptions(){return mapper.moduleOptions();}
     public List<PackagePlanModels.PackageView> list() { return mapper.listPackages().stream().map(this::view).toList(); }
     public PackagePlanModels.PackageView get(long id) {
         PackagePlanModels.PackageRow row=mapper.findPackage(id); if(row==null) throw new ApiException(CommonErrorCode.NOT_FOUND); return view(row);
@@ -71,7 +72,8 @@ public class PackagePlanService {
     @Transactional
     public PackagePlanModels.PackageView create(PackagePlanModels.CreatePackage command) {
         long id=id(); try { mapper.insertPackage(id,command.code(),command.name()); }
-        catch(DuplicateKeyException e){ throw new ApiException(PackagePlanErrorCode.DUPLICATE); } return get(id);
+        catch(DuplicateKeyException e){ throw new ApiException(PackagePlanErrorCode.DUPLICATE); }
+        return get(id);
     }
     @Transactional
     public PackagePlanModels.PackageView update(long id, PackagePlanModels.UpdatePackage command) {
@@ -79,7 +81,7 @@ public class PackagePlanService {
     }
     @Transactional
     public PackagePlanModels.VersionView createVersion(long packageId, PackagePlanModels.CreateVersion command) {
-        PackagePlanModels.PackageRow plan=mapper.findPackage(packageId); if(plan==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        requireEditableParent(packageId);
         long versionId=id();
         try { mapper.insertVersion(versionId,packageId,command.versionNo(),command.name(),command.effectiveFrom());
             Set<String> seen=new HashSet<>();
@@ -90,19 +92,37 @@ public class PackagePlanService {
         } catch(DuplicateKeyException e){ throw new ApiException(PackagePlanErrorCode.DUPLICATE); }
         return versionView(mapper.findVersion(versionId));
     }
-    public PackagePlanModels.ValidationResult validate(long versionId) {
-        PackagePlanModels.VersionRow version=requireVersion(versionId); List<String> errors=new ArrayList<>();
-        List<PackagePlanModels.ModuleRow> modules=mapper.listModules(versionId);
+    @Transactional
+    public PackagePlanModels.VersionView updateVersion(long id,PackagePlanModels.UpdateVersion command){
+        var old=requireVersion(id);requireEditableParent(old.packageId());old=mapper.lockVersion(id);
+        if(!"DRAFT".equals(old.status())||old.version()!=command.version())throw new ApiException(CommonErrorCode.CONFLICT,"草稿已变化或已发布，请重新读取");
+        if(mapper.updateVersion(id,command.name(),command.version())!=1)throw new ApiException(CommonErrorCode.CONFLICT);
+        mapper.deleteModules(id);Set<String> seen=new HashSet<>();
+        for(var module:command.modules())if(!seen.add(module.moduleCode())||mapper.insertModule(id,module.moduleCode(),module.enabled(),write(module.quotas()))!=1)
+            throw new ApiException(PackagePlanErrorCode.INVALID,"模块不存在、停用或重复: "+module.moduleCode());
+        audit.append(new AuditService.AuditCommand("PACKAGE_VERSION_UPDATE","PACKAGE_VERSION",id,null,Map.of("version",old.version()),Map.of("version",old.version()+1,"name",command.name()),null,null));
+        return versionView(mapper.findVersion(id));
+    }
+    private PackagePlanModels.PackageRow requireEditableParent(long id){var p=mapper.lockPackage(id);if(p==null)throw new ApiException(CommonErrorCode.NOT_FOUND);if(!Set.of("DRAFT","ACTIVE").contains(p.status()))throw new ApiException(PackagePlanErrorCode.INVALID,"父套餐已失效，不能配置或发布版本");return p;}
+    public PackagePlanModels.ValidationResult validate(long versionId) {var v=requireVersion(versionId);return validate(v,mapper.listModules(versionId),mapper.moduleOptions(),mapper.findPackage(v.packageId()));}
+    private PackagePlanModels.ValidationResult validate(PackagePlanModels.VersionRow version,List<PackagePlanModels.ModuleRow> modules,List<PackagePlanModels.ModuleOption> options,PackagePlanModels.PackageRow parent) {
+        List<String> errors=new ArrayList<>();
+        if(parent==null||!Set.of("DRAFT","ACTIVE").contains(parent.status()))errors.add("父套餐已失效");
+        Set<String> available=options.stream().map(PackagePlanModels.ModuleOption::code).collect(java.util.stream.Collectors.toSet());
+        modules.stream().filter(m->!available.contains(m.moduleCode())).forEach(m->errors.add("模块已停用: "+m.moduleCode()));
         if(modules.stream().noneMatch(PackagePlanModels.ModuleRow::enabled)) errors.add("至少启用一个模块");
         modules.forEach(m->readQuotas(m.quotaJson()).forEach((code,limit)->{ if(limit<0) errors.add(code+" 不能小于0"); }));
-        if("PUBLISHED".equals(version.status())) errors.add("版本已经发布");
+        if(!"DRAFT".equals(version.status())) errors.add("仅草稿版本可以发布");
         return new PackagePlanModels.ValidationResult(errors.isEmpty(),List.copyOf(errors));
     }
     @Transactional
     public PackagePlanModels.VersionView publish(long versionId,int version,long actorId) {
-        PackagePlanModels.ValidationResult result=validate(versionId); if(!result.valid()) throw new ApiException(PackagePlanErrorCode.INVALID,String.join("；",result.errors()));
+        var original=requireVersion(versionId);var parent=requireEditableParent(original.packageId());var current=mapper.lockVersion(versionId);
+        if(current.version()!=version||!"DRAFT".equals(current.status()))throw new ApiException(CommonErrorCode.CONFLICT,"套餐版本已变化或不可发布");
+        PackagePlanModels.ValidationResult result=validate(current,mapper.lockModules(versionId),mapper.lockModuleOptions(),parent); if(!result.valid()) throw new ApiException(PackagePlanErrorCode.INVALID,String.join("；",result.errors()));
         if(mapper.publish(versionId,version,actorId,LocalDateTime.now(ZoneOffset.UTC))!=1) throw new ApiException(CommonErrorCode.CONFLICT,"套餐版本已变化或不可发布");
-        return versionView(mapper.findVersion(versionId));
+        mapper.activatePackage(original.packageId());
+        return versionView(mapper.lockVersion(versionId),mapper.lockModules(versionId));
     }
     public PackagePlanModels.SubscriptionPreview preview(long tenantId,long targetVersionId) {
         PackagePlanModels.VersionRow target=requirePublished(targetVersionId); Long currentId=mapper.findTenantPackageVersion(tenantId);
@@ -143,7 +163,8 @@ public class PackagePlanService {
     public void requireQuota(long tenantId,String quotaCode,long delta){ var q=quota(tenantId,quotaCode); if(q.limit()<=0||q.used()+delta>q.limit()) throw new ApiException(PackagePlanErrorCode.QUOTA_EXCEEDED); }
 
     private PackagePlanModels.PackageView view(PackagePlanModels.PackageRow row){return new PackagePlanModels.PackageView(Long.toString(row.id()),row.packageCode(),row.packageName(),row.status(),row.version(),mapper.listVersions(row.id()).stream().map(this::versionView).toList());}
-    private PackagePlanModels.VersionView versionView(PackagePlanModels.VersionRow r){return new PackagePlanModels.VersionView(Long.toString(r.id()),r.versionNo(),r.versionName(),r.effectiveFrom(),r.status(),r.version(),mapper.listModules(r.id()).stream().map(m->new PackagePlanModels.ModuleGrant(m.moduleCode(),m.enabled(),readQuotas(m.quotaJson()))).toList());}
+    private PackagePlanModels.VersionView versionView(PackagePlanModels.VersionRow r){return versionView(r,mapper.listModules(r.id()));}
+    private PackagePlanModels.VersionView versionView(PackagePlanModels.VersionRow r,List<PackagePlanModels.ModuleRow> modules){return new PackagePlanModels.VersionView(Long.toString(r.id()),r.versionNo(),r.versionName(),r.effectiveFrom(),r.status(),r.version(),modules.stream().map(m->new PackagePlanModels.ModuleGrant(m.moduleCode(),m.enabled(),readQuotas(m.quotaJson()))).toList());}
     private PackagePlanModels.VersionRow requireVersion(long id){var r=mapper.findVersion(id);if(r==null)throw new ApiException(CommonErrorCode.NOT_FOUND);return r;}
     private PackagePlanModels.VersionRow requirePublished(long id){var r=requireVersion(id);if(!"PUBLISHED".equals(r.status()))throw new ApiException(PackagePlanErrorCode.INVALID,"只能分配已发布版本");return r;}
     private Map<String,PackagePlanModels.ModuleGrant> grantMap(long id){Map<String,PackagePlanModels.ModuleGrant> map=new HashMap<>();for(var m:mapper.listModules(id))map.put(m.moduleCode(),new PackagePlanModels.ModuleGrant(m.moduleCode(),m.enabled(),readQuotas(m.quotaJson())));return map;}

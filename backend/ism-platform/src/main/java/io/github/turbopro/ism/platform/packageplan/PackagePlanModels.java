@@ -12,14 +12,18 @@ public final class PackagePlanModels {
     public record CreatePackage(@NotBlank @Pattern(regexp = "[A-Z][A-Z0-9_]{1,63}") String code,
                                 @NotBlank @Size(max = 100) String name) {}
     public record UpdatePackage(@NotBlank @Size(max = 100) String name, @PositiveOrZero int version) {}
-    public record ModuleGrant(@NotBlank String moduleCode, boolean enabled,
-                              Map<String, @PositiveOrZero Long> quotas) {
-        public ModuleGrant { quotas = quotas == null ? Map.of() : Map.copyOf(quotas); }
+    public record ModuleGrant(@NotBlank @Size(max=64) String moduleCode, boolean enabled,
+                              Map<@Pattern(regexp="[A-Z][A-Z0-9_]{0,63}") String, @NotNull @PositiveOrZero Long> quotas) {
+        public ModuleGrant { quotas = quotas == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(quotas)); }
     }
     public record CreateVersion(@Positive int versionNo, @NotBlank @Size(max = 100) String name,
                                 LocalDateTime effectiveFrom,
-                                @NotEmpty List<@Valid ModuleGrant> modules) {}
-    public record PublishCommand(@PositiveOrZero int version) {}
+                                @NotEmpty @Size(max=100) List<@NotNull @Valid ModuleGrant> modules) {}
+    public record UpdateVersion(@NotBlank @Size(max=100) String name,
+                                @NotEmpty @Size(max=100) List<@NotNull @Valid ModuleGrant> modules,
+                                @NotNull @PositiveOrZero Integer version) {}
+    public record ModuleOption(String code,String name) {}
+    public record PublishCommand(@NotNull @PositiveOrZero Integer version) {}
     public record AssignSubscription(@NotNull String packageVersionId,
                                      @NotNull LocalDateTime effectiveFrom,
                                      LocalDateTime effectiveTo,

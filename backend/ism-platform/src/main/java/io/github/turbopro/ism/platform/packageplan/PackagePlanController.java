@@ -23,16 +23,20 @@ public class PackagePlanController {
     private final SubscriptionReminderService reminders;
     public PackagePlanController(PackagePlanService service,ApiResponseFactory responses,IdempotencyService idempotency,
                                  AuditService audit,ObjectMapper json,SubscriptionReminderService reminders){this.service=service;this.responses=responses;this.idempotency=idempotency;this.audit=audit;this.json=json;this.reminders=reminders;}
+    @GetMapping("/package-modules") @RequiresPermission("platform:package:manage")
+    ApiResponse<List<PackagePlanModels.ModuleOption>> moduleOptions(){return responses.success(service.moduleOptions());}
+    @PutMapping("/package-versions/{id}") @RequiresPermission("platform:package:manage")
+    ApiResponse<PackagePlanModels.VersionView> updateVersion(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.UpdateVersion c){return responses.success(once("PACKAGE_VERSION_UPDATE:"+id,key,c,PackagePlanModels.VersionView.class,()->service.updateVersion(id,c)));}
     @GetMapping("/packages") @RequiresPermission("platform:package:view")
     ApiResponse<List<PackagePlanModels.PackageView>> list(){return responses.success(service.list());}
     @PostMapping("/packages") @RequiresPermission("platform:package:manage")
-    ApiResponse<PackagePlanModels.PackageView> create(@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.CreatePackage c){return responses.success(once("PACKAGE_CREATE",key,c,PackagePlanModels.PackageView.class,()->service.create(c)));}
+    ApiResponse<PackagePlanModels.PackageView> create(@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.CreatePackage c){return responses.success(once("PACKAGE_CREATE",key,c,PackagePlanModels.PackageView.class,()->{var result=service.create(c);audit.append(new AuditService.AuditCommand("PACKAGE_CREATE","PACKAGE",Long.parseLong(result.id()),null,Map.of(),Map.of("code",result.code()),null,null));return result;}));}
     @GetMapping("/packages/{id}") @RequiresPermission("platform:package:view")
     ApiResponse<PackagePlanModels.PackageView> get(@PathVariable long id){return responses.success(service.get(id));}
     @PutMapping("/packages/{id}") @RequiresPermission("platform:package:manage")
     ApiResponse<PackagePlanModels.PackageView> update(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.UpdatePackage c){return responses.success(once("PACKAGE_UPDATE:"+id,key,c,PackagePlanModels.PackageView.class,()->service.update(id,c)));}
     @PostMapping("/packages/{id}/versions") @RequiresPermission("platform:package:manage")
-    ApiResponse<PackagePlanModels.VersionView> version(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.CreateVersion c){return responses.success(once("PACKAGE_VERSION_CREATE:"+id,key,c,PackagePlanModels.VersionView.class,()->service.createVersion(id,c)));}
+    ApiResponse<PackagePlanModels.VersionView> version(@PathVariable long id,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.CreateVersion c){return responses.success(once("PACKAGE_VERSION_CREATE:"+id,key,c,PackagePlanModels.VersionView.class,()->{var result=service.createVersion(id,c);audit.append(new AuditService.AuditCommand("PACKAGE_VERSION_CREATE","PACKAGE_VERSION",Long.parseLong(result.id()),null,Map.of(),Map.of("packageId",Long.toString(id),"versionNo",result.versionNo()),null,null));return result;}));}
     @PostMapping("/package-versions/{id}/validate") @RequiresPermission("platform:package:manage")
     ApiResponse<PackagePlanModels.ValidationResult> validate(@PathVariable long id){return responses.success(service.validate(id));}
     @PostMapping("/package-versions/{id}/publish") @RequiresPermission("platform:package:publish")

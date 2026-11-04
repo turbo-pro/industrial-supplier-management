@@ -4,6 +4,7 @@ import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
 import TenantInitialization from './TenantInitialization.vue';
 import TenantCreation from './TenantCreation.vue';
+import PackageAuthoring from './PackageAuthoring.vue';
 import TenantSiteUpgrade from './TenantSiteUpgrade.vue';
 
 const form = reactive({ username: '', password: '' });
@@ -20,6 +21,7 @@ const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPasswor
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
 const createTenantOpen=ref(false);
+const packageEditorOpen=ref(false),packageTarget=ref<components['schemas']['PackagePlan']|null>(null);
 const upgradeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const initializeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const subscriptionTenant = ref<components['schemas']['Tenant'] | null>(null);
@@ -229,6 +231,7 @@ function logout(reason = '') {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
+  packageEditorOpen.value=false;packageTarget.value=null;
   packages.value = [];
   tenants.value = [];
   subscriptionTenant.value = null;
@@ -287,13 +290,15 @@ if (accessToken.value) {
       <p>至少 12 位，包含大小写字母、数字和特殊字符。</p>
       <button :disabled="changingPassword" type="submit">确认修改</button>
     </form>
-    <section v-if="currentUser?.permissions.includes('platform:package:view')" class="panel">
-      <div class="panel-title"><div><h2>套餐版本</h2><p>发布后的版本不可覆盖，变更必须创建新版本。</p></div><button type="button">新建套餐</button></div>
-      <table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th></tr></thead>
-        <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.status }}</td><td>{{ item.versions.length }}</td></tr>
-        <tr v-if="packages.length === 0"><td colspan="4" class="empty">尚未创建套餐</td></tr></tbody>
-      </table>
+    <section v-if="currentUser?.permissions.includes('platform:package:view')" class="panel package-catalog">
+      <div class="panel-title"><div><h2>套餐版本</h2><p>发布后的版本不可覆盖，变更必须创建新版本。</p></div><button v-if="currentUser?.permissions.includes('platform:package:manage')" type="button" :disabled="packageEditorOpen" @click="packageTarget=null;packageEditorOpen=true">新建套餐</button></div>
+      <div class="tenant-list-scroll"><table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.status }}</td><td>{{ item.versions.length }}</td><td><button type="button" :disabled="packageEditorOpen" @click="packageTarget=item;packageEditorOpen=true">查看套餐配置</button></td></tr>
+        <tr v-if="packages.length === 0"><td colspan="5" class="empty">尚未创建套餐</td></tr></tbody>
+      </table></div>
     </section>
+    <button v-if="!currentUser?.permissions.includes('platform:package:view')&&currentUser?.permissions.includes('platform:package:manage')" type="button" :disabled="packageEditorOpen" @click="packageTarget=null;packageEditorOpen=true">新建套餐</button>
+    <PackageAuthoring v-if="packageEditorOpen" :plan="packageTarget" :token="accessToken" :can-manage="currentUser?.permissions.includes('platform:package:manage')??false" :can-publish="currentUser?.permissions.includes('platform:package:publish')??false" @close="packageEditorOpen=false;packageTarget=null" @changed="loadWorkspace" />
     <section class="panel tenant-opening">
       <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button v-if="currentUser?.permissions.includes('platform:tenant:create')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="createTenantOpen=true">新建租户</button></div>
       <div class="tenant-list-scroll"><table v-if="currentUser?.permissions.includes('platform:tenant:view')"><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
@@ -351,6 +356,6 @@ if (accessToken.value) {
 </template>
 
 <style scoped>
-.tenant-list-scroll{max-width:100%;overflow-x:auto;}.tenant-list-scroll table{min-width:720px;}.tenant-opening .panel-title{flex-wrap:wrap;gap:12px;}.tenant-opening .panel-title>div{flex:1 1 240px;}
+.tenant-list-scroll{max-width:100%;overflow-x:auto;}.tenant-list-scroll table{min-width:720px;}.tenant-opening .panel-title,.package-catalog .panel-title{flex-wrap:wrap;gap:12px;}.tenant-opening .panel-title>div,.package-catalog .panel-title>div{flex:1 1 240px;}
 @media(max-width:600px){.workspace header{flex-direction:column;align-items:flex-start;gap:12px;}.workspace header>div:last-child{flex-wrap:wrap;gap:8px;width:100%;}.workspace header [role=status]{flex-basis:100%;}}
 </style>

@@ -20,6 +20,20 @@ public interface PackagePlanMapper {
     List<PackagePlanModels.PackageRow> listPackages();
     @Select("SELECT id,package_code,package_name,status,version FROM plt_package WHERE id=#{id}")
     PackagePlanModels.PackageRow findPackage(long id);
+    @Select("SELECT id,package_code,package_name,status,version FROM plt_package WHERE id=#{id} FOR UPDATE")
+    PackagePlanModels.PackageRow lockPackage(long id);
+    @Select("SELECT module_code AS code,module_name AS name FROM plt_module WHERE status='ACTIVE' ORDER BY sort_order,id")
+    List<PackagePlanModels.ModuleOption> moduleOptions();
+    @Select("SELECT module_code AS code,module_name AS name FROM plt_module WHERE status='ACTIVE' ORDER BY sort_order,id FOR SHARE")
+    List<PackagePlanModels.ModuleOption> lockModuleOptions();
+    @Update("UPDATE plt_package SET status='ACTIVE',version=version+1 WHERE id=#{id} AND status='DRAFT'")
+    int activatePackage(long id);
+    @Select("SELECT id,package_id,version_no,version_name,effective_from,status,version FROM plt_package_version WHERE id=#{id} FOR UPDATE")
+    PackagePlanModels.VersionRow lockVersion(long id);
+    @Update("UPDATE plt_package_version SET version_name=#{name},version=version+1 WHERE id=#{id} AND status='DRAFT' AND version=#{version}")
+    int updateVersion(long id,String name,int version);
+    @Delete("DELETE FROM plt_package_module WHERE package_version_id=#{id}")
+    int deleteModules(long id);
     @Insert("INSERT INTO plt_package(id,package_code,package_name,status) VALUES(#{id},#{code},#{name},'DRAFT')")
     int insertPackage(long id, String code, String name);
     @Update("UPDATE plt_package SET package_name=#{name},version=version+1 WHERE id=#{id} AND status='DRAFT' AND version=#{version}")
@@ -38,6 +52,8 @@ public interface PackagePlanMapper {
         WHERE pm.package_version_id=#{versionId} ORDER BY m.sort_order
         """)
     List<PackagePlanModels.ModuleRow> listModules(long versionId);
+    @Select("SELECT pm.package_version_id,pm.module_id,m.module_code,m.module_name,pm.enabled,pm.quota_json FROM plt_package_module pm JOIN plt_module m ON m.id=pm.module_id WHERE pm.package_version_id=#{versionId} ORDER BY m.sort_order FOR SHARE")
+    List<PackagePlanModels.ModuleRow> lockModules(long versionId);
     @Update("UPDATE plt_package_version SET status='PUBLISHED',published_at=#{now},published_by=#{actorId},version=version+1 WHERE id=#{id} AND status='DRAFT' AND version=#{version}")
     int publish(long id, int version, long actorId, LocalDateTime now);
     @Select("SELECT " + EffectiveSubscriptionSql.VERSION + " FROM plt_tenant t WHERE t.id=#{tenantId}")
