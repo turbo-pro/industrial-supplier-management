@@ -1273,6 +1273,112 @@ paths:
         '200': { description: Draft saved, content: { application/json: { schema: { $ref: '#/components/schemas/PackageVersionResponse' } } } }
         '409': { $ref: '#/components/responses/ApiFailure' }
         '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests:
+    get:
+      operationId: listSupportRequests
+      tags: [Console Support]
+      description: Own requests by default; review=true requires support:view and support:review and excludes unsubmitted drafts. No tenant business content or access token is returned.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: review, in: query, schema: { type: boolean, default: false } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Support review page, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestPageResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests/{id}:
+    get:
+      operationId: getSupportRequest
+      tags: [Console Support]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Owned or submitted review metadata and immutable events, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+  /console/tenants/{tenantId}/support-requests:
+    post:
+      operationId: createSupportRequest
+      tags: [Console Support]
+      description: Creates a bounded readonly proposal, not a support session. Requires platform:support:request. Scope is server-controlled; PLATFORM_APPROVED never implies tenant authorization or entry.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateSupportRequest' } } } }
+      responses:
+        '200': { description: Draft created without business access, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests/{id}/submit:
+    post:
+      operationId: submitSupportRequest
+      tags: [Console Support]
+      description: Versioned submit; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupportRequest' } } } }
+      responses:
+        '200': { description: Request decision recorded, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests/{id}/approve:
+    post:
+      operationId: approveSupportRequest
+      tags: [Console Support]
+      description: Versioned approve; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupportRequest' } } } }
+      responses:
+        '200': { description: Request decision recorded, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests/{id}/reject:
+    post:
+      operationId: rejectSupportRequest
+      tags: [Console Support]
+      description: Versioned reject; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupportRequest' } } } }
+      responses:
+        '200': { description: Request decision recorded, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+  /console/support-requests/{id}/cancel:
+    post:
+      operationId: cancelSupportRequest
+      tags: [Console Support]
+      description: Versioned cancel; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeSupportRequest' } } } }
+      responses:
+        '200': { description: Request decision recorded, content: { application/json: { schema: { $ref: '#/components/schemas/SupportRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /console/packages:
     get:
       operationId: listPackages
@@ -4833,6 +4939,75 @@ components:
         name: { type: string, maxLength: 100 }
         modules: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/PackageModuleGrant' } }
         version: { type: integer, minimum: 0 }
+    CreateSupportRequest:
+      type: object
+      required: [ticketNo, reason, profileCode, durationMinutes]
+      properties:
+        ticketNo: { type: string, maxLength: 100 }
+        reason: { type: string, maxLength: 1000 }
+        profileCode: { type: string, enum: [SUPPLIER_BASIC_READ_V1] }
+        durationMinutes: { type: integer, minimum: 5, maximum: 60 }
+    ChangeSupportRequest:
+      type: object
+      required: [version, comment]
+      properties:
+        version: { type: integer, minimum: 0 }
+        comment: { type: string, maxLength: 1000 }
+    SupportProfile:
+      type: object
+      required: [code, temporaryRole, dataScope, actions, fields]
+      properties:
+        code: { type: string }
+        temporaryRole: { type: string }
+        dataScope: { type: string }
+        actions: { type: array, items: { type: string } }
+        fields: { type: array, items: { type: string } }
+    SupportRequestEvent:
+      type: object
+      required: [id, actorId, actorName, requestVersion, action, comment, occurredAt]
+      properties:
+        id: { type: string }
+        actorId: { type: string }
+        actorName: { type: string }
+        requestVersion: { type: integer }
+        action: { type: string }
+        comment: { type: string }
+        occurredAt: { type: string, format: date-time }
+    SupportRequest:
+      type: object
+      required: [id, bizNo, operatorId, operatorName, tenantId, tenantCode, tenantName, ticketNo, reason, profile, requestedExpireAt, status, version, createdAt, canSubmit, canCancel, canReview, events]
+      properties:
+        id: { type: string }
+        bizNo: { type: string }
+        operatorId: { type: string }
+        operatorName: { type: string }
+        tenantId: { type: string }
+        tenantCode: { type: string }
+        tenantName: { type: string }
+        ticketNo: { type: string }
+        reason: { type: string }
+        profile: { $ref: '#/components/schemas/SupportProfile' }
+        requestedExpireAt: { type: string, format: date-time }
+        status: { type: string, enum: [DRAFT, SUBMITTED, PLATFORM_APPROVED, REJECTED, CANCELLED, EXPIRED] }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        canSubmit: { type: boolean }
+        canCancel: { type: boolean }
+        canReview: { type: boolean }
+        events: { type: array, items: { $ref: '#/components/schemas/SupportRequestEvent' } }
+    SupportRequestResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SupportRequest' } } }]
+    SupportRequestPage:
+      type: object
+      required: [total, page, size, items]
+      properties:
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        size: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/SupportRequest' } }
+    SupportRequestPageResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/SupportRequestPage' } } }]
     CreatePackage:
       type: object
       required: [code, name]

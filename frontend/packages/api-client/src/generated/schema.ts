@@ -1322,6 +1322,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Own requests by default; review=true requires support:view and support:review and excludes unsubmitted drafts. No tenant business content or access token is returned. */
+        get: operations["listSupportRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSupportRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/tenants/{tenantId}/support-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates a bounded readonly proposal, not a support session. Requires platform:support:request. Scope is server-controlled; PLATFORM_APPROVED never implies tenant authorization or entry. */
+        post: operations["createSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Versioned submit; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant. */
+        post: operations["submitSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Versioned approve; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant. */
+        post: operations["approveSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Versioned reject; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant. */
+        post: operations["rejectSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Versioned cancel; independent reviewer for approval/rejection. PLATFORM_APPROVED is platform review only, no session/token/tenant grant. */
+        post: operations["cancelSupportRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/packages": {
         parameters: {
             query?: never;
@@ -6656,6 +6774,72 @@ export interface components {
             modules: components["schemas"]["PackageModuleGrant"][];
             version: number;
         };
+        CreateSupportRequest: {
+            ticketNo: string;
+            reason: string;
+            /** @enum {string} */
+            profileCode: "SUPPLIER_BASIC_READ_V1";
+            durationMinutes: number;
+        };
+        ChangeSupportRequest: {
+            version: number;
+            comment: string;
+        };
+        SupportProfile: {
+            code: string;
+            temporaryRole: string;
+            dataScope: string;
+            actions: string[];
+            fields: string[];
+        };
+        SupportRequestEvent: {
+            id: string;
+            actorId: string;
+            actorName: string;
+            requestVersion: number;
+            action: string;
+            comment: string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        SupportRequest: {
+            id: string;
+            bizNo: string;
+            operatorId: string;
+            operatorName: string;
+            tenantId: string;
+            tenantCode: string;
+            tenantName: string;
+            ticketNo: string;
+            reason: string;
+            profile: components["schemas"]["SupportProfile"];
+            /** Format: date-time */
+            requestedExpireAt: string;
+            /** @enum {string} */
+            status: "DRAFT" | "SUBMITTED" | "PLATFORM_APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+            /** Format: date-time */
+            submittedAt?: string | null;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            canSubmit: boolean;
+            canCancel: boolean;
+            canReview: boolean;
+            events: components["schemas"]["SupportRequestEvent"][];
+        };
+        SupportRequestResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SupportRequest"];
+        };
+        SupportRequestPage: {
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            items: components["schemas"]["SupportRequest"][];
+        };
+        SupportRequestPageResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["SupportRequestPage"];
+        };
         CreatePackage: {
             code: string;
             name: string;
@@ -10093,6 +10277,223 @@ export interface operations {
                     "application/json": components["schemas"]["PackageVersionResponse"];
                 };
             };
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    listSupportRequests: {
+        parameters: {
+            query?: {
+                review?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Support review page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestPageResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupportRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned or submitted review metadata and immutable events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    createSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tenantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft created without business access */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    submitSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Request decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    approveSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Request decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    rejectSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Request decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    cancelSupportRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Request decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportRequestResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
         };

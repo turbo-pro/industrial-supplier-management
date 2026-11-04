@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
+import SupportRequests from './SupportRequests.vue';
 import TenantInitialization from './TenantInitialization.vue';
 import TenantCreation from './TenantCreation.vue';
 import PackageAuthoring from './PackageAuthoring.vue';
@@ -21,6 +22,7 @@ const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPasswor
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
 const createTenantOpen=ref(false);
+const supportOpen=ref(false),supportTenant=ref<{id:string;name:string}>();
 const packageEditorOpen=ref(false),packageTarget=ref<components['schemas']['PackagePlan']|null>(null);
 const upgradeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const initializeTarget = ref<components['schemas']['Tenant'] | null>(null);
@@ -231,6 +233,7 @@ function logout(reason = '') {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
+  supportOpen.value=false;supportTenant.value=undefined;
   packageEditorOpen.value=false;packageTarget.value=null;
   packages.value = [];
   tenants.value = [];
@@ -280,7 +283,7 @@ if (accessToken.value) {
     </form>
   </main>
   <main v-else class="workspace">
-    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
+    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button v-if="currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant=undefined;supportOpen=true">支持申请工作台</button><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
     <section v-if="passwordChangeRecommended" class="password-notice" role="alert">此账号长期未登录，建议修改密码。<button type="button" @click="showPasswordForm=true">立即修改</button><button type="button" @click="passwordChangeRecommended=false">稍后再说</button></section>
     <form v-if="showPasswordForm" class="panel password-form" @submit.prevent="changePassword">
       <h2>修改登录密码</h2>
@@ -302,10 +305,11 @@ if (accessToken.value) {
     <section class="panel tenant-opening">
       <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button v-if="currentUser?.permissions.includes('platform:tenant:create')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="createTenantOpen=true">新建租户</button></div>
       <div class="tenant-list-scroll"><table v-if="currentUser?.permissions.includes('platform:tenant:view')"><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:support:request')&&currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant={id:tenant.id,name:tenant.name};supportOpen=true">发起支持访问申请</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
         <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
       </table><p v-else>当前没有租户列表查看权限，创建操作仍需单独授权。</p></div><p v-if="currentUser?.permissions.includes('platform:tenant:view') && tenants.length===0" class="tenant-empty">当前未加载到租户记录。</p>
     </section>
+    <SupportRequests v-if="supportOpen" :token="accessToken!" :tenant="supportTenant" :can-request="currentUser?.permissions.includes('platform:support:request')??false" :can-review="currentUser?.permissions.includes('platform:support:review')??false" @close="supportOpen=false;supportTenant=undefined" />
     <TenantCreation v-if="createTenantOpen" :token="accessToken" @close="createTenantOpen=false" @created="tenantCreated" />
     <TenantSiteUpgrade v-if="upgradeTarget" :key="upgradeTarget.id" :tenant="upgradeTarget" :token="accessToken" @close="upgradeTarget = null; loadWorkspace()" @done="upgradeTarget = null; message = '已升级为多场站，原场站及历史归属保持不变'; loadWorkspace()" />
     <TenantInitialization v-if="initializeTarget" :key="initializeTarget.id" :tenant="initializeTarget" :token="accessToken" @close="initializeTarget = null" @done="initializeTarget = null; message = '租户初始化已完成'; loadWorkspace()" />
