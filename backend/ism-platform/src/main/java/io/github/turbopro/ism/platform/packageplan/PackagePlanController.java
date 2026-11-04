@@ -44,7 +44,7 @@ public class PackagePlanController {
     @PostMapping("/tenants/{tenantId}/subscription-preview") @RequiresPermission("platform:package:assign")
     ApiResponse<PackagePlanModels.SubscriptionPreview> preview(@PathVariable long tenantId,@RequestParam long packageVersionId){return responses.success(service.preview(tenantId,packageVersionId));}
     @PostMapping("/tenants/{tenantId}/subscription") @RequiresPermission("platform:package:assign")
-    ApiResponse<PackagePlanModels.SubscriptionPreview> assign(@PathVariable long tenantId,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.AssignSubscription c,@AuthenticationPrincipal ConsolePrincipal p){return responses.success(once("SUBSCRIPTION_ASSIGN:"+tenantId,key,c,PackagePlanModels.SubscriptionPreview.class,()->{var result=service.assign(tenantId,Long.parseLong(c.packageVersionId()),c);audit.append(new AuditService.AuditCommand("SUBSCRIPTION_ASSIGN","TENANT",tenantId,null,Map.of(),Map.of("packageVersionId",c.packageVersionId()),null,null));return result;}));}
+    ApiResponse<PackagePlanModels.SubscriptionPreview> assign(@PathVariable long tenantId,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PackagePlanModels.AssignSubscription c,@AuthenticationPrincipal ConsolePrincipal p){return responses.success(once("SUBSCRIPTION_ASSIGN:"+tenantId,key,c,PackagePlanModels.SubscriptionPreview.class,()->{var result=service.assign(tenantId,packageVersionId(c.packageVersionId()),c);audit.append(new AuditService.AuditCommand("SUBSCRIPTION_ASSIGN","TENANT",tenantId,null,Map.of(),Map.of("packageVersionId",c.packageVersionId()),null,null));return result;}));}
     @GetMapping("/tenants/{tenantId}/quota-usage") @RequiresPermission("platform:package:view")
     ApiResponse<PackagePlanModels.QuotaUsage> quota(@PathVariable long tenantId,@RequestParam String quotaCode){return responses.success(service.quota(tenantId,quotaCode));}
 
@@ -80,5 +80,6 @@ public class PackagePlanController {
                     return result;
                 }));
     }
+    private long packageVersionId(String value){try{return Long.parseLong(value);}catch(NumberFormatException e){throw new io.github.turbopro.ism.common.api.error.ApiException(io.github.turbopro.ism.common.api.error.CommonErrorCode.VALIDATION_FAILED);}}
     private String write(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("请求无法序列化",e);}}
 }

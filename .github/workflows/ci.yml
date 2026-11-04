@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [supplier-quota, package-authoring, tenant-create, project-entry, site-project, site-context, site-preference, site-upgrade, site-initialization, iam-batch-roles, console-reminder, portal-auth, portal-management, portal-exit, portal-password, portal-recovery, portal-changes, portal-certificates, portal-submissions]
+        scenario: [subscription-assignment, supplier-quota, package-authoring, tenant-create, project-entry, site-project, site-context, site-preference, site-upgrade, site-initialization, iam-batch-roles, console-reminder, portal-auth, portal-management, portal-exit, portal-password, portal-recovery, portal-changes, portal-certificates, portal-submissions]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -80,7 +80,9 @@ jobs:
         env:
           SCENARIO: ${{ matrix.scenario }}
         run: |
-          if [ "$SCENARIO" = supplier-quota ]; then
+          if [ "$SCENARIO" = subscription-assignment ]; then
+            node scripts/verify-reminder-e2e.mjs --subscription-assignment
+          elif [ "$SCENARIO" = supplier-quota ]; then
             node scripts/verify-reminder-e2e.mjs --supplier-quota
           elif [ "$SCENARIO" = package-authoring ]; then
             node scripts/verify-reminder-e2e.mjs --package-authoring

@@ -125,8 +125,10 @@ public class PackagePlanService {
         mapper.activatePackage(original.packageId());
         return versionView(mapper.lockVersion(versionId),mapper.lockModules(versionId));
     }
+    @Transactional
     public PackagePlanModels.SubscriptionPreview preview(long tenantId,long targetVersionId) {
-        requireQuotaTenant(tenantId);
+        var tenant=lockAssignableTenant(tenantId);var now=mapper.utcNow();
+        if(mapper.lockAssignableVersion(targetVersionId)==null)throw new ApiException(PackagePlanErrorCode.INVALID,"目标套餐或已发布版本不可用");
         PackagePlanModels.VersionRow target=requirePublished(targetVersionId); Long currentId=mapper.findTenantPackageVersion(tenantId);
         Map<String,PackagePlanModels.ModuleGrant> current=currentId==null?Map.of():grantMap(currentId); Map<String,PackagePlanModels.ModuleGrant> next=grantMap(target.id());
         Set<String> removed=current.entrySet().stream().filter(e->e.getValue().enabled()).map(Map.Entry::getKey)
@@ -139,16 +141,22 @@ public class PackagePlanService {
         for(String code:quotaCodes){ long old=oldQ.getOrDefault(code,0L), limit=newQ.getOrDefault(code,0L), used=used(tenantId,code); if(limit<old || used>limit) changes.put(code,new PackagePlanModels.QuotaChange(old,limit,used,used>limit)); }
         List<String> advice=new ArrayList<>(); if(!removed.isEmpty()) advice.add("确认失效模块的数据只读保留策略");
         if(changes.values().stream().anyMatch(PackagePlanModels.QuotaChange::exceedsTarget)) advice.add("先清理超出目标额度的资源或确认只读保留");
-        return new PackagePlanModels.SubscriptionPreview(Long.toString(tenantId),currentId==null?null:currentId.toString(),Long.toString(targetVersionId),removed,changes,advice);
+        return new PackagePlanModels.SubscriptionPreview(Long.toString(tenantId),currentId==null?null:currentId.toString(),Long.toString(targetVersionId),removed,changes,advice,tenant.version(),now,mapper.futurePlanCount(tenantId,now));
     }
     @Transactional
     public PackagePlanModels.SubscriptionPreview assign(long tenantId,long targetVersionId,PackagePlanModels.AssignSubscription command) {
         if(Long.parseLong(command.packageVersionId())!=targetVersionId) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
-        if(mapper.lockTenant(tenantId)==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var tenant=lockAssignableTenant(tenantId);
+        if(command.tenantVersion()!=null&&command.tenantVersion()!=tenant.version())throw new ApiException(CommonErrorCode.CONFLICT,"租户订阅已变化，请重新预览后确认");
         LocalDateTime now=mapper.utcNow();
+        if(command.effectiveFrom()!=null&&(command.effectiveFrom().getYear()<1000||command.effectiveFrom().getYear()>9999)||command.effectiveTo()!=null&&(command.effectiveTo().getYear()<1000||command.effectiveTo().getYear()>9999))throw new ApiException(CommonErrorCode.VALIDATION_FAILED,"订阅日期超出数据库支持范围");
         if(command.effectiveFrom()==null || (command.effectiveTo()!=null &&
                 (!command.effectiveTo().isAfter(command.effectiveFrom()) || !command.effectiveTo().isAfter(now))))
             throw new ApiException(PackagePlanErrorCode.INVALID,"订阅结束时间必须晚于起始时间和当前 UTC 时间");
+        if(command.activationMode()==PackagePlanModels.ActivationMode.SCHEDULED&&!command.effectiveFrom().isAfter(now))
+            throw new ApiException(PackagePlanErrorCode.INVALID,"未来生效时间已过，请重新选择并预览");
+        if(command.activationMode()==PackagePlanModels.ActivationMode.IMMEDIATE&&command.effectiveFrom().isAfter(now))
+            throw new ApiException(PackagePlanErrorCode.INVALID,"立即生效不能指定未来起始时间");
         if(!command.exceptions().isEmpty())
             throw new ApiException(PackagePlanErrorCode.INVALID,"当前尚不支持套餐例外授权，不能忽略已提交的例外配置");
         PackagePlanModels.SubscriptionPreview preview=preview(tenantId,targetVersionId);
@@ -171,6 +179,12 @@ public class PackagePlanService {
     private PackagePlanModels.VersionRow requirePublished(long id){var r=requireVersion(id);if(!"PUBLISHED".equals(r.status()))throw new ApiException(PackagePlanErrorCode.INVALID,"只能分配已发布版本");return r;}
     private Map<String,PackagePlanModels.ModuleGrant> grantMap(long id){Map<String,PackagePlanModels.ModuleGrant> map=new HashMap<>();for(var m:mapper.listModules(id))map.put(m.moduleCode(),new PackagePlanModels.ModuleGrant(m.moduleCode(),m.enabled(),readQuotas(m.quotaJson())));return map;}
     private Map<String,Long> flatten(Collection<PackagePlanModels.ModuleGrant> grants){Map<String,Long> r=new HashMap<>();Set<String> active=mapper.moduleOptions().stream().map(PackagePlanModels.ModuleOption::code).collect(java.util.stream.Collectors.toSet());grants.stream().filter(g->g.enabled()&&active.contains(g.moduleCode())).forEach(g->g.quotas().forEach((k,v)->r.merge(k,v,Math::max)));return r;}
+    private PackagePlanModels.SubscriptionTenantRow lockAssignableTenant(long id){
+        if(id<=0)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var row=mapper.lockQuotaTenant(id);if(row==null)throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if(Set.of("CANCELLED","CANCELLING").contains(row.status()))throw new ApiException(PackagePlanErrorCode.INVALID,"注销租户不能分配套餐");
+        return mapper.lockSubscriptionTenant(id);
+    }
     private void requireQuotaTenant(long id){if(id<=0||mapper.subscriptionTenant(id)==null)throw new ApiException(CommonErrorCode.NOT_FOUND);}
     private long used(long tenant,String code){if(usageReaders.containsKey(code))return usageReaders.get(code).used(tenant);Long v=mapper.quotaUsed(tenant,code,"CURRENT");return v==null?0:v;}
     private String write(Object v){try{return json.writeValueAsString(v);}catch(JsonProcessingException e){throw new IllegalArgumentException(e);}}

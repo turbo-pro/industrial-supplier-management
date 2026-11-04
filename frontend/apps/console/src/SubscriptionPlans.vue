@@ -2,11 +2,13 @@
 import { nextTick, onMounted, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SupplierQuotaSummary from './SupplierQuotaSummary.vue';
+import SubscriptionAssignment from './SubscriptionAssignment.vue';
 
 const props = defineProps<{ tenantId: string; tenantName: string; token: string; canManage: boolean }>();
 defineEmits<{ close: [] }>();
 type Plan = components['schemas']['SubscriptionView'];
 const client = createIsmClient({ getAccessToken: () => props.token });
+const assignmentOpen=ref(false),quotaReload=ref(0);
 const result = ref<components['schemas']['SubscriptionPage'] | null>(null);
 const loading = ref(false), saving = ref(false), page = ref(0);
 const error = ref(''), notice = ref(''), reason = ref('');
@@ -64,6 +66,7 @@ async function cancel() {
   } catch { error.value = '取消请求未确认，可重试；相同请求将复用幂等键'; }
   finally { saving.value = false; }
 }
+function assigned(){assignmentOpen.value=false;quotaReload.value++;page.value=0;void load();notice.value='分配已提交，请以刷新后的计划状态为准；回执不代表当前仍在生效';}
 function move(delta: number) { page.value += delta; notice.value = ''; void load(); }
 async function showReminders(plan: Plan) {
   target.value = null;
@@ -109,9 +112,11 @@ onMounted(load);
   <section class="panel" aria-label="订阅计划" :aria-busy="loading || saving || reminderSending">
     <div class="panel-title">
       <div><h2 ref="heading" tabindex="-1">{{ tenantName }} · 订阅计划</h2><p>时间按 UTC 显示。只能取消待生效计划，不会恢复已到期的旧套餐。</p></div>
-      <button type="button" :disabled="saving || reminderSending" @click="$emit('close')">关闭计划</button>
+      <button type="button" :disabled="saving || reminderSending || assignmentOpen" @click="$emit('close')">关闭计划</button>
     </div>
-    <p v-if="!canManage">当前账号只读；取消计划需要套餐分配权限。</p>
+    <button v-if="canManage" type="button" :disabled="assignmentOpen||saving||reminderSending||loading||!result" @click="target=null;reminderTarget=null;reminderRequest++;assignmentOpen=true">分配新套餐</button>
+    <SubscriptionAssignment v-if="assignmentOpen" :tenant-id="tenantId" :token="token" @close="assignmentOpen=false" @assigned="assigned" />
+    <p v-if="!canManage">当前账号只读；分配和取消计划需要套餐分配权限。</p>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="loading" role="status">读取订阅计划中…</p>
@@ -123,13 +128,13 @@ onMounted(load);
           <td>{{ plan.packageName }} / {{ plan.versionName }}</td><td>{{ labels[plan.state] }}</td>
           <td>{{ time(plan.effectiveFrom) }}</td><td>{{ time(plan.effectiveTo) }}</td>
           <td>{{ plan.cancelReason ?? '—' }}<small v-if="plan.cancelledAt">{{ time(plan.cancelledAt) }} · 操作人 {{ plan.cancelledBy }}</small></td>
-          <td><button v-if="canManage && plan.canCancel" type="button" :disabled="saving || reminderSending" @click="select(plan)">取消计划</button>
-            <button type="button" :disabled="saving || reminderSending" @click="showReminders(plan)">到期提醒记录</button></td>
+          <td><button v-if="canManage && plan.canCancel" type="button" :disabled="saving || reminderSending || assignmentOpen" @click="select(plan)">取消计划</button>
+            <button type="button" :disabled="saving || reminderSending || assignmentOpen" @click="showReminders(plan)">到期提醒记录</button></td>
         </tr><tr v-if="!result.items.length"><td colspan="6">暂无订阅记录</td></tr></tbody>
       </table></div>
       <nav class="plan-actions" aria-label="订阅分页">
-        <button type="button" :disabled="page === 0 || saving || reminderSending" @click="move(-1)">上一页</button><span>第 {{ page + 1 }} 页</span>
-        <button type="button" :disabled="(page + 1) * result.size >= result.total || saving || reminderSending" @click="move(1)">下一页</button>
+        <button type="button" :disabled="page === 0 || saving || reminderSending || assignmentOpen" @click="move(-1)">上一页</button><span>第 {{ page + 1 }} 页</span>
+        <button type="button" :disabled="(page + 1) * result.size >= result.total || saving || reminderSending || assignmentOpen" @click="move(1)">下一页</button>
       </nav>
       <form v-if="target && canManage" class="password-reset-form" aria-label="取消未来计划确认" @submit.prevent="cancel">
         <h3>取消 {{ target.packageName }} / {{ target.versionName }}？</h3>
@@ -154,8 +159,8 @@ onMounted(load);
         <button type="button" :disabled="reminderLoading || reminderSending" @click="loadReminders">刷新提醒记录</button>
       </section>
     </template>
-    <SupplierQuotaSummary :key="tenantId" :tenant-id="tenantId" :token="token" />
-    <button type="button" :disabled="loading || saving || reminderSending" @click="load">刷新计划</button>
+    <SupplierQuotaSummary :key="tenantId+':'+quotaReload" :tenant-id="tenantId" :token="token" />
+    <button type="button" :disabled="loading || saving || reminderSending || assignmentOpen" @click="load">刷新计划</button>
   </section>
 </template>
 

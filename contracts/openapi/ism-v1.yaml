@@ -1352,10 +1352,12 @@ paths:
       responses:
         '200': { description: Module and quota impact preview, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPreviewResponse' } } } }
         '404': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
   /console/tenants/{tenantId}/subscription:
     post:
       operationId: assignTenantSubscription
-      description: 按 UTC 配置订阅有效期，起始包含、结束不包含。未来计划在起始时刻前不影响当前有效套餐；每次分配替换尚未生效的计划。到期不自动回退旧套餐，公共管理能力保留。过去起始时间按当前时刻立即执行，不追溯改写。结束时间必须晚于起始及当前时间，非空 exceptions 暂不支持并返回 422。租户列表及详情的 packageVersionId 返回当前有效版本，到期可为空。
+      description: 按 UTC 配置订阅有效期，起始包含、结束不包含。HTTP须提交tenantVersion和activationMode；版本变化409，SCHEDULED起始已过422。未来计划在起始时刻前不影响当前有效套餐；每次分配替换尚未生效的计划。到期不自动回退旧套餐，公共管理能力保留。过去起始时间按当前时刻立即执行，不追溯改写。结束时间必须晚于起始及当前时间，非空 exceptions 暂不支持并返回 422。租户列表及详情的 packageVersionId 返回当前有效版本，到期可为空。
       tags: [Console Tenant Subscriptions]
       security: [{ bearerAuth: [] }]
       parameters:
@@ -4897,9 +4899,11 @@ components:
       allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/ValidationResult' } } }]
     AssignSubscription:
       type: object
-      required: [packageVersionId, effectiveFrom]
+      required: [packageVersionId, effectiveFrom, tenantVersion, activationMode]
       properties:
-        packageVersionId: { type: string }
+        packageVersionId: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        tenantVersion: { type: integer, minimum: 0, description: 使用最近预览返回的版本；变化后409并重新预览 }
+        activationMode: { type: string, enum: [IMMEDIATE, SCHEDULED], description: SCHEDULED提交时起始已过则422，不静默立即执行 }
         effectiveFrom: { type: string, format: date-time, description: UTC 时间，无偏移的 ISO 本地时间格式；过去时刻按立即执行 }
         effectiveTo: { type: string, format: date-time, nullable: true, description: UTC 排他结束时间，空表示无固定结束时间 }
         exceptions: { type: object, additionalProperties: true, description: 扩展预留字段，当前只接受空对象 }
@@ -4980,8 +4984,11 @@ components:
         exceedsTarget: { type: boolean }
     SubscriptionPreview:
       type: object
-      required: [tenantId, targetPackageVersionId, removedModules, quotaChanges, recommendations]
+      required: [tenantId, targetPackageVersionId, removedModules, quotaChanges, recommendations, tenantVersion, asOf, replacedFuturePlans]
       properties:
+        tenantVersion: { type: integer, minimum: 0 }
+        asOf: { type: string, format: date-time, description: 数据库UTC预览时间 }
+        replacedFuturePlans: { type: integer, format: int64, minimum: 0 }
         tenantId: { type: string }
         currentPackageVersionId: { type: string, nullable: true }
         targetPackageVersionId: { type: string }

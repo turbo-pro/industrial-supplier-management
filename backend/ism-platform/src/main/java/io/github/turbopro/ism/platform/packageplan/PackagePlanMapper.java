@@ -60,6 +60,10 @@ public interface PackagePlanMapper {
     Long findTenantPackageVersion(long tenantId);
     @Select("SELECT id FROM plt_tenant WHERE id=#{tenantId} FOR UPDATE")
     Long lockTenant(long tenantId);
+    @Select("SELECT v.id FROM plt_package_version v JOIN plt_package p ON p.id=v.package_id WHERE v.id=#{id} AND v.status='PUBLISHED' AND p.status='ACTIVE' FOR SHARE")
+    Long lockAssignableVersion(long id);
+    @Select("SELECT COUNT(*) FROM plt_subscription WHERE tenant_id=#{tenantId} AND status='ACTIVE' AND effective_from > #{now}")
+    long futurePlanCount(long tenantId,LocalDateTime now);
     @Select("SELECT UTC_TIMESTAMP(3)")
     LocalDateTime utcNow();
     @Insert("INSERT INTO plt_subscription(id,tenant_id,package_version_id,status,effective_from,exception_json) SELECT #{id},t.id,t.package_version_id,'ACTIVE',#{now},JSON_OBJECT() FROM plt_tenant t JOIN plt_package_version v ON v.id=t.package_version_id AND v.status='PUBLISHED' WHERE t.id=#{tenantId} AND NOT EXISTS (SELECT 1 FROM plt_subscription s WHERE s.tenant_id=t.id)")

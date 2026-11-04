@@ -24,10 +24,14 @@ public final class PackagePlanModels {
                                 @NotNull @PositiveOrZero Integer version) {}
     public record ModuleOption(String code,String name) {}
     public record PublishCommand(@NotNull @PositiveOrZero Integer version) {}
-    public record AssignSubscription(@NotNull String packageVersionId,
+    public enum ActivationMode { IMMEDIATE,SCHEDULED }
+    public record AssignSubscription(@NotBlank @Pattern(regexp="[1-9][0-9]{0,18}") String packageVersionId,
                                      @NotNull LocalDateTime effectiveFrom,
                                      LocalDateTime effectiveTo,
-                                     Map<String, Object> exceptions) {
+                                     Map<String, Object> exceptions,
+                                     @NotNull @PositiveOrZero Integer tenantVersion,
+                                     @NotNull ActivationMode activationMode) {
+        public AssignSubscription(String id,LocalDateTime from,LocalDateTime to,Map<String,Object> exceptions){this(id,from,to,exceptions,null,null);}
         public AssignSubscription { exceptions = exceptions == null ? Map.of() : Map.copyOf(exceptions); }
     }
     public record PackageRow(long id, String packageCode, String packageName, String status, int version) {}
@@ -42,7 +46,8 @@ public final class PackagePlanModels {
     public record ValidationResult(boolean valid, List<String> errors) {}
     public record SubscriptionPreview(String tenantId, String currentPackageVersionId,
                                       String targetPackageVersionId, Set<String> removedModules,
-                                      Map<String, QuotaChange> quotaChanges, List<String> recommendations) {}
+                                      Map<String, QuotaChange> quotaChanges, List<String> recommendations,
+                                      int tenantVersion,LocalDateTime asOf,long replacedFuturePlans) {}
     public record QuotaChange(long currentLimit, long targetLimit, long usedValue, boolean exceedsTarget) {}
     public record CancelSubscription(@PositiveOrZero int tenantVersion,
                                      @NotBlank @Size(max=500) String reason) {}

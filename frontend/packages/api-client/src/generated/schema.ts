@@ -1429,7 +1429,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 按 UTC 配置订阅有效期，起始包含、结束不包含。未来计划在起始时刻前不影响当前有效套餐；每次分配替换尚未生效的计划。到期不自动回退旧套餐，公共管理能力保留。过去起始时间按当前时刻立即执行，不追溯改写。结束时间必须晚于起始及当前时间，非空 exceptions 暂不支持并返回 422。租户列表及详情的 packageVersionId 返回当前有效版本，到期可为空。 */
+        /** @description 按 UTC 配置订阅有效期，起始包含、结束不包含。HTTP须提交tenantVersion和activationMode；版本变化409，SCHEDULED起始已过422。未来计划在起始时刻前不影响当前有效套餐；每次分配替换尚未生效的计划。到期不自动回退旧套餐，公共管理能力保留。过去起始时间按当前时刻立即执行，不追溯改写。结束时间必须晚于起始及当前时间，非空 exceptions 暂不支持并返回 422。租户列表及详情的 packageVersionId 返回当前有效版本，到期可为空。 */
         post: operations["assignTenantSubscription"];
         delete?: never;
         options?: never;
@@ -6718,6 +6718,13 @@ export interface components {
         };
         AssignSubscription: {
             packageVersionId: string;
+            /** @description 使用最近预览返回的版本；变化后409并重新预览 */
+            tenantVersion: number;
+            /**
+             * @description SCHEDULED提交时起始已过则422，不静默立即执行
+             * @enum {string}
+             */
+            activationMode: "IMMEDIATE" | "SCHEDULED";
             /**
              * Format: date-time
              * @description UTC 时间，无偏移的 ISO 本地时间格式；过去时刻按立即执行
@@ -6817,6 +6824,14 @@ export interface components {
             exceedsTarget: boolean;
         };
         SubscriptionPreview: {
+            tenantVersion: number;
+            /**
+             * Format: date-time
+             * @description 数据库UTC预览时间
+             */
+            asOf: string;
+            /** Format: int64 */
+            replacedFuturePlans: number;
             tenantId: string;
             currentPackageVersionId?: string | null;
             targetPackageVersionId: string;
@@ -10290,7 +10305,9 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionPreviewResponse"];
                 };
             };
+            403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     assignTenantSubscription: {
