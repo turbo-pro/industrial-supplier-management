@@ -13,7 +13,11 @@ public class GrantEntitlements {
     }
 
     public Set<String> allowedModules(long tenantId) {
-        Set<String> result = new HashSet<>(modules.enabledModules(tenantId));
+        return withCoreModules(modules.enabledModules(tenantId));
+    }
+
+    public static Set<String> withCoreModules(Set<String> enabled) {
+        Set<String> result = new HashSet<>(enabled);
         result.addAll(Set.of("SYSTEM", "COMMON", "MESSAGE", "WORKFLOW"));
         return Set.copyOf(result);
     }

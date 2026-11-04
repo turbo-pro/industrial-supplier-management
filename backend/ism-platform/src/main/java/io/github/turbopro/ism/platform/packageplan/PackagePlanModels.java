@@ -47,7 +47,8 @@ public final class PackagePlanModels {
     public record SubscriptionPreview(String tenantId, String currentPackageVersionId,
                                       String targetPackageVersionId, Set<String> removedModules,
                                       Map<String, QuotaChange> quotaChanges, List<String> recommendations,
-                                      int tenantVersion,LocalDateTime asOf,long replacedFuturePlans) {}
+                                      int tenantVersion,LocalDateTime asOf,long replacedFuturePlans,
+                                      io.github.turbopro.ism.common.api.authorization.ModuleCapabilityCatalog.Impact authorizationImpact) {}
     public record QuotaChange(long currentLimit, long targetLimit, long usedValue, boolean exceedsTarget) {}
     public record CancelSubscription(@PositiveOrZero int tenantVersion,
                                      @NotBlank @Size(max=500) String reason) {}

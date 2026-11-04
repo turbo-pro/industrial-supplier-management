@@ -7310,7 +7310,37 @@ export interface components {
             usedValue: number;
             exceedsTarget: boolean;
         };
+        AuthorizationImpactCounts: {
+            /** Format: int64 */
+            menus: number;
+            /** Format: int64 */
+            actions: number;
+            /** Format: int64 */
+            fields: number;
+        };
+        AuthorizationCapabilityChange: {
+            /** @enum {string} */
+            kind: "MENU" | "ACTION" | "FIELD";
+            code: string;
+            name: string;
+            moduleCode: string;
+            /** @enum {string} */
+            change: "REMOVED" | "ADDED";
+        };
+        /** @description Active catalog snapshot only, not per-account navigation or workflow simulation. No tenant user, role name or business data. Core IAM modules retain existing entitlement. Actual authorization always intersects current module and role grants. Future schedule is compared against current UTC state, not predicted future roles. At most 200 items, removals first and stable module/kind/code ordering; totals include omitted items. Advisory only, never an authorization grant or locked confirmation snapshot. */
+        AuthorizationImpact: {
+            removed: components["schemas"]["AuthorizationImpactCounts"];
+            added: components["schemas"]["AuthorizationImpactCounts"];
+            /** Format: int64 */
+            total: number;
+            /** @enum {integer} */
+            limit: 200;
+            truncated: boolean;
+            items: components["schemas"]["AuthorizationCapabilityChange"][];
+        };
         SubscriptionPreview: {
+            /** @description Fresh previews include the catalog snapshot. Historical idempotency receipts may omit it or return null; re-preview instead of treating absence as zero impact. */
+            authorizationImpact?: components["schemas"]["AuthorizationImpact"] | null;
             tenantVersion: number;
             /**
              * Format: date-time

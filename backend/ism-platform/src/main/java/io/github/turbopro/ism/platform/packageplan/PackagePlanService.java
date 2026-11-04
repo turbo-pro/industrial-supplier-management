@@ -19,7 +19,8 @@ public class PackagePlanService {
     private final PackagePlanMapper mapper; private final ObjectMapper json;
     private final Map<String,io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader> usageReaders;
     private final AuditService audit;
-    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json,AuditService audit,List<io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader> readers) { this.mapper=mapper; this.json=json; this.audit=audit;this.usageReaders=readers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader::quotaCode,r->r)); }
+    private final io.github.turbopro.ism.common.api.authorization.ModuleCapabilityCatalog capabilityCatalog;
+    public PackagePlanService(PackagePlanMapper mapper, ObjectMapper json,AuditService audit,List<io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader> readers,io.github.turbopro.ism.common.api.authorization.ModuleCapabilityCatalog capabilityCatalog) {this.capabilityCatalog=capabilityCatalog; this.mapper=mapper; this.json=json; this.audit=audit;this.usageReaders=readers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(io.github.turbopro.ism.common.api.quota.TenantQuotaUsageReader::quotaCode,r->r)); }
 
     @Transactional(readOnly=true)
     public PackagePlanModels.SubscriptionPage subscriptions(long tenantId,int page,int size) {
@@ -141,7 +142,11 @@ public class PackagePlanService {
         for(String code:quotaCodes){ long old=oldQ.getOrDefault(code,0L), limit=newQ.getOrDefault(code,0L), used=used(tenantId,code); if(limit<old || used>limit) changes.put(code,new PackagePlanModels.QuotaChange(old,limit,used,used>limit)); }
         List<String> advice=new ArrayList<>(); if(!removed.isEmpty()) advice.add("确认失效模块的数据只读保留策略");
         if(changes.values().stream().anyMatch(PackagePlanModels.QuotaChange::exceedsTarget)) advice.add("先清理超出目标额度的资源或确认只读保留");
-        return new PackagePlanModels.SubscriptionPreview(Long.toString(tenantId),currentId==null?null:currentId.toString(),Long.toString(targetVersionId),removed,changes,advice,tenant.version(),now,mapper.futurePlanCount(tenantId,now));
+        return new PackagePlanModels.SubscriptionPreview(Long.toString(tenantId),currentId==null?null:currentId.toString(),Long.toString(targetVersionId),removed,changes,advice,tenant.version(),now,mapper.futurePlanCount(tenantId,now),capabilityCatalog.compare(
+                Set.copyOf(mapper.currentEnabledTenantModules(tenantId)),next.values().stream()
+                .filter(PackagePlanModels.ModuleGrant::enabled).map(PackagePlanModels.ModuleGrant::moduleCode)
+                .filter(mapper.lockModuleOptions().stream().map(PackagePlanModels.ModuleOption::code).collect(java.util.stream.Collectors.toSet())::contains)
+                .collect(java.util.stream.Collectors.toSet())));
     }
     @Transactional
     public PackagePlanModels.SubscriptionPreview assign(long tenantId,long targetVersionId,PackagePlanModels.AssignSubscription command) {

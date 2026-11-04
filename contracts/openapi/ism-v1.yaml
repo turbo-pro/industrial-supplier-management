@@ -5872,10 +5872,41 @@ components:
         targetLimit: { type: integer, format: int64 }
         usedValue: { type: integer, format: int64 }
         exceedsTarget: { type: boolean }
+    AuthorizationImpactCounts:
+      type: object
+      required: [menus, actions, fields]
+      properties:
+        menus: { type: integer, format: int64, minimum: 0 }
+        actions: { type: integer, format: int64, minimum: 0 }
+        fields: { type: integer, format: int64, minimum: 0 }
+    AuthorizationCapabilityChange:
+      type: object
+      required: [kind, code, name, moduleCode, change]
+      properties:
+        kind: { type: string, enum: [MENU, ACTION, FIELD] }
+        code: { type: string }
+        name: { type: string }
+        moduleCode: { type: string }
+        change: { type: string, enum: [REMOVED, ADDED] }
+    AuthorizationImpact:
+      type: object
+      description: Active catalog snapshot only, not per-account navigation or workflow simulation. No tenant user, role name or business data. Core IAM modules retain existing entitlement. Actual authorization always intersects current module and role grants. Future schedule is compared against current UTC state, not predicted future roles. At most 200 items, removals first and stable module/kind/code ordering; totals include omitted items. Advisory only, never an authorization grant or locked confirmation snapshot.
+      required: [removed, added, total, limit, truncated, items]
+      properties:
+        removed: { $ref: '#/components/schemas/AuthorizationImpactCounts' }
+        added: { $ref: '#/components/schemas/AuthorizationImpactCounts' }
+        total: { type: integer, format: int64, minimum: 0 }
+        limit: { type: integer, enum: [200] }
+        truncated: { type: boolean }
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/AuthorizationCapabilityChange' } }
     SubscriptionPreview:
       type: object
       required: [tenantId, targetPackageVersionId, removedModules, quotaChanges, recommendations, tenantVersion, asOf, replacedFuturePlans]
       properties:
+        authorizationImpact:
+          allOf: [{ $ref: '#/components/schemas/AuthorizationImpact' }]
+          nullable: true
+          description: Fresh previews include the catalog snapshot. Historical idempotency receipts may omit it or return null; re-preview instead of treating absence as zero impact.
         tenantVersion: { type: integer, minimum: 0 }
         asOf: { type: string, format: date-time, description: 数据库UTC预览时间 }
         replacedFuturePlans: { type: integer, format: int64, minimum: 0 }
