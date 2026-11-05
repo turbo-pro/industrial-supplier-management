@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { nextTick, reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
 import SupportRequests from './SupportRequests.vue';
@@ -8,6 +8,8 @@ import TenantCreation from './TenantCreation.vue';
 import PackageAuthoring from './PackageAuthoring.vue';
 import TenantSiteUpgrade from './TenantSiteUpgrade.vue';
 import PlatformBrand from './PlatformBrand.vue';
+import ConsoleFrame from './ConsoleFrame.vue';
+import {ElTag} from 'element-plus';
 import PlatformBrandingSettings from './PlatformBrandingSettings.vue';
 import {defaultBranding,isBranding,safeImage} from './platformBranding';
 const branding=ref({...defaultBranding}),brandingOpen=ref(false);
@@ -30,7 +32,7 @@ const showPasswordForm = ref(false);
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const packages = ref<components['schemas']['PackagePlan'][]>([]);
 const tenants = ref<components['schemas']['Tenant'][]>([]);
-const createTenantOpen=ref(false);
+const createTenantOpen=ref(false),navigationSection=ref('packages');
 const supportOpen=ref(false),supportTenant=ref<{id:string;name:string}>();
 const packageEditorOpen=ref(false),packageTarget=ref<components['schemas']['PackagePlan']|null>(null);
 const upgradeTarget = ref<components['schemas']['Tenant'] | null>(null);
@@ -49,6 +51,16 @@ const temporaryPassword = ref('');
 const resetBusy = ref(false);
 const canManageUsers = () => currentUser.value?.permissions.includes('platform:user:manage') ?? false;
 const client = createIsmClient({ getAccessToken: () => accessToken.value });
+
+async function navigate(section:string){
+ navigationSection.value=section;
+ if(section==='branding')brandingOpen.value=true;
+ if(section==='support'&&!supportOpen.value){supportTenant.value=undefined;supportOpen.value=true;}
+ await nextTick();
+ const selector=section==='branding'?'.branding-settings':section==='support'?'.support-requests':`[data-console-section="${section}"]`;
+ const target=document.querySelector<HTMLElement>(selector);if(target){target.scrollIntoView({block:'start',behavior:'instant'});const heading=target.querySelector<HTMLElement>('h2');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}
+}
+const statusLabel=(value:string)=>(({ACTIVE:'启用',DRAFT:'草稿',DISABLED:'停用',SUSPENDED:'已暂停',CLOSED:'已关闭',PENDING:'待初始化',READY:'已就绪'} as Record<string,string>)[value]??value);
 
 async function login() {
   submitting.value = true;
@@ -242,7 +254,7 @@ function logout(reason = '') {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
-  brandingOpen.value=false;
+  brandingOpen.value=false;navigationSection.value='packages';
   supportOpen.value=false;supportTenant.value=undefined;
   packageEditorOpen.value=false;packageTarget.value=null;
   packages.value = [];
@@ -294,9 +306,8 @@ if (accessToken.value) {
       <p v-if="message" role="status">{{ message }}</p>
     </form>
   </main>
-  <main v-else class="workspace">
-    <PlatformBrand :branding="branding"/>
-    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button v-if="currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant=undefined;supportOpen=true">支持申请工作台</button><button v-if="currentUser?.permissions.includes('platform:branding:view')" type="button" :disabled="brandingOpen" @click="brandingOpen=true">平台品牌配置</button><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
+  <ConsoleFrame v-else :branding="branding" :display-name="currentUser?.displayName??''" :permissions="currentUser?.permissions??[]" :active-section="navigationSection" @navigate="navigate"><main class="workspace">
+    <header class="workspace-heading"><div><p class="eyebrow">CONSOLE · 平台运营</p><h1>套餐与模块</h1><p class="page-description">管理租户开通、功能授权与平台运营设置。</p></div><div class="workspace-actions"><span role="status">{{ message }}</span><button v-if="currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant=undefined;supportOpen=true;navigationSection='support'">支持申请工作台</button><button v-if="currentUser?.permissions.includes('platform:branding:view')" type="button" :disabled="brandingOpen" @click="brandingOpen=true;navigationSection='branding'">平台品牌配置</button><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
     <PlatformBrandingSettings v-if="brandingOpen" :token="accessToken" @close="brandingOpen=false" @changed="loadBranding"/>
     <section v-if="passwordChangeRecommended" class="password-notice" role="alert">此账号长期未登录，建议修改密码。<button type="button" @click="showPasswordForm=true">立即修改</button><button type="button" @click="passwordChangeRecommended=false">稍后再说</button></section>
     <form v-if="showPasswordForm" class="panel password-form" @submit.prevent="changePassword">
@@ -307,19 +318,19 @@ if (accessToken.value) {
       <p>至少 12 位，包含大小写字母、数字和特殊字符。</p>
       <button :disabled="changingPassword" type="submit">确认修改</button>
     </form>
-    <section v-if="currentUser?.permissions.includes('platform:package:view')" class="panel package-catalog">
+    <section v-if="currentUser?.permissions.includes('platform:package:view')" class="panel package-catalog" data-console-section="packages">
       <div class="panel-title"><div><h2>套餐版本</h2><p>发布后的版本不可覆盖，变更必须创建新版本。</p></div><button v-if="currentUser?.permissions.includes('platform:package:manage')" type="button" :disabled="packageEditorOpen" @click="packageTarget=null;packageEditorOpen=true">新建套餐</button></div>
       <div class="tenant-list-scroll"><table><thead><tr><th>套餐编码</th><th>套餐名称</th><th>状态</th><th>版本数</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.status }}</td><td>{{ item.versions.length }}</td><td><button type="button" :disabled="packageEditorOpen" @click="packageTarget=item;packageEditorOpen=true">查看套餐配置</button></td></tr>
+        <tbody><tr v-for="item in packages" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td><ElTag :type="item.status==='ACTIVE'?'success':'info'" effect="light" size="small">{{statusLabel(item.status)}}</ElTag></td><td>{{ item.versions.length }}</td><td><button type="button" :disabled="packageEditorOpen" @click="packageTarget=item;packageEditorOpen=true">查看套餐配置</button></td></tr>
         <tr v-if="packages.length === 0"><td colspan="5" class="empty">尚未创建套餐</td></tr></tbody>
       </table></div>
     </section>
     <button v-if="!currentUser?.permissions.includes('platform:package:view')&&currentUser?.permissions.includes('platform:package:manage')" type="button" :disabled="packageEditorOpen" @click="packageTarget=null;packageEditorOpen=true">新建套餐</button>
     <PackageAuthoring v-if="packageEditorOpen" :plan="packageTarget" :token="accessToken" :can-manage="currentUser?.permissions.includes('platform:package:manage')??false" :can-publish="currentUser?.permissions.includes('platform:package:publish')??false" @close="packageEditorOpen=false;packageTarget=null" @changed="loadWorkspace" />
-    <section class="panel tenant-opening">
+    <section class="panel tenant-opening" data-console-section="tenants">
       <div class="panel-title"><div><h2>租户开通</h2><p>仅显示控制面摘要，不展示租户业务正文。</p></div><button v-if="currentUser?.permissions.includes('platform:tenant:create')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="createTenantOpen=true">新建租户</button></div>
       <div class="tenant-list-scroll"><table v-if="currentUser?.permissions.includes('platform:tenant:view')"><thead><tr><th>租户编码</th><th>租户名称</th><th>运行状态</th><th>初始化状态</th><th>运营模式</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td>{{ tenant.status }}</td><td>{{ tenant.initializationStatus }}</td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:support:request')&&currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant={id:tenant.id,name:tenant.name};supportOpen=true">发起支持访问申请</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
+        <tbody><tr v-for="tenant in tenants" :key="tenant.id"><td>{{ tenant.code }}</td><td>{{ tenant.name }}</td><td><ElTag :type="tenant.status==='ACTIVE'?'success':'info'" effect="light" size="small">{{statusLabel(tenant.status)}}</ElTag></td><td><ElTag :type="tenant.initializationStatus==='READY'?'success':'warning'" effect="plain" size="small">{{statusLabel(tenant.initializationStatus)}}</ElTag></td><td>{{ tenant.operationMode === 'SINGLE_SITE' ? '单场站' : tenant.operationMode === 'MULTI_SITE' ? '多场站' : '未分类' }}<span v-if="tenant.siteLabel">（{{ tenant.siteLabel }}）</span></td><td><button v-if="tenant.initializationStatus === 'PENDING' && currentUser?.permissions.includes('platform:tenant:initialize')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="initializeTarget = tenant">初始化租户</button><button v-if="tenant.operationMode === 'SINGLE_SITE' && tenant.status === 'ACTIVE' && tenant.initializationStatus === 'READY' && currentUser?.permissions.includes('platform:tenant:upgrade')" type="button" :disabled="createTenantOpen || initializeTarget !== null || upgradeTarget !== null" @click="upgradeTarget = tenant">升级多场站</button><button v-if="currentUser?.permissions.includes('platform:support:request')&&currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant={id:tenant.id,name:tenant.name};supportOpen=true">发起支持访问申请</button><button v-if="currentUser?.permissions.includes('platform:package:view')" type="button" @click="subscriptionTenant = tenant">查看订阅计划</button></td></tr>
         <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
       </table><p v-else>当前没有租户列表查看权限，创建操作仍需单独授权。</p></div><p v-if="currentUser?.permissions.includes('platform:tenant:view') && tenants.length===0" class="tenant-empty">当前未加载到租户记录。</p>
     </section>
@@ -330,7 +341,7 @@ if (accessToken.value) {
     <SubscriptionPlans v-if="subscriptionTenant" :key="subscriptionTenant.id" :tenant-id="subscriptionTenant.id"
       :tenant-name="subscriptionTenant.name" :token="accessToken" :can-manage="currentUser?.permissions.includes('platform:package:assign') ?? false"
       @close="subscriptionTenant = null" />
-    <section v-if="currentUser?.permissions.includes('platform:user:view')" class="panel">
+    <section v-if="currentUser?.permissions.includes('platform:user:view')" class="panel" data-console-section="accounts">
       <div class="panel-title"><div><h2>平台账号</h2><p>平台账号与租户用户完全隔离；停用会使既有会话失效。</p></div></div>
       <form v-if="canManageUsers()" class="console-user-form" @submit.prevent="createUser">
         <label>平台用户名<input v-model="userForm.username" required pattern="[a-zA-Z][a-zA-Z0-9._-]{2,99}" /></label>
@@ -339,16 +350,16 @@ if (accessToken.value) {
         <label>平台角色<select v-model="userForm.roleCode"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select></label>
         <button :disabled="userBusy" type="submit">创建平台账号</button>
       </form>
-      <table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+      <div class="account-table-scroll"><table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
         <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td>
           <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id" @change="rolePreview=null"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
             <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="previewUserRole(user)">预览影响</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
-          <td>{{ user.status === 'ACTIVE' ? '启用' : '停用' }}<span v-if="user.manualLocked"> · 人工锁定</span><span v-else-if="user.automaticLockedUntil"> · 登录失败暂锁</span></td>
+          <td><ElTag :type="user.status==='ACTIVE'?'success':'info'" size="small">{{user.status==='ACTIVE'?'启用':'停用'}}</ElTag><span v-if="user.manualLocked"> · 人工锁定</span><span v-else-if="user.automaticLockedUntil"> · 登录失败暂锁</span></td>
           <td><div v-if="canManageUsers()" class="account-actions"><button type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button>
             <button type="button" :disabled="user.id === currentUser?.id" @click="resetTarget=user;temporaryPassword=''">重置密码</button>
             <button type="button" :disabled="user.id === currentUser?.id" @click="lockTarget=user;lockReason=''">{{ user.manualLocked || user.automaticLockedUntil ? '解除锁定' : '锁定登录' }}</button></div></td></tr>
         <tr v-if="users.length === 0"><td colspan="5" class="empty">尚无平台账号</td></tr></tbody>
-      </table>
+      </table></div>
       <section v-if="rolePreview" class="role-preview" aria-label="角色影响预览">
         <h3>{{ rolePreview.username }} 的角色影响预览</h3>
         <p>当前角色：{{ rolePreview.currentRoleCodes.join('、') || '无' }}；拟调整为：{{ rolePreview.proposedRoleCode }}。保存后旧会话会失效。</p>
@@ -370,13 +381,14 @@ if (accessToken.value) {
         <button type="submit">确认</button><button type="button" class="secondary-button" @click="lockTarget=null;lockReason=''">取消</button>
       </form>
     </section>
-  </main>
-  <footer v-if="branding.footerText" class="platform-footer">{{branding.footerText}}</footer>
+  </main></ConsoleFrame>
+  <footer v-if="!accessToken&&branding.footerText" class="platform-footer">{{branding.footerText}}</footer>
 </template>
 
 <style scoped>
 .platform-footer{padding:18px 24px;text-align:center;overflow-wrap:anywhere;line-height:1.6;color:#d4e7eb;background:#0d2538;}
 .workspace header{flex-wrap:wrap;gap:16px;}
+.account-table-scroll{max-width:100%;overflow:auto;}.account-table-scroll table{min-width:900px;}
 .tenant-list-scroll{max-width:100%;overflow-x:auto;}.tenant-list-scroll table{min-width:720px;}.tenant-opening .panel-title,.package-catalog .panel-title{flex-wrap:wrap;gap:12px;}.tenant-opening .panel-title>div,.package-catalog .panel-title>div{flex:1 1 240px;}
 @media(max-width:600px){.workspace header{flex-direction:column;align-items:flex-start;gap:12px;}.workspace header>div:last-child{flex-wrap:wrap;gap:8px;width:100%;}.workspace header [role=status]{flex-basis:100%;}}
 </style>

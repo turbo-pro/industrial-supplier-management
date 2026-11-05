@@ -33,7 +33,7 @@ async (page) => {
       await form.getByRole('button',{name:'使用原请求重试',exact:true}).click();
     }
     await form.waitFor({state:'detached'});
-    await row.getByRole('cell',{name:'READY',exact:true}).waitFor();
+    await row.getByRole('cell',{name:'已就绪',exact:true}).waitFor();
     await row.getByRole('cell',{name:multi?'多场站（门店）':'单场站（工厂）',exact:true}).waitFor();
   }
   if(attempts.length!==2||JSON.stringify(attempts[0])!==JSON.stringify(attempts[1]))throw new Error('Retry did not preserve exact request');

@@ -47,12 +47,18 @@ importers:
 
   frontend/apps/console:
     dependencies:
+      '@element-plus/icons-vue':
+        specifier: ^2.3.2
+        version: 2.3.2(vue@3.5.43(typescript@5.9.3))
       '@ism/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
       '@vitejs/plugin-vue':
         specifier: ^6.0.1
         version: 6.0.9(vite@7.3.6)(vue@3.5.43(typescript@5.9.3))
+      element-plus:
+        specifier: ^2.14.6
+        version: 2.14.6(vue@3.5.43(typescript@5.9.3))
       vite:
         specifier: ^7.1.5
         version: 7.3.6
