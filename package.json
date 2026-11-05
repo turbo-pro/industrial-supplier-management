@@ -11,6 +11,7 @@
     "dev:down": "./scripts/dev.sh down",
     "dev:status": "./scripts/dev.sh status",
     "dev:logs": "./scripts/dev.sh logs",
+    "verify:foundation": "node scripts/verify-foundation.mjs",
     "build": "pnpm --recursive --if-present build",
     "generate:api": "pnpm --filter @ism/api-client generate",
     "check:api": "pnpm --filter @ism/api-client check:generated",

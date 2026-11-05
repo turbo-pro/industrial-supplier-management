@@ -1,5 +1,7 @@
 # B0/B1 前置依赖与验收证据定位
 
+2026-11-05补充：[基础门禁](foundation-regression-review.md)24+1本轮通过；以下10-29行是历史定位，不能代当前整包完成。当前支持提案/租户授权、场站与字典增量分别见最新专项，完整会话和全业务Gate仍缺。
+
 日期：2026-10-29。来源为 PRD 35、40、66、68、70 及仓内源码和专项 Review。本表定位现有基础、已运行范围与下一动作，不将代码存在或历史通过写成整包完成。具体修改入口以仓库实际路径为准。
 
 ## 已选择任务
@@ -9,9 +11,9 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 | 包 | 当前实现定位 | 本次或历史证据 | 下一步及未覆盖边界 |
 |---|---|---|---|
 | B0-01 | 父/子 pom.xml，四端 package.json，bootstrap 启动器 | 本次 ModuleBoundaryTest；见下文 | 仍需跨模块 SQL/内部对象治理；mobile 仅目录注册 |
-| B0-02 | bootstrap Flyway、MyBatis 配置，V1–V85 | 本次隔离 MySQL 应用启动；旧库升级证据见 v25-checksum-recovery.md | 独立重复启动/升级 Gate 不以有迁移目录替代 |
+| B0-02 | bootstrap Flyway、MyBatis 配置，本轮验证V1–V92 | 本次隔离 MySQL 应用启动；旧库升级证据见 v25-checksum-recovery.md | 2026-11-05三次应用启动历史/校验一致；仍不代表全部数据库兼容和发布Gate |
 | B0-03 | common-infrastructure/web 统一响应/异常/traceId | 本次[HTTP输入专项](http-input-boundary-review.md)契约13/13、真实上传下载1/1 | 缺头/原生参数误报500已修；全产品消息、请求大小与全部参数组合仍待映射 |
-| B0-04 | iam/auth 的 AuthService、JWT、刷新/退出 | B0InfrastructureIT 的认证回归为历史基础 | 补本次令牌族、安全事件及跨端矩阵，不能以门户会话代员工JWT验收 |
+| B0-04 | iam/auth 的 AuthService、JWT、刷新/退出 | 2026-11-05完整24项及新增跨节点真实HTTP1本轮通过 | 员工/Console跨节点令牌族已本轮复验；跨机器/安全事件全量/跨端矩阵仍待，不以门户代员工 |
 | B0-05 | TenantContext、TenantIsolationInterceptor、TenantScopedMapper | 本次 shouldFailClosedAndIsolateTenantReadsWritesAndExports | 全业务 Mapper/下载/统计与后台任务的逐入口覆盖仍需归档 |
 | B0-06 | AuthorizationGrantLoader、数据范围和字段权限 | 同一隔离用例检查详情/导出掩码、越权、权限变更 | 全产品敏感字段用途/留存/导出治理未完成 |
 | B0-07 | operation 审计/Outbox/租约；dispatch-lease-fencing-review.md | 2026-10-28 租约15/15为历史专项证据 | 本次[幂等键输入](idempotency-input-review.md)单测2/2、HTTP及并发集成各1/1；进程宕机/容量、全部副作用幂等及审计保留仍需专验 |
@@ -31,8 +33,8 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 
 ## P0 补充契约定位
 
-- GAP-01 / PRD 68：生产代码目前只有 `platform:support:request` 权限种子，没有支持申请/独立审批/会话/一次令牌/访问日志实现。此项待实现，不能把 Console 登录认作支持访问完成；先维护双重身份与当前权限交集，再开放任何业务面进入。
-- GAP-02 / PRD 70：初始化创建 HEADQUARTERS 根组织；有 SITE 字典项，没有 SINGLE_SITE/MULTI_SITE 和统一服务端场站上下文闭环。单场站模式、无损升级、停用及所有业务入口归属需作为联合任务推进。
+- GAP-01 / PRD 68：已有[提案/独立平台审批](support-request-review.md)和[租户授权/冻结交集](tenant-support-review.md)专项；真实会话、一次性进入、双身份业务认证、横幅和访问日志仍未交付，入口保持关闭，不把Console登录或交集预览当成业务访问。
+- GAP-02 / PRD 70：已有初始化、单转多升级、服务端场站上下文及项目工作区专项。未在本轮复验所有SITE-AT；停用、全部业务归属及总部汇总/明细分权仍按原契约逐项核对，不能把旧描述当作这些功能尚无代码。
 - GAP-03：已有配置键和字典，不等于自定义字段/动态表单。配置元数据、发布版本、历史引用和字段权限需独立子任务，禁止动态SQL/任意脚本绕开核心规则。
 - GAP-13：有字段掩码和部分门户会话清理，不能覆盖全部敏感数据的用途、保留、删除、审计归档和账号交接。
 - GAP-15：CI 有编译、单测、隔离 MySQL 和多个浏览器入口；tests/performance 仍是占位说明。容量/P95、备份恢复RPO/RTO、进程宕机与升级回滚不能据此标记通过。

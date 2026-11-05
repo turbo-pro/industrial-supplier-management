@@ -129,12 +129,16 @@ class B0InfrastructureIT {
             .withUsername("ism")
             .withPassword("ism");
 
+    private static final java.nio.file.Path STORAGE = isolatedStorage();
+    private static java.nio.file.Path isolatedStorage(){try{return java.nio.file.Files.createTempDirectory("ism-b0-regression-");}catch(java.io.IOException e){throw new IllegalStateException(e);}}
+    @org.junit.jupiter.api.AfterAll static void cleanupOwnedStorage()throws java.io.IOException{try(var paths=java.nio.file.Files.walk(STORAGE)){for(var p:paths.sorted(java.util.Comparator.reverseOrder()).toList())java.nio.file.Files.deleteIfExists(p);}}
+
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
-        registry.add("ism.storage.local-root", () -> System.getProperty("java.io.tmpdir") + "/ism-it-storage");
+        registry.add("ism.storage.local-root", STORAGE::toString);
         registry.add("ism.print.worker-enabled",()->"false");
     }
 
@@ -1738,7 +1742,7 @@ class B0InfrastructureIT {
                     "iam:user:manage", "iam:role:manage");
             assertThat(grants.dataScope("iam:organization").type()).isEqualTo(DataScope.Type.TENANT_ALL);
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("SYSTEM_MANAGEMENT"))
-                    .singleElement().satisfies(menu -> assertThat(menu.children()).extracting("code").containsExactly("ORGANIZATION_MANAGEMENT","USER_MANAGEMENT","ROLE_MANAGEMENT","DICTIONARY_MANAGEMENT","TENANT_SETTING","SITE_PREFERENCE"));
+                    .singleElement().satisfies(menu -> assertThat(menu.children()).extracting("code").containsExactly("ORGANIZATION_MANAGEMENT","USER_MANAGEMENT","ROLE_MANAGEMENT","DICTIONARY_MANAGEMENT","TENANT_SETTING","SITE_PREFERENCE","TENANT_SUPPORT"));
             assertThat(navigationService.currentMenus()).filteredOn(menu -> menu.code().equals("RESOURCE_CENTER"))
                     .singleElement().satisfies(menu -> assertThat(menu.children())
                             .extracting("code").containsExactly("FILE_MANAGEMENT", "TASK_CENTER", "PRINT_TEMPLATE", "ADVANCED_SEARCH"));

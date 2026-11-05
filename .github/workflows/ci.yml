@@ -44,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -51,6 +54,20 @@ jobs:
           cache: maven
       - name: Verify MySQL, Flyway, MyBatis and Flowable integration
         run: ./mvnw --batch-mode --no-transfer-progress -pl backend/ism-bootstrap -am -Pintegration-test verify
+
+      - name: Reject skipped or incomplete foundation reports
+        run: node scripts/verify-foundation.mjs --check-reports
+      - name: Preserve foundation integration reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-integration-reports
+          path: |
+            backend/ism-bootstrap/target/failsafe-reports/TEST-io.github.turbopro.ism.bootstrap.B0InfrastructureIT.xml
+            backend/ism-bootstrap/target/failsafe-reports/io.github.turbopro.ism.bootstrap.B0InfrastructureIT.txt
+            backend/ism-bootstrap/target/failsafe-reports/TEST-io.github.turbopro.ism.bootstrap.SharedDatabaseAuthenticationIT.xml
+            backend/ism-bootstrap/target/failsafe-reports/io.github.turbopro.ism.bootstrap.SharedDatabaseAuthenticationIT.txt
+          retention-days: 7
 
   console-reminder-e2e:
     runs-on: ubuntu-latest
