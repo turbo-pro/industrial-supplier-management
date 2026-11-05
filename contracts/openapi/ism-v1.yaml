@@ -1579,6 +1579,39 @@ paths:
         '403': { $ref: '#/components/responses/ApiFailure' }
         '404': { $ref: '#/components/responses/ApiFailure' }
         '409': { $ref: '#/components/responses/ApiFailure' }
+  /console/branding:
+    get:
+      operationId: getPublicPlatformBranding
+      tags: [Console Branding]
+      description: Anonymous public display metadata only. Does not expose revision, permissions or tenant settings. No Authorization header is needed.
+      security: []
+      responses:
+        '200': { description: Public platform branding, content: { application/json: { schema: { $ref: '#/components/schemas/PlatformBrandingResponse' } } } }
+  /console/settings/branding:
+    get:
+      operationId: getPlatformBrandingSettings
+      tags: [Console Branding]
+      description: Requires platform:branding:view in the Console realm.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Revision and write capability, content: { application/json: { schema: { $ref: '#/components/schemas/PlatformBrandingSettingsResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+    put:
+      operationId: savePlatformBranding
+      tags: [Console Branding]
+      description: Requires platform:branding:manage. Atomic full replacement with expected revision, 24h actor-scoped exact idempotent replay and audit. Tenant branding is independent. Blank image/footer fields clear overrides. Images accept site absolute paths or HTTP(S) without credentials; no server-side fetch or upload is performed.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavePlatformBranding' } } } }
+      responses:
+        '200': { description: Saved receipt, content: { application/json: { schema: { $ref: '#/components/schemas/PlatformBrandingSettingsResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+        '422': { $ref: '#/components/responses/ApiFailure' }
+        '500': { $ref: '#/components/responses/ApiFailure' }
   /console/package-modules:
     get:
       operationId: listPackageModuleOptions
@@ -6423,6 +6456,27 @@ components:
         locked: { type: boolean }
         reason: { type: string, minLength: 1, maxLength: 500 }
         version: { type: integer, minimum: 0 }
+    PlatformBranding:
+      type: object
+      required: [systemName, logoUrl, faviconUrl, footerText]
+      properties:
+        systemName: { type: string, minLength: 1, maxLength: 100 }
+        logoUrl: { type: string, maxLength: 2000 }
+        faviconUrl: { type: string, maxLength: 2000 }
+        footerText: { type: string, maxLength: 300 }
+    SavePlatformBranding:
+      allOf: [{ $ref: '#/components/schemas/PlatformBranding' }, { type: object, required: [version], properties: { version: { type: integer, minimum: 0 } } }]
+    PlatformBrandingSettings:
+      type: object
+      required: [branding, version, canManage]
+      properties:
+        branding: { $ref: '#/components/schemas/PlatformBranding' }
+        version: { type: integer, minimum: 0 }
+        canManage: { type: boolean }
+    PlatformBrandingResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PlatformBranding' } } }]
+    PlatformBrandingSettingsResponse:
+      allOf: [{ $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/PlatformBrandingSettings' } } }]
     ConsoleUser:
       type: object
       required: [id, username, displayName, status, passwordChangeRequired, manualLocked, version, roleCodes]

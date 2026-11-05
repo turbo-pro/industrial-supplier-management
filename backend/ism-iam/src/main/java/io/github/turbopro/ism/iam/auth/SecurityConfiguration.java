@@ -32,7 +32,7 @@ public class SecurityConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh",
-                                "/api/console/auth/login", "/api/console/auth/refresh", "/actuator/health/**").permitAll()
+                                "/api/console/auth/login", "/api/console/auth/refresh", "/api/console/branding", "/actuator/health/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/portal/auth/register","/api/portal/auth/login","/api/portal/auth/reset-password").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {

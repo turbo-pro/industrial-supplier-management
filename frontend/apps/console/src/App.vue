@@ -7,6 +7,15 @@ import TenantInitialization from './TenantInitialization.vue';
 import TenantCreation from './TenantCreation.vue';
 import PackageAuthoring from './PackageAuthoring.vue';
 import TenantSiteUpgrade from './TenantSiteUpgrade.vue';
+import PlatformBrand from './PlatformBrand.vue';
+import PlatformBrandingSettings from './PlatformBrandingSettings.vue';
+import {defaultBranding,isBranding,safeImage} from './platformBranding';
+const branding=ref({...defaultBranding}),brandingOpen=ref(false);
+// This client intentionally sends no Authorization header, including before login.
+const publicClient=createIsmClient();
+let brandingEpoch=0;
+async function loadBranding(){const epoch=++brandingEpoch;try{const r=await publicClient.GET('/console/branding');if(epoch!==brandingEpoch||r.error||!isBranding(r.data?.data))return;branding.value={...r.data.data};document.title=branding.value.systemName;let icon=document.querySelector<HTMLLinkElement>('#platform-favicon');const src=safeImage(branding.value.faviconUrl);if(!src){icon?.remove();return;}if(!icon){icon=document.createElement('link');icon.id='platform-favicon';icon.rel='icon';document.head.append(icon);}icon.href=src;icon.onerror=()=>icon?.remove();}catch{/* Default or last confirmed public branding remains visible. */}}
+void loadBranding();
 
 const form = reactive({ username: '', password: '' });
 const TOKEN_KEY = 'ism.console.accessToken';
@@ -233,6 +242,7 @@ function logout(reason = '') {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
+  brandingOpen.value=false;
   supportOpen.value=false;supportTenant.value=undefined;
   packageEditorOpen.value=false;packageTarget.value=null;
   packages.value = [];
@@ -261,6 +271,7 @@ if (accessToken.value) {
       <p>管理租户、套餐和平台能力。Console 不直接展示租户业务正文。</p>
     </section>
     <form class="login-card" @submit.prevent="login">
+      <PlatformBrand :branding="branding"/>
       <p class="eyebrow">PLATFORM CONSOLE</p>
       <h2>平台人员登录</h2>
       <label>平台用户名<input v-model="form.username" name="username" autocomplete="username" required /></label>
@@ -272,6 +283,7 @@ if (accessToken.value) {
   <main v-else-if="passwordChangeRequired" class="shell">
     <section class="context"><p class="eyebrow">PLATFORM CONSOLE</p><h1>需要修改密码</h1><p>当前账号必须先修改密码，才能访问平台控制台。</p></section>
     <form class="login-card" @submit.prevent="changePassword">
+      <PlatformBrand :branding="branding"/>
       <h2>修改登录密码</h2>
       <label>当前密码<input v-model="passwordForm.oldPassword" type="password" autocomplete="current-password" required /></label>
       <label>新密码<input v-model="passwordForm.newPassword" type="password" autocomplete="new-password" required minlength="12" /></label>
@@ -283,7 +295,9 @@ if (accessToken.value) {
     </form>
   </main>
   <main v-else class="workspace">
-    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button v-if="currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant=undefined;supportOpen=true">支持申请工作台</button><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
+    <PlatformBrand :branding="branding"/>
+    <header><div><p class="eyebrow">PLATFORM CONSOLE</p><h1>套餐与模块</h1></div><div><span role="status">{{ message }}</span><button v-if="currentUser?.permissions.includes('platform:support:view')" type="button" :disabled="supportOpen" @click="supportTenant=undefined;supportOpen=true">支持申请工作台</button><button v-if="currentUser?.permissions.includes('platform:branding:view')" type="button" :disabled="brandingOpen" @click="brandingOpen=true">平台品牌配置</button><button type="button" @click="showPasswordForm=!showPasswordForm">修改密码</button><button type="button" @click="logout()">退出登录</button></div></header>
+    <PlatformBrandingSettings v-if="brandingOpen" :token="accessToken" @close="brandingOpen=false" @changed="loadBranding"/>
     <section v-if="passwordChangeRecommended" class="password-notice" role="alert">此账号长期未登录，建议修改密码。<button type="button" @click="showPasswordForm=true">立即修改</button><button type="button" @click="passwordChangeRecommended=false">稍后再说</button></section>
     <form v-if="showPasswordForm" class="panel password-form" @submit.prevent="changePassword">
       <h2>修改登录密码</h2>
@@ -357,9 +371,12 @@ if (accessToken.value) {
       </form>
     </section>
   </main>
+  <footer v-if="branding.footerText" class="platform-footer">{{branding.footerText}}</footer>
 </template>
 
 <style scoped>
+.platform-footer{padding:18px 24px;text-align:center;overflow-wrap:anywhere;line-height:1.6;color:#d4e7eb;background:#0d2538;}
+.workspace header{flex-wrap:wrap;gap:16px;}
 .tenant-list-scroll{max-width:100%;overflow-x:auto;}.tenant-list-scroll table{min-width:720px;}.tenant-opening .panel-title,.package-catalog .panel-title{flex-wrap:wrap;gap:12px;}.tenant-opening .panel-title>div,.package-catalog .panel-title>div{flex:1 1 240px;}
 @media(max-width:600px){.workspace header{flex-direction:column;align-items:flex-start;gap:12px;}.workspace header>div:last-child{flex-wrap:wrap;gap:8px;width:100%;}.workspace header [role=status]{flex-basis:100%;}}
 </style>

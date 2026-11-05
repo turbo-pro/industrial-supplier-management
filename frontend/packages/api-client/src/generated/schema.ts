@@ -1425,6 +1425,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Anonymous public display metadata only. Does not expose revision, permissions or tenant settings. No Authorization header is needed. */
+        get: operations["getPublicPlatformBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/settings/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires platform:branding:view in the Console realm. */
+        get: operations["getPlatformBrandingSettings"];
+        /** @description Requires platform:branding:manage. Atomic full replacement with expected revision, 24h actor-scoped exact idempotent replay and audit. Tenant branding is independent. Blank image/footer fields clear overrides. Images accept site absolute paths or HTTP(S) without credentials; no server-side fetch or upload is performed. */
+        put: operations["savePlatformBranding"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/package-modules": {
         parameters: {
             query?: never;
@@ -7826,6 +7861,26 @@ export interface components {
             reason: string;
             version: number;
         };
+        PlatformBranding: {
+            systemName: string;
+            logoUrl: string;
+            faviconUrl: string;
+            footerText: string;
+        };
+        SavePlatformBranding: components["schemas"]["PlatformBranding"] & {
+            version: number;
+        };
+        PlatformBrandingSettings: {
+            branding: components["schemas"]["PlatformBranding"];
+            version: number;
+            canManage: boolean;
+        };
+        PlatformBrandingResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PlatformBranding"];
+        };
+        PlatformBrandingSettingsResponse: components["schemas"]["SuccessEnvelope"] & {
+            data: components["schemas"]["PlatformBrandingSettings"];
+        };
         ConsoleUser: {
             id: string;
             username: string;
@@ -10877,6 +10932,81 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             409: components["responses"]["ApiFailure"];
+        };
+    };
+    getPublicPlatformBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public platform branding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBrandingResponse"];
+                };
+            };
+        };
+    };
+    getPlatformBrandingSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revision and write capability */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBrandingSettingsResponse"];
+                };
+            };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+        };
+    };
+    savePlatformBranding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePlatformBranding"];
+            };
+        };
+        responses: {
+            /** @description Saved receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformBrandingSettingsResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
         };
     };
     listPackageModuleOptions: {
