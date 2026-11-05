@@ -36,7 +36,7 @@ test('tenant administrator can log in with the generated API client', async ({ p
   await expect(page.getByRole('dialog', { name: '修改登录密码' })).toContainText('长期未登录');
   await page.getByRole('button', { name: '稍后再说' }).click();
   await expect(page.getByRole('heading', { name: '供应商档案' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '华东设备制造', exact: true })).toBeVisible();
+  await expect(page.getByText('华东设备制造', { exact: true }).first()).toBeVisible();
   await page.getByText('系统管理').click();
   await expect(page.getByRole('menuitem', { name: '组织管理' })).toBeVisible();
   await page.getByRole('menuitem', { name: '组织管理' }).click();

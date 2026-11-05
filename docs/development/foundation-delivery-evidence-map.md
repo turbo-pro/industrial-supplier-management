@@ -27,7 +27,7 @@ B0-01 子任务：Maven 模块注册/依赖图、基础模块反向依赖、唯�
 | B1-07 | 数据范围/字段权限及 IAM 套餐范围约束 | 基础租户/范围/掩码样板；[账号范围](b1-user-scope-consistency-review.md)、[个人场站候选/首选](site-preference-review.md)及[请求级上下文](site-context-review.md)专项 | 总部汇总/明细/编辑分权及支持会话字段交集仍缺 |
 | B1-08 | iam/navigation、套餐菜单交集 | b1-package-permission-entitlement-review.md 历史证据 | 新模块/新增入口纳入菜单和后端联动验证 |
 | B1-09 | IAM 字典系统项/租户覆盖/自定义项 | ConfigurationService/Test 和初始化历史流程 | GAP-03 核心/扩展字段、表单布局、发布/历史版本未落地 |
-| B1-10 | IAM 配置、租户品牌和受控普通用户品牌读取 | b1-tenant-branding-review.md 历史证据 | Console 平台品牌、公告与完整配置分层仍缺 |
+| B1-10 | IAM 配置、租户品牌和受控普通用户品牌读取 | b1-tenant-branding-review.md 历史证据 | 2026-11-05 [Console平台品牌](platform-branding-review.md)基础四字段及公开/受权页面已验收；公告、主题/独立登录文案与完整配置分层仍缺 |
 | B1-11 | PackagePlanService 影响预览与 TenantService 状态 | 已有套餐降级/未来取消历史专项 | 注销保留/删除、安全审计与全部资源影响待补齐 |
 | B1-12 | 多个 IAM/Console 专项及浏览器运行入口 | 历史证据分散，未宣称本次整包复验 | 联合 SUPPORT-AT、SITE-AT、CFG、GAP-13/15 形成完整 Gate |
 
