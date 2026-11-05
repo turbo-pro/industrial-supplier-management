@@ -2298,6 +2298,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/configuration/dictionaries/{typeCode}/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                typeCode: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description system:dictionary:manage. Rename only the authenticated tenant display name; immutable system type code. Optimistic name version and atomic idempotency/audit. Other tenants and business enums unchanged. */
+        put: operations["renameTenantDictionary"];
+        post?: never;
+        /** @description Restore system display name, retaining an increasing tenant revision tombstone. Cannot reset revisions or affect other tenants. */
+        delete: operations["restoreTenantDictionaryName"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configuration/dictionaries/{typeCode}/items/{itemCode}": {
         parameters: {
             query?: never;
@@ -2308,6 +2328,7 @@ export interface paths {
         get?: never;
         put: operations["upsertDictionaryItem"];
         post?: never;
+        /** @description Restore a core item to inherited values or remove a custom effective item. Retains increasing revision tombstone; stale pre-restoration versions conflict. Removed custom metadata appears only in removedItems. */
         delete: operations["deleteDictionaryItemOverride"];
         options?: never;
         head?: never;
@@ -6998,14 +7019,26 @@ export interface components {
             status: "ACTIVE" | "DISABLED";
             version: number;
             /** @enum {string} */
-            source: "SYSTEM" | "TENANT_OVERRIDE" | "TENANT_CUSTOM";
+            source: "SYSTEM" | "TENANT_OVERRIDE" | "TENANT_CUSTOM" | "TENANT_REMOVED";
         };
+        /** @description Tenant effective configuration, not business-enum registration. System item codes and values are immutable. Item versions never reset after restoration; removed custom entries are absent from items and available only as disabled management tombstones in removedItems. New metadata may be absent in historical idempotency receipts; re-read before editing. */
         DictionaryType: {
+            systemName?: string;
+            /** @enum {string} */
+            nameSource?: "SYSTEM" | "TENANT_OVERRIDE";
+            nameVersion?: number;
+            canManage?: boolean;
+            removedItems?: components["schemas"]["DictionaryItem"][];
             code: string;
             name: string;
             tenantExtensible: boolean;
             items: components["schemas"]["DictionaryItem"][];
         };
+        UpdateDictionaryName: {
+            name: string;
+            version: number;
+        };
+        /** @description Use current item.version or removedItems.version. A never-overridden or never-created entry starts at request version zero; fresh saves return version one. Legacy stored revisions, including zero, are retained. Restore/remove increments rather than resets revision. */
         UpsertDictionaryItem: {
             code: string;
             label: string;
@@ -12539,6 +12572,9 @@ export interface operations {
                     "application/json": components["schemas"]["DictionaryTypeListResponse"];
                 };
             };
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            500: components["responses"]["ApiFailure"];
         };
     };
     getDictionary: {
@@ -12562,6 +12598,69 @@ export interface operations {
                 };
             };
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    renameTenantDictionary: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                typeCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDictionaryName"];
+            };
+        };
+        responses: {
+            /** @description Effective tenant dictionary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryTypeResponse"];
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
+        };
+    };
+    restoreTenantDictionaryName: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header: {
+                /** @description Unique request key retained for 24 hours; retries must use the same request body. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                typeCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inherited dictionary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryTypeResponse"];
+                };
+            };
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            409: components["responses"]["ApiFailure"];
         };
     };
     upsertDictionaryItem: {

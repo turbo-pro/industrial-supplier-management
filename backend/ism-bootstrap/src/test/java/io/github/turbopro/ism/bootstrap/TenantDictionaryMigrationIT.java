@@ -1,0 +1,13 @@
+package io.github.turbopro.ism.bootstrap;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.*;
+import static org.assertj.core.api.Assertions.*;
+@Testcontainers
+class TenantDictionaryMigrationIT {
+ @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.0").withDatabaseName("dictionary_upgrade").withUsername("ism").withPassword("ism");
+ @Test void v91UpgradePreservesOverridesBusinessAndChecksum(){var ds=new DriverManagerDataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword());var j=new JdbcTemplate(ds);Flyway.configure().dataSource(ds).locations("classpath:db/migration").target("91").load().migrate();j.update("INSERT INTO plt_tenant(id,tenant_code,tenant_name,status,initialization_status) VALUES(90001,'DICT-OLD','原租户','ACTIVE','READY')");j.update("INSERT INTO iam_tenant(id,tenant_code,tenant_name,status) VALUES(90001,'DICT-OLD','原租户','ACTIVE')");j.update("INSERT INTO iam_organization(id,tenant_id,organization_code,organization_name,organization_type,status) VALUES(90002,90001,'HQ','原总部','HEADQUARTERS','ACTIVE')");j.update("INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,supplier_type,created_by,updated_by) VALUES(90003,90001,90002,'OLD','原档案','MANUFACTURER',1,1)");j.update("INSERT INTO cfg_tenant_dictionary_item(id,tenant_id,type_code,item_code,item_label,item_value,sort_order,status,version) VALUES(90004,90001,'COMMON_STATUS','ACTIVE','原覆盖','LEGACY-VALUE',42,'DISABLED',7)");var before=j.queryForMap("SELECT * FROM sup_supplier WHERE id=90003");var override=j.queryForMap("SELECT item_label,item_value,sort_order,status,version FROM cfg_tenant_dictionary_item WHERE id=90004");var f=Flyway.configure().dataSource(ds).locations("classpath:db/migration").load();f.migrate();f.validate();assertThat(j.queryForMap("SELECT * FROM sup_supplier WHERE id=90003")).isEqualTo(before);assertThat(j.queryForMap("SELECT item_label,item_value,sort_order,status,version FROM cfg_tenant_dictionary_item WHERE id=90004")).isEqualTo(override);assertThat(j.queryForObject("SELECT overridden FROM cfg_tenant_dictionary_item WHERE id=90004",Integer.class)).isOne();assertThat(j.queryForObject("SELECT COUNT(*) FROM cfg_tenant_dictionary_type",Integer.class)).isZero();assertThat(j.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='25'",Integer.class)).isEqualTo(1394665689);assertThat(f.migrate().migrationsExecuted).isZero();}
+}

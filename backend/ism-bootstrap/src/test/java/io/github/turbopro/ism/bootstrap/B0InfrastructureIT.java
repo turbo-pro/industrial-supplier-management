@@ -1752,7 +1752,7 @@ class B0InfrastructureIT {
                     .singleElement().extracting(ConfigurationModels.DictionaryItemView::source)
                     .isEqualTo("TENANT_CUSTOM");
             configurationService.upsertItem("SUPPLIER_TYPE", new ConfigurationModels.UpsertDictionaryItem(
-                    "LOGISTICS", "物流与运输供应商", "LOGISTICS", 40, "ACTIVE", 0));
+                    "LOGISTICS", "物流与运输供应商", "LOGISTICS", 40, "ACTIVE", 1));
             assertThatThrownBy(() -> configurationService.upsertItem("SUPPLIER_TYPE",
                     new ConfigurationModels.UpsertDictionaryItem(
                             "LOGISTICS", "过期写入", "LOGISTICS", 40, "ACTIVE", 0)))

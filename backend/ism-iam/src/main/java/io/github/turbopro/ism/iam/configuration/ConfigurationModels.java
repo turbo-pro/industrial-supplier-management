@@ -10,7 +10,10 @@ import java.util.List;
 
 public final class ConfigurationModels {
     private ConfigurationModels() {}
-    public record DictionaryTypeView(String code,String name,boolean tenantExtensible,List<DictionaryItemView> items) {}
+    public record DictionaryTypeView(String code,String name,boolean tenantExtensible,List<DictionaryItemView> items,
+        String systemName,String nameSource,int nameVersion,boolean canManage,List<DictionaryItemView> removedItems) {}
+    public record DictionaryNameRow(String displayName,boolean overridden,int version) {}
+    public record UpdateDictionaryName(@NotBlank @Size(max=100) String name,@NotNull @PositiveOrZero Integer version) {}
     public record DictionaryItemView(String id,String code,String label,String value,int sortOrder,String status,int version,String source) {}
     public record UpsertDictionaryItem(@NotBlank @Pattern(regexp="[A-Z][A-Z0-9_]{1,63}") String code,
         @NotBlank @Size(max=100) String label,@NotBlank @Size(max=200) String value,int sortOrder,

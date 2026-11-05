@@ -2293,6 +2293,9 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Effective system and tenant dictionaries, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeListResponse' } } } }
+        '401': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '500': { $ref: '#/components/responses/ApiFailure' }
   /configuration/dictionaries/{typeCode}:
     get:
       operationId: getDictionary
@@ -2302,6 +2305,34 @@ paths:
       responses:
         '200': { description: Effective dictionary, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeResponse' } } } }
         '404': { $ref: '#/components/responses/ApiFailure' }
+  /configuration/dictionaries/{typeCode}/name:
+    parameters: [{ name: typeCode, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: renameTenantDictionary
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      description: system:dictionary:manage. Rename only the authenticated tenant display name; immutable system type code. Optimistic name version and atomic idempotency/audit. Other tenants and business enums unchanged.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateDictionaryName' } } } }
+      responses:
+        '200': { description: Effective tenant dictionary, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeResponse' } } } }
+        '400': { $ref: '#/components/responses/ApiFailure' }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
+    delete:
+      operationId: restoreTenantDictionaryName
+      tags: [Tenant Configuration]
+      security: [{ bearerAuth: [] }]
+      description: Restore system display name, retaining an increasing tenant revision tombstone. Cannot reset revisions or affect other tenants.
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Inherited dictionary, content: { application/json: { schema: { $ref: '#/components/schemas/DictionaryTypeResponse' } } } }
+        '403': { $ref: '#/components/responses/ApiFailure' }
+        '404': { $ref: '#/components/responses/ApiFailure' }
+        '409': { $ref: '#/components/responses/ApiFailure' }
   /configuration/dictionaries/{typeCode}/items/{itemCode}:
     put:
       operationId: upsertDictionaryItem
@@ -2318,6 +2349,7 @@ paths:
         '422': { $ref: '#/components/responses/ApiFailure' }
     delete:
       operationId: deleteDictionaryItemOverride
+      description: Restore a core item to inherited values or remove a custom effective item. Retains increasing revision tombstone; stale pre-restoration versions conflict. Removed custom metadata appears only in removedItems.
       tags: [Tenant Configuration]
       security: [{ bearerAuth: [] }]
       parameters:
@@ -5571,17 +5603,30 @@ components:
         sortOrder: { type: integer }
         status: { type: string, enum: [ACTIVE, DISABLED] }
         version: { type: integer }
-        source: { type: string, enum: [SYSTEM, TENANT_OVERRIDE, TENANT_CUSTOM] }
+        source: { type: string, enum: [SYSTEM, TENANT_OVERRIDE, TENANT_CUSTOM, TENANT_REMOVED] }
     DictionaryType:
       type: object
       required: [code, name, tenantExtensible, items]
+      description: Tenant effective configuration, not business-enum registration. System item codes and values are immutable. Item versions never reset after restoration; removed custom entries are absent from items and available only as disabled management tombstones in removedItems. New metadata may be absent in historical idempotency receipts; re-read before editing.
       properties:
+        systemName: { type: string }
+        nameSource: { type: string, enum: [SYSTEM, TENANT_OVERRIDE] }
+        nameVersion: { type: integer, minimum: 0 }
+        canManage: { type: boolean }
+        removedItems: { type: array, items: { $ref: '#/components/schemas/DictionaryItem' } }
         code: { type: string }
         name: { type: string }
         tenantExtensible: { type: boolean }
         items: { type: array, items: { $ref: '#/components/schemas/DictionaryItem' } }
+    UpdateDictionaryName:
+      type: object
+      required: [name, version]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        version: { type: integer, minimum: 0 }
     UpsertDictionaryItem:
       type: object
+      description: Use current item.version or removedItems.version. A never-overridden or never-created entry starts at request version zero; fresh saves return version one. Legacy stored revisions, including zero, are retained. Restore/remove increments rather than resets revision.
       required: [code, label, value, sortOrder, version]
       properties:
         code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }

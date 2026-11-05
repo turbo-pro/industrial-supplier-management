@@ -13,6 +13,8 @@ public interface SystemConfigurationMapper {
     ConfigurationModels.DictionaryTypeRow type(String typeCode);
     @Select("SELECT COUNT(*) FROM sys_dictionary_item WHERE type_code=#{typeCode} AND item_code=#{itemCode}")
     int systemItemExists(String typeCode,String itemCode);
+    @Select("SELECT item_value FROM sys_dictionary_item WHERE type_code=#{typeCode} AND item_code=#{itemCode}")
+    String systemItemValue(String typeCode,String itemCode);
     @Select("SELECT value_type FROM cfg_setting_definition WHERE setting_key=#{key} AND status='ACTIVE'")
     String settingType(String key);
     @Select("SELECT setting_key,value_type,default_value FROM cfg_setting_definition WHERE status='ACTIVE' ORDER BY setting_key")
