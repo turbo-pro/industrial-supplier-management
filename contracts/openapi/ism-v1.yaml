@@ -626,7 +626,7 @@ paths:
       operationId: readSupportWorkspaceSupplier
       tags: [Tenant Support]
       security: []
-      description: Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant.
+      description: Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant. A denied read is attributed to the operator only if the workspace credential still proves ownership.
       parameters:
       - name: sessionId
         in: path

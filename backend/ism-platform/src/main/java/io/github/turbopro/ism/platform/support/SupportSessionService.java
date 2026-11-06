@@ -160,6 +160,19 @@ public class SupportSessionService {
         }
     }
 
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void auditWorkspaceReadDenied(long sessionId, String access, long supplierId) {
+        var candidate = sessions.workspaceCandidate(sessionId, digest(access, WORKSPACE_ACCESS));
+        if (candidate == null) return; // Unverified credentials must not attribute actions to an operator.
+        var request = requests.get(candidate.requestId());
+        try (var operator = TenantContext.open(0, candidate.operatorId())) {
+            audit.append(new AuditService.AuditCommand("SUPPORT_SUPPLIER_READ_DENIED", "SUPPLIER", supplierId,
+                    null, Map.of(), Map.of("sessionId", Long.toString(sessionId),
+                    "targetTenantId", Long.toString(request.targetTenantId()), "result", "DENIED",
+                    "surface", "SUPPORT_WORKSPACE"), null, null));
+        }
+    }
+
     private TenantSupportModels.Authorization workspaceGrant(SupportSessionMapper.Entry entry) {
         // IAM needs a narrowly scoped caller for role lookup; never install a login or permission snapshot.
         try (var lookup = TenantContext.open(0, entry.operatorId())) {

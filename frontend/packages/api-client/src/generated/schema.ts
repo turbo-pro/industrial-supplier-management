@@ -235,7 +235,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant. */
+        /** @description Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant. A denied read is attributed to the operator only if the workspace credential still proves ownership. */
         post: operations["readSupportWorkspaceSupplier"];
         delete?: never;
         options?: never;

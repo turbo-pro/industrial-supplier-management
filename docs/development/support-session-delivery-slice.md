@@ -62,3 +62,5 @@ Spring Boot 真实 HTTP 与隔离 MySQL 1/1、通用 API 契约 13/13 通过。�
 最终双端 Chrome、Spring Boot 和隔离 MySQL 1/1 通过（`node scripts/verify-reminder-e2e.mjs --support-workspace`）。验证独立直开拒绝、可信跨源交接、opener 切断、凭证未进入页面/URL/Cookie/存储、键盘读取、375/768/1024/1440px 无横向溢出、主动退出后旧凭证重放拒绝，以及第二次会话中租户撤回后页面清屏、Console 撤销和最终库中两次读取/撤销审计。干净暂存快照的管理端和 Console 生产构建通过。证据：`output/playwright/support-workspace-e2e-1793976791046/database-assertions.txt`；截图：`output/playwright/tenant-support/workspace-active.png`。
 
 GAP-01 不关闭。下一项复核独立工作台拒绝审计：只有可由凭证验证归属的请求才记到真实平台操作者；无法验证身份的失败应由通用安全事件处理。仍须补生产代理配置验收及 PRD 68 各验收项整体验证。
+
+2026-11-06 工作台拒绝审计切片（SUPPORT-AT-009/011）：业务读取返回 403 后，独立审计事务只对仍能匹配活动工作台摘要的凭证记录真实平台操作者、目标租户、对象、会话和 trace；错秘密或已清除摘要的重放不归因给操作者。审计不记录凭证和业务字段，无迁移或 UI 变更；可回退审计代码并保留历史事件。真 HTTP 与隔离 MySQL 1/1、通用契约 13/13 通过：撤回后带可验证凭证的拒绝恰好落一条，错误秘密和退出后的重放不产生冒名记录。OpenAPI 与生成客户端一致。证据：`output/support-workspace-denial/run.log`。

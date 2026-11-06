@@ -48,7 +48,14 @@ public class SupportWorkspaceController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @Valid @RequestBody SupportSessionController.Access body) {
         requireDedicatedIdentity(authorization);
-        return reply(suppliers.readWorkspace(sessionId, body.accessSecret(), supplierId));
+        try {
+            return reply(suppliers.readWorkspace(sessionId, body.accessSecret(), supplierId));
+        } catch (ApiException failure) {
+            if (failure.errorCode() == CommonErrorCode.FORBIDDEN) {
+                sessions.auditWorkspaceReadDenied(sessionId, body.accessSecret(), supplierId);
+            }
+            throw failure;
+        }
     }
 
     @PostMapping("/exit")

@@ -90,6 +90,7 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 """, Integer.class, sessionId)).isOne();
         assertThat(jdbc.queryForObject("SELECT access_digest FROM plt_support_session WHERE id=?",
                 String.class, sessionId)).hasSize(64).isNotEqualTo(access);
+        assertThat(post(read, Map.of("accessSecret", "X".repeat(43))).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(post(read, body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(ok(post(workspace + "/exit", body)).path("status").asText()).isEqualTo("REVOKED");
         assertThat(post(read, body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -105,6 +106,15 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 WHERE action='SUPPORT_SESSION_REVOKE' AND object_id=? AND tenant_id=0
                   AND JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.surface'))='SUPPORT_WORKSPACE'
                 """, Integer.class, sessionId)).isOne();
+        var denial = jdbc.queryForMap("""
+                SELECT operator_id, trace_id, after_summary FROM sys_audit_event
+                WHERE action='SUPPORT_SUPPLIER_READ_DENIED' AND object_id=? AND tenant_id=0
+                """, supplierId);
+        assertThat(denial.get("operator_id").toString()).isEqualTo(identity.path("operatorId").asText());
+        assertThat(denial.get("trace_id").toString()).isNotBlank();
+        assertThat(denial.get("after_summary").toString())
+                .contains(sessionId, Long.toString(tenant.tenant()), "SUPPORT_WORKSPACE", "DENIED")
+                .doesNotContain(access, entry, browser, "SUP-WORKSPACE", "PRIVATE");
     }
 
     private ResponseEntity<JsonNode> post(String path, Object body) {
