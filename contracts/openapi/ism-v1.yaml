@@ -302,6 +302,267 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TenantSupportDecision'
+  /console/support-requests/{requestId}/sessions:
+    post:
+      operationId: reserveSupportSession
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires the original Console operator and an enabled support session HTTP feature.
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [sessionId]
+                      properties:
+                        sessionId:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/entry-token:
+    post:
+      operationId: issueSupportEntryToken
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires the original Console operator and an enabled support session HTTP feature.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [browserSecret]
+              properties:
+                browserSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [entryToken]
+                      properties:
+                        entryToken:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/exchange:
+    post:
+      operationId: exchangeSupportEntryToken
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires the original Console operator and an enabled support session HTTP feature.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [browserSecret, entryToken]
+              properties:
+                browserSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+                entryToken:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [accessSecret]
+                      properties:
+                        accessSecret:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read:
+    post:
+      operationId: readSupportSupplier
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires the original Console operator and an enabled support session HTTP feature.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: supplierId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessSecret]
+              properties:
+                accessSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      description: Approved fields only. Empty for absent or out-of-scope suppliers.
+                      properties:
+                        id:
+                          type: string
+                        code:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+                        status:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/revoke:
+    post:
+      operationId: revokeSupportSession
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires the original Console operator and an enabled support session HTTP feature.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [status]
+                      properties:
+                        status:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-requests/{id}/authorization:
     get:
       operationId: getSupportAuthorization

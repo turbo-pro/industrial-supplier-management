@@ -1,5 +1,7 @@
 # 自动续推交接
 
+2026-11-06：[B1 支持会话 HTTP](support-session-delivery-slice.md)接入默认关闭的 Console 接口及生成客户端。隔离库真实 HTTP 定向 1/1 通过。下一步为 Console 操作页及浏览器闭环。
+
 2026-11-06：[B1 支持供应商读取](support-session-delivery-slice.md)接入内部字段投影与实际读取审计，隔离库 1/1 通过。下一步接入受控 HTTP 和支持页面。
 
 2026-11-06：[B1 支持会话运行期](support-session-delivery-slice.md)落地 V96 与内部访问秘密、实时范围交集和主动撤销，隔离库定向 1/1 通过。下一切片接入供应商只读投影与访问审计。
