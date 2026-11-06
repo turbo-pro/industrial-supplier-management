@@ -30,3 +30,7 @@ Console 会话记录专项：真实 HTTP 和隔离 MySQL 2/2、通用 API 契约
 专项结果：隔离 MySQL 真 HTTP 1/1、通用 API 契约 13/13、V96→V97 升级 1/1、双端 Chrome 和最终库 1/1，Console 构建通过。升级保留原事件和 V25 校验和；真实页面读取历史会话日志，确认只有裁剪字段。证据：`output/support-access-log/run.log`、`output/support-access-log/upgrade.log`、`output/playwright/support-workspace-e2e-1793979511718/database-assertions.txt`。
 
 2026-11-06 错租户告警切片（SUPPORT-AT-004）：Console 读取在当前授权和有效凭证校验通过后核对真实目标租户。错租户保持通用 403；会话审计仅在确知归属时关联真实租户，服务端输出 `SUPPORT_TENANT_MISMATCH` 警告。错误凭证不会触发该分类告警。无迁移及 UI 变更，回滚应用可保留历史事件。隔离 MySQL 真实 HTTP 1/1、契约 13/13 通过，验证正确读取、错租户响应无真实租户信息、单条脱敏告警及对应会话日志。证据：`output/support-tenant-mismatch/run.log`。下一项复核普通员工写入、搜索、下载和导出接口的直接越权路径。
+
+2026-11-07 员工 API 权限边界复验（B1-06/07/12、SUPPORT-AT-002/005/006）。两类有效支持凭证和原申请人的 Console 令牌分别调用员工供应商详情、状态变更、全局搜索、文件内容及任务列表，共 15 次请求均返回 401 或 403，响应无数据和下载头。员工正向读取成功，隔离库确认供应商状态及版本未变化。HTTP 1/1、通用契约 13/13。首次运行因 Docker 守护进程未启动中断，启动后重跑通过。证据见 `output/support-employee-boundary/recheck.log`。
+
+复验范围为现有真实路由。员工生产导出入口仍待实现及专项验证，文件和任务入口验收不计为导出验收。此切片仅新增回归断言，可单独回滚提交。下一项使用实际外租户供应商验证 SUPPORT-AT-011。

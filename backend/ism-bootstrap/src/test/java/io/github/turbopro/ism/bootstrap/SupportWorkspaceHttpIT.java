@@ -81,6 +81,21 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
         assertThat(ok(post(workspace + "/suppliers/" + (supplierId + 1) + "/read", body)).isEmpty()).isTrue();
         assertThat(post(workspace + "/exit", Map.of("accessSecret", consoleAccess)).getStatusCode())
                 .isEqualTo(HttpStatus.FORBIDDEN);
+        // These credentials have already succeeded on their own support surfaces.
+        // Exercise real employee routes while both sessions are still active.
+        for (String credential : java.util.List.of(access, consoleAccess, owner)) {
+            assertDenied("GET", "/api/suppliers/" + supplierId, credential, null);
+            assertDenied("POST", "/api/suppliers/" + supplierId + "/status", credential,
+                    Map.of("status", "ACTIVE", "version", 0, "reason", "support boundary probe"));
+            assertDenied("POST", "/api/search", credential, Map.of("keyword", "SUP-WORKSPACE"));
+            assertDenied("GET", "/api/files/1/content", credential, null);
+            assertDenied("GET", "/api/tasks", credential, null);
+        }
+        assertThat(ok(request("GET", "/api/suppliers/" + supplierId, employee, null, null))
+                .path("status").asText()).isEqualTo("DRAFT");
+        assertThat(jdbc.queryForObject("SELECT version FROM sup_supplier WHERE id=?",
+                Integer.class, supplierId)).isZero();
+
         var consent = detail(employee, requestId);
         ok(decide(employee, requestId, "revoke", "workspace-revoke-" + requestId, decision(consent)));
         assertThat(post(workspace + "/identity", body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -129,6 +144,13 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
         assertThat(denial.get("after_summary").toString())
                 .contains(sessionId, Long.toString(tenant.tenant()), "SUPPORT_WORKSPACE", "DENIED")
                 .doesNotContain(access, entry, browser, "SUP-WORKSPACE", "PRIVATE");
+    }
+
+    private void assertDenied(String method, String path, String credential, Object body) {
+        var response = request(method, path, credential, null, body);
+        assertThat(response.getStatusCode().value()).as("%s %s", method, path).isIn(401, 403);
+        assertThat(response.getHeaders().getFirst("Content-Disposition")).isNull();
+        assertThat(response.getBody().has("data")).isFalse();
     }
 
     private ResponseEntity<JsonNode> post(String path, Object body) {
