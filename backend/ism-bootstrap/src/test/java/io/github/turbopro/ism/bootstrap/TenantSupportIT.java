@@ -32,7 +32,7 @@ class TenantSupportIT extends SiteProjectSupport {
 
  @Autowired SupportSessionService supportSessions;
 
- @Test void pendingSessionBindsOwnerConsentAndFrozenScope() {
+ @Test void pendingSessionBindsOwnerConsentAndFrozenScope() throws Exception {
   var f = fixture();
   String tenantToken = tenantLogin(f, "pref-admin");
   String id = approved(f);
@@ -61,11 +61,56 @@ class TenantSupportIT extends SiteProjectSupport {
       """, Integer.class, sessionId, requestId, Long.parseLong(approved.path("consent").path("id").asText()), owner, f.tenant())).isOne();
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_RESERVE' AND object_id=?",
       Integer.class, sessionId)).isOne();
+  String browser = "A".repeat(43);
+  String entry;
+  long revokedSession;
+  String revokedEntry;
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   entry = supportSessions.issueEntry(sessionId, browser);
+   assertThatThrownBy(() -> supportSessions.issueEntry(sessionId, browser)).hasMessageContaining("不可用");
+   assertThatThrownBy(() -> supportSessions.exchangeEntry(sessionId, entry, "B".repeat(43))).hasMessageContaining("不可用");
+   revokedSession = supportSessions.createPending(requestId);
+   revokedEntry = supportSessions.issueEntry(revokedSession, browser);
+   long expiredSession = supportSessions.createPending(requestId);
+   String expired = supportSessions.issueEntry(expiredSession, browser);
+   jdbc.update("UPDATE plt_support_session SET entry_expires_at=UTC_TIMESTAMP(3) WHERE id=?", expiredSession);
+   assertThatThrownBy(() -> supportSessions.exchangeEntry(expiredSession, expired, browser)).hasMessageContaining("不可用");
+  }
+  assertThat(jdbc.queryForObject("SELECT entry_digest FROM plt_support_session WHERE id=?", String.class, sessionId))
+      .hasSize(64).isNotEqualTo(entry);
+  var start = new CountDownLatch(1);
+  var workers = Executors.newFixedThreadPool(2);
+  Callable<Boolean> redeem = () -> {
+   start.await();
+   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+    supportSessions.exchangeEntry(sessionId, entry, browser);
+    return true;
+   } catch (io.github.turbopro.ism.common.api.error.ApiException e) {
+    assertThat(e).hasMessageContaining("不可用");
+    return false;
+   }
+  };
+  try {
+   var first = workers.submit(redeem);
+   var second = workers.submit(redeem);
+   start.countDown();
+   assertThat(List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)))
+       .containsExactlyInAnyOrder(true, false);
+  } finally {
+   workers.shutdownNow();
+  }
+  assertThat(jdbc.queryForObject("""
+      SELECT COUNT(*) FROM plt_support_session WHERE id=? AND status='ACTIVE'
+        AND entry_digest IS NULL AND browser_digest IS NULL AND activated_at IS NOT NULL
+      """, Integer.class, sessionId)).isOne();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_ACTIVATE' AND object_id=?",
+      Integer.class, sessionId)).isOne();
   ok(decide(tenantToken, id, "revoke", "reserve-revoke-" + id, decision(detail(tenantToken, id))));
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");
+   assertThatThrownBy(() -> supportSessions.exchangeEntry(revokedSession, revokedEntry, browser)).hasMessageContaining("不可用");
   }
-  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=?",
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=? AND status='ACTIVE'",
       Integer.class, requestId)).isOne();
  }
 }
