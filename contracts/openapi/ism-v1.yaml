@@ -980,6 +980,59 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '422':
           $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/terminate:
+    post:
+      operationId: terminateSupportSession
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires platform:support:terminate in Console. Revokes another operator's session and clears all credentials atomically with an audit event. Repeating a revoked session is a no-op. Feature switch remains required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [status]
+                      properties:
+                        status:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-requests/{id}/authorization:
     get:
       operationId: getSupportAuthorization

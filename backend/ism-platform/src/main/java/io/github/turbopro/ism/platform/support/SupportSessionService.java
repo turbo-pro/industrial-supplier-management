@@ -237,6 +237,26 @@ public class SupportSessionService {
                 sessionId, null, Map.of(), Map.of(), null, null));
     }
 
+    @Transactional
+    public void terminate(long sessionId, String reason) {
+        var actor = TenantContext.require();
+        if (actor.tenantId() != 0 || !AuthorizationContext.require().hasAction("platform:support:terminate")) {
+            throw unavailable();
+        }
+        if (reason == null || reason.isBlank() || reason.length() > 1000) {
+            throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        }
+        var state = sessions.lockState(sessionId);
+        if (state == null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        if ("REVOKED".equals(state)) return;
+        var entry = sessions.entry(sessionId);
+        if (sessions.revoke(sessionId, entry.operatorId()) != 1) throw unavailable();
+        audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_TERMINATE", "SUPPORT_SESSION",
+                sessionId, null, Map.of(), Map.of("reason", reason.strip(),
+                "originalOperatorId", Long.toString(entry.operatorId()),
+                "targetTenantId", Long.toString(requests.get(entry.requestId()).targetTenantId())), null, null));
+    }
+
     private TenantSupportModels.Authorization revalidate(long sessionId) {
         var actor = requireOperator();
         var entry = sessions.entry(sessionId);

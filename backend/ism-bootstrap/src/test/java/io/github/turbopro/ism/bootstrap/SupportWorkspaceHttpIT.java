@@ -208,6 +208,46 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 Integer.class, sessionId)).isZero();
     }
 
+    @Test
+    void independentPlatformAdminTerminatesActiveWorkspaceAndPendingEntry() {
+        var tenant = fixture();
+        String employee = tenantLogin(tenant, "pref-admin"), owner = login(false), admin = login(true);
+        String requestId = approved(tenant);
+        save(employee, tenant.role(), 0, true);
+        ok(decide(employee, requestId, "approve", "terminate-" + requestId, decision(detail(employee, requestId))));
+        String reservations = "/api/console/support-requests/" + requestId + "/sessions";
+        for (boolean activate : java.util.List.of(true, false)) {
+            String id = ok(request("POST", reservations, owner, null, null)).path("sessionId").asText();
+            String console = "/api/console/support-sessions/" + id;
+            String workspace = "/api/support-workspace/" + id;
+            String browser = "T".repeat(43);
+            String entry = ok(request("POST", console + "/workspace-entry-token", owner, null,
+                    Map.of("browserSecret", browser))).path("entryToken").asText();
+            var exchange = Map.of("browserSecret", browser, "entryToken", entry);
+            String secret = activate ? ok(post(workspace + "/exchange", exchange)).path("accessSecret").asText() : null;
+            var body = Map.of("reason", "安全事件人工终止");
+            assertDenied("POST", console + "/terminate", owner, body);
+            assertDenied("POST", console + "/terminate", employee, body);
+            assertThat(request("POST", console + "/terminate", admin, null, Map.of("reason", " "))
+                    .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                assertThat(ok(request("POST", console + "/terminate", admin, null, body))
+                        .path("status").asText()).isEqualTo("REVOKED");
+            }
+            assertThat(post(workspace + "/exchange", exchange).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            if (activate) assertThat(post(workspace + "/identity", Map.of("accessSecret", secret))
+                    .getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE id=? AND status='REVOKED' AND access_digest IS NULL AND entry_digest IS NULL AND browser_digest IS NULL",
+                    Integer.class, id)).isOne();
+            var events = jdbc.queryForList("SELECT operator_id, trace_id, after_summary FROM sys_audit_event WHERE object_id=? AND action='SUPPORT_SESSION_TERMINATE'", id);
+            assertThat(events).hasSize(1);
+            assertThat(events.get(0).get("trace_id").toString()).isNotBlank();
+            assertThat(events.get(0).get("after_summary").toString()).contains("安全事件人工终止", "originalOperatorId", Long.toString(tenant.tenant())).doesNotContain(entry, browser);
+            assertThat(events.get(0).get("operator_id").toString()).isNotEqualTo(jdbc.queryForObject(
+                    "SELECT CAST(platform_operator_id AS CHAR) FROM plt_support_session WHERE id=?", String.class, id));
+        }
+    }
+
     private void assertDenied(String method, String path, String credential, Object body) {
         var response = request(method, path, credential, null, body);
         assertThat(response.getStatusCode().value()).as("%s %s", method, path).isIn(401, 403);

@@ -122,6 +122,16 @@ public class SupportSessionController {
         return reply(Map.of("status", "REVOKED"));
     }
 
+    public record Termination(@NotBlank @jakarta.validation.constraints.Size(max = 1000) String reason) {}
+
+    @RequiresPermission("platform:support:terminate")
+    @PostMapping("/support-sessions/{sessionId}/terminate")
+    ResponseEntity<ApiResponse<Map<String, String>>> terminate(@PathVariable long sessionId,
+            @Valid @RequestBody Termination body) {
+        sessions.terminate(sessionId, body.reason());
+        return reply(Map.of("status", "REVOKED"));
+    }
+
     private ResponseEntity<ApiResponse<Map<String, String>>> reply(Map<String, String> data) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(data));
     }

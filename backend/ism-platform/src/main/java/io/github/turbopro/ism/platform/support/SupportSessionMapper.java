@@ -41,6 +41,9 @@ public interface SupportSessionMapper {
             """)
     List<Summary> listOwn(long requestId, long operatorId, Long before, LocalDateTime cursorTime);
 
+    @Select("SELECT status FROM plt_support_session WHERE id=#{id} FOR UPDATE")
+    String lockState(long id);
+
     record Entry(long requestId, long decisionId, long operatorId, String scopeJson) {}
 
     @Select("""

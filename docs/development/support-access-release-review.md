@@ -38,3 +38,9 @@ Console 会话记录专项：真实 HTTP 和隔离 MySQL 2/2、通用 API 契约
 2026-11-07 SUPPORT-AT-011 双租户实证。隔离库准备两家租户及各自供应商，外租户员工能读取本租户的真实记录。目标租户支持会话持相同外租户供应商 ID 查询时只得到空投影，日志标记不可见。真实 HTTP 1/1、契约 13/13。仅新增验收数据和断言，可独立回滚。证据见 `output/support-foreign-supplier/run.log`。GAP-01 保持开放，后续复核集团管理员的组织权限与 Console 入口隔离。
 
 2026-11-07 SUPPORT-AT-012 验收范围（B1-06/07/12）。使用总部账号与仅获第一工厂组织范围的集团用户，验证总部可读两个工厂、受限用户可读下属车间但不可读第二工厂；两种员工身份均不能查询或创建 Console 支持会话、签发进入令牌、读取支持日志或撤销平台会话。仅修改真实 HTTP 集成测试及本专项/交接记录，无迁移、产品接口、页面或客户端契约变化；回滚本次测试提交即可。真实 Spring Boot HTTP 与隔离 MySQL 1/1、API 契约 13/13 通过，10 次 Console 负向请求均拒绝，数据库确认未创建额外会话且没有撤销事件。Review 核对了有效员工凭证、真实业务数据正向对照和拒绝后数据库状态。证据 `output/support-group-boundary/run.log`；Testcontainers 自建数据库已自动清理。GAP-01 仍开放，下一项实施独立平台终止权限和审计，不重复扩充已验证的身份隔离用例。
+
+2026-11-07 平台强制终止（GAP-01，B1-06/07/12，SUPPORT-AT-007/009）。新增独立 `platform:support:terminate` 权限，V98 仅授予内置平台管理员角色，不向支持申请角色授予。`POST /console/support-sessions/{sessionId}/terminate` 要求 Console 身份、独立权限和 1–1000 字符非空原因；支持功能开关仍适用。原子回收待兑换及活动会话全部秘密，状态沿用 REVOKED；重复调用为无操作。新增 SUPPORT_SESSION_TERMINATE 审计记录实际管理员、原申请人、目标租户、原因和 trace，不伪造原申请人操作。Console 支持工作台提供按会话 ID 输入、原因、二次确认、取消及结果未确认时重试。
+
+验收：真实 Spring Boot/隔离 MySQL 1/1，覆盖活动和待兑换两种会话、申请人及员工拒绝、空原因拒绝、重复终止、旧凭证重放和唯一审计；API 契约 13/13。Console 构建通过，Chrome 页面测试 2/2 验证有权/无权、确认前不提交、取消无副作用和成功反馈。页面测试使用模拟接口，不记作真实双端浏览器联调；V97 旧库升级和真实浏览器联调仍需补验。证据 `output/termination-http.log`、`output/termination-ui-build.log`、`output/termination-ui-tests.log`。Review 核对终止更新持行锁、权限与申请权分离、审计和回收同事务。未改旧 V25，也未修改真实开发库。
+
+范围为 V98、平台会话服务/Mapper/控制器、OpenAPI 和生成客户端、Console 组件与专项测试。回滚应用和页面可保留 V98 权限及已撤销状态/审计，不回滚数据或 repair。默认支持功能关闭。独立审计角色、会话详情/可见列表、真实终止页面联调、升级验证仍是后续项，不将本切片计作 GAP-01 完成。

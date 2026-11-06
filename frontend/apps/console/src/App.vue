@@ -3,6 +3,7 @@ import { nextTick, reactive, ref } from 'vue';
 import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
 import SupportRequests from './SupportRequests.vue';
+import SupportTermination from './SupportTermination.vue';
 import TenantInitialization from './TenantInitialization.vue';
 import TenantCreation from './TenantCreation.vue';
 import PackageAuthoring from './PackageAuthoring.vue';
@@ -334,6 +335,7 @@ if (accessToken.value) {
         <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
       </table><p v-else>当前没有租户列表查看权限，创建操作仍需单独授权。</p></div><p v-if="currentUser?.permissions.includes('platform:tenant:view') && tenants.length===0" class="tenant-empty">当前未加载到租户记录。</p>
     </section>
+    <SupportTermination v-if="supportOpen && currentUser?.permissions.includes('platform:support:terminate')" :token="accessToken!" />
     <SupportRequests v-if="supportOpen" :token="accessToken!" :tenant="supportTenant" :can-request="currentUser?.permissions.includes('platform:support:request')??false" :can-review="currentUser?.permissions.includes('platform:support:review')??false" @close="supportOpen=false;supportTenant=undefined" />
     <TenantCreation v-if="createTenantOpen" :token="accessToken" @close="createTenantOpen=false" @created="tenantCreated" />
     <TenantSiteUpgrade v-if="upgradeTarget" :key="upgradeTarget.id" :tenant="upgradeTarget" :token="accessToken" @close="upgradeTarget = null; loadWorkspace()" @done="upgradeTarget = null; message = '已升级为多场站，原场站及历史归属保持不变'; loadWorkspace()" />
