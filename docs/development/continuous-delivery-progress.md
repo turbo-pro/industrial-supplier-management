@@ -1,5 +1,7 @@
 # 自动续推交接
 
+2026-11-06：[B1 Console 支持会话](support-session-delivery-slice.md)接入只读业务操作与可安全重试的撤销；真实浏览器、Spring Boot 和隔离 MySQL 1/1 通过，默认仍关闭。下一步补凭证拒绝审计，GAP-01 整包保持开放。
+
 2026-11-06：[B1 支持会话 HTTP](support-session-delivery-slice.md)接入默认关闭的 Console 接口及生成客户端。隔离库真实 HTTP 定向 1/1 通过。下一步为 Console 操作页及浏览器闭环。
 
 2026-11-06：[B1 支持供应商读取](support-session-delivery-slice.md)接入内部字段投影与实际读取审计，隔离库 1/1 通过。下一步接入受控 HTTP 和支持页面。

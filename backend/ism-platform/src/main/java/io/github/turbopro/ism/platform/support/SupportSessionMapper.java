@@ -60,4 +60,11 @@ public interface SupportSessionMapper {
             WHERE id=#{id} AND platform_operator_id=#{operatorId} AND status IN ('ACTIVE','PENDING')
             """)
     int revoke(long id, long operatorId);
+
+    @Select("""
+            SELECT id FROM plt_support_session
+            WHERE id=#{id} AND platform_operator_id=#{operatorId} AND status='REVOKED'
+            FOR UPDATE
+            """)
+    Long lockRevoked(long id, long operatorId);
 }

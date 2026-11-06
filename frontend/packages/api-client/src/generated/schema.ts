@@ -201,7 +201,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Requires the original Console operator and an enabled support session HTTP feature. */
+        /** @description Requires the original Console operator and an enabled support session HTTP feature. Retrying revocation as the same authorized operator succeeds without another audit event. */
         post: operations["revokeSupportSession"];
         delete?: never;
         options?: never;
@@ -216,7 +216,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Console realm only, platform:support:view, own request or independent reviewer submitted visibility. Final intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled is ALWAYS false; no JWT, entry token, business data, search or download. */
+        /** @description Console realm only, platform:support:view, own request or independent reviewer submitted visibility. Final intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled indicates deployment opt-in and whether the current requester may attempt to start a session. This response contains no session credential or business data. */
         get: operations["getSupportAuthorization"];
         put?: never;
         post?: never;
@@ -4461,8 +4461,7 @@ export interface components {
         SupportAuthorization: {
             requestId: string;
             authorizationReady: boolean;
-            /** @enum {boolean} */
-            sessionEnabled: false;
+            sessionEnabled: boolean;
             reason: string;
             scope: components["schemas"]["TenantSupportScope"];
             /** Format: date-time */

@@ -528,7 +528,7 @@ paths:
       tags: [Tenant Support]
       security:
       - bearerAuth: []
-      description: Requires the original Console operator and an enabled support session HTTP feature.
+      description: Requires the original Console operator and an enabled support session HTTP feature. Retrying revocation as the same authorized operator succeeds without another audit event.
       parameters:
       - name: sessionId
         in: path
@@ -571,8 +571,8 @@ paths:
       security:
       - bearerAuth: []
       description: Console realm only, platform:support:view, own request or independent reviewer submitted visibility. Final
-        intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled is ALWAYS
-        false; no JWT, entry token, business data, search or download.
+        intersection of tenant consent snapshot and live role/module/fields/operator/tenant/deadline. sessionEnabled indicates deployment opt-in and whether
+        the current requester may attempt to start a session. This response contains no session credential or business data.
       responses:
         '200':
           description: Governance metadata only; never enables a support session
@@ -4148,8 +4148,6 @@ components:
         authorizationReady: *id002
         sessionEnabled:
           type: boolean
-          enum:
-          - false
         reason: *id001
         scope:
           $ref: '#/components/schemas/TenantSupportScope'

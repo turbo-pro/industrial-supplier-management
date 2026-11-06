@@ -115,6 +115,7 @@ public class SupportSessionService {
     public void revoke(long sessionId) {
         var actor = requireOperator();
         if (sessions.revoke(sessionId, actor.actorId()) != 1) {
+            if (sessions.lockRevoked(sessionId, actor.actorId()) != null) return;
             throw unavailable();
         }
         audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_REVOKE", "SUPPORT_SESSION",

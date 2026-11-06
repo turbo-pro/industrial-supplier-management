@@ -28,3 +28,13 @@ Spring Boot 与隔离 MySQL 定向 1/1 通过。真实 HTTP 双审批后，内�
 2026-11-06 受控 HTTP 切片覆盖 SUPPORT-AT-003/004/006/007/009/011 的服务接口部分。Console 原申请人依序预约、签发、兑换、读取和撤销。秘密经 POST 请求体传输，响应带 Cache-Control no-store。OpenAPI 和生成客户端同步。配置 `ism.support.sessions.enabled` 默认关闭，待 Console 页面和浏览器生命周期验收后显式开启。回滚可关闭该开关并回退应用。此切片沿用 V96 存储，失败鉴权访问审计和全链页面验收仍在后续范围。
 
 显式启用测试配置后，Spring Boot 真实 HTTP 与隔离 MySQL 定向 1/1 通过。验证双审批前拒绝预约、独立审批人不能代申请人创建、凭证响应禁止缓存、兑换重放拒绝、员工令牌拒绝、只返回批准的名称与编码、撤销后原秘密失效，以及实际读取审计落库。生成客户端 TypeScript 构建通过。证据位于 `output/support-session-http/run.log`。
+
+2026-11-06 Console 只读页面切片覆盖 SUPPORT-AT-003/004/006/007/009/011 的 Console 操作路径。授权预览的 `sessionEnabled` 表示部署显式开启且当前原申请人具备尝试开启的资格；不是活动会话状态。页面展示目标租户、真实操作者、已批准范围和 UTC 截止，凭证留在组件内存，按供应商 ID 读取白名单字段。撤销时立即清除结果和凭证；若回执丢失，原操作者可以重试确认，服务器只写一次撤销审计。未新增迁移。回滚关闭 `ism.support.sessions.enabled` 即可停止新会话和读取；保留会话记录及审计。
+
+显式启用场景 `node scripts/verify-reminder-e2e.mjs --support-session`：真实浏览器、Spring Boot 和隔离 MySQL 1/1 通过。测试验证租户明确批准、Console 原申请人开启、字段投影、凭证未出现在 DOM/URL/Cookie/浏览器存储、撤销回执丢失后的安全重试、同凭证 HTTP 重放被拒，以及读取和撤销审计各一次。证据：`output/playwright/support-session-e2e-1793975109707/database-assertions.txt`。
+
+本次验收仅覆盖 Console 内的受控只读面。GAP-01 继续开放：下一切片先补受控业务入口的凭证拒绝审计及真实 HTTP 复验；普通租户管理端的独立支持身份、全局身份横幅和整包验收另按 PRD 68 推进。
+
+干净暂存快照：OpenAPI 重生成与暂存客户端逐字节一致，Console 生产构建和 32 项浏览器回归通过。停用入口后若计划重新启用，先确认旧会话已撤销或全部到期。
+
+默认关闭场景 `node scripts/verify-reminder-e2e.mjs --tenant-support` 真实双端与隔离库 1/1 通过：原申请人能检查授权交集，但不会出现会话按钮，会话 API 拒绝访问；租户撤回后预览即时失效。证据：`output/playwright/tenant-support-e2e-1793975237594/database-assertions.txt`。
