@@ -11,6 +11,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/console")
 @ConditionalOnProperty(name = "ism.support.sessions.enabled", havingValue = "true")
 public class SupportSessionController {
+    private static final Logger LOG = LoggerFactory.getLogger(SupportSessionController.class);
     private static final String SECRET = "[A-Za-z0-9_-]{43}";
     private final SupportSessionService sessions;
     private final SupportSupplierReadService suppliers;
@@ -95,9 +98,18 @@ public class SupportSessionController {
         } catch (ApiException failure) {
             if (failure.errorCode() == CommonErrorCode.FORBIDDEN && TenantContext.require().tenantId() == 0) {
                 // The read transaction has rolled back. Persist the attempt independently in the Console realm.
-                audit.append(new AuditService.AuditCommand("SUPPORT_SUPPLIER_READ_DENIED", "SUPPLIER", supplierId,
-                        null, Map.of(), Map.of("requestedSessionId", Long.toString(sessionId),
-                        "requestedTenantId", Long.toString(tenantId), "result", "DENIED"), null, null));
+                if (failure instanceof SupportSessionService.TenantMismatch mismatch) {
+                    audit.append(new AuditService.AuditCommand("SUPPORT_SUPPLIER_READ_DENIED", "SUPPLIER", supplierId,
+                            null, Map.of(), Map.of("sessionId", Long.toString(sessionId),
+                            "targetTenantId", Long.toString(mismatch.actualTenantId()), "requestedTenantId", Long.toString(tenantId),
+                            "reason", "TENANT_MISMATCH", "result", "DENIED", "surface", "CONSOLE"), null, null));
+                    LOG.warn("SUPPORT_TENANT_MISMATCH operatorId={} sessionId={} expectedTenantId={} requestedTenantId={}",
+                            TenantContext.require().actorId(), sessionId, mismatch.actualTenantId(), tenantId);
+                } else {
+                    audit.append(new AuditService.AuditCommand("SUPPORT_SUPPLIER_READ_DENIED", "SUPPLIER", supplierId,
+                            null, Map.of(), Map.of("requestedSessionId", Long.toString(sessionId),
+                            "requestedTenantId", Long.toString(tenantId), "result", "DENIED"), null, null));
+                }
             }
             throw failure;
         }

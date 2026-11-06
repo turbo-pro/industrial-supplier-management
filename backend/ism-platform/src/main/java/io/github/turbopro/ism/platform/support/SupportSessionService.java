@@ -218,9 +218,11 @@ public class SupportSessionService {
     public TenantSupportModels.Scope requireAccess(long sessionId, long targetTenantId, String access) {
         String digest = digest(access);
         var grant = revalidate(sessionId);
-        if (sessions.lockActive(sessionId, targetTenantId, digest) == null) {
+        long actualTenantId = requests.get(Long.parseLong(grant.requestId())).targetTenantId();
+        if (sessions.lockActive(sessionId, actualTenantId, digest) == null) {
             throw unavailable();
         }
+        if (targetTenantId != actualTenantId) throw new TenantMismatch(actualTenantId);
         return grant.scope();
     }
 
@@ -285,6 +287,15 @@ public class SupportSessionService {
             throw unavailable();
         }
         return actor;
+    }
+
+    static final class TenantMismatch extends ApiException {
+        private final long actualTenantId;
+        TenantMismatch(long actualTenantId) {
+            super(CommonErrorCode.FORBIDDEN, "支持会话或进入凭证不可用");
+            this.actualTenantId = actualTenantId;
+        }
+        long actualTenantId() { return actualTenantId; }
     }
 
     private static ApiException unavailable() {

@@ -270,7 +270,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Requires the original Console operator and an enabled support session HTTP feature. Denied read attempts reaching the session check are audited without credentials. */
+        /** @description Requires the original Console operator and an enabled support session HTTP feature. Denied read attempts reaching the session check are audited without credentials. A verified credential used with the wrong tenant also emits a security warning, without changing the denial response. */
         post: operations["readSupportSupplier"];
         delete?: never;
         options?: never;

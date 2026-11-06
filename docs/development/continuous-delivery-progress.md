@@ -1,5 +1,7 @@
 # 自动续推交接
 
+2026-11-06：[B1 支持会话错租户告警](support-access-release-review.md)补有效凭证错租户的通用拒绝、告警及关联审计。真 HTTP 与隔离库 1/1、契约 13/13 通过。下一项为员工业务 API 直接越权复核。
+
 2026-11-06：[B1 会话访问日志](support-access-release-review.md)补原申请人按会话查询及 V97 索引。隔离库 HTTP、V96 升级、双端浏览器各 1/1，Console 构建通过。下一项为已验明归属的错租户告警。
 
 2026-11-06：[B1 Console 会话记录](support-access-release-review.md)补原申请人的分页、剩余时间及刷新后撤销；HTTP/隔离库 2/2、真实双端与最终库 1/1，干净 Console 构建通过。下一项为会话访问日志查询。

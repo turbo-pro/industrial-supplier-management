@@ -2,11 +2,15 @@ package io.github.turbopro.ism.bootstrap;
 
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 @TestPropertySource(properties = "ism.support.sessions.enabled=true")
 class SupportSessionHttpIT extends TenantSupportIT {
     @Test
@@ -45,7 +49,7 @@ class SupportSessionHttpIT extends TenantSupportIT {
     }
 
     @Test
-    void consoleCanReadOnlyApprovedProjectionUntilRevoked() {
+    void consoleCanReadOnlyApprovedProjectionUntilRevoked(CapturedOutput output) {
         var tenant = fixture();
         String employee = tenantLogin(tenant, "pref-admin");
         String owner = login(false);
@@ -85,7 +89,11 @@ class SupportSessionHttpIT extends TenantSupportIT {
                 .isEqualTo(HttpStatus.FORBIDDEN);
         long wrongTenantId = tenant.tenant() + 1;
         String wrongTenant = session + "/tenants/" + wrongTenantId + "/suppliers/" + supplierId + "/read";
-        assertThat(request("POST", wrongTenant, owner, null, secret).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        var mismatch = request("POST", wrongTenant, owner, null, secret);
+        assertThat(mismatch.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(mismatch.getBody().toString()).doesNotContain("TENANT_MISMATCH", Long.toString(tenant.tenant()));
+        assertThat(request("POST", wrongTenant, owner, null, Map.of("accessSecret", incorrectSecret)).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
         ok(request("POST", session + "/revoke", owner, null, null));
         assertThat(request("POST", read, owner, null, secret).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=?",
@@ -97,7 +105,7 @@ class SupportSessionHttpIT extends TenantSupportIT {
                 """, supplierId);
         Long operator = jdbc.queryForObject("SELECT platform_operator_id FROM plt_support_session WHERE id=?",
                 Long.class, sessionId);
-        assertThat(denied).hasSize(3).allSatisfy(event -> {
+        assertThat(denied).hasSize(4).allSatisfy(event -> {
             assertThat(event.get("tenant_id")).isEqualTo(0L);
             assertThat(event.get("operator_id")).isEqualTo(operator);
             assertThat((String) event.get("trace_id")).isNotBlank();
@@ -106,5 +114,12 @@ class SupportSessionHttpIT extends TenantSupportIT {
         });
         assertThat(denied).anySatisfy(event ->
                 assertThat(event.get("after_summary").toString()).contains(Long.toString(wrongTenantId)));
+        var alerts = output.getOut().lines().filter(line -> line.contains("SUPPORT_TENANT_MISMATCH")).toList();
+        assertThat(alerts).singleElement().satisfies(line -> assertThat(line)
+                .contains(sessionId, "expectedTenantId=" + tenant.tenant(), "requestedTenantId=" + wrongTenantId)
+                .doesNotContain(access, incorrectSecret, entry, browser));
+        var accessLog = ok(request("GET", session + "/access-logs", owner, null, null)).path("items");
+        assertThat(accessLog.size()).isEqualTo(2);
+        assertThat(accessLog.get(0).path("result").asText()).isEqualTo("DENIED");
     }
 }
