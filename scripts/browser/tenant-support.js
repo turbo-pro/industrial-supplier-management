@@ -42,8 +42,21 @@ async(page)=>{
    }
    await popup.setViewportSize({width:1024,height:820});
    await popup.screenshot({path:'output/playwright/tenant-support/workspace-active.png'});
-   await popup.getByRole('button',{name:'撤销会话并退出'}).click();
-   await popup.getByText('会话已撤销，可关闭此窗口。',{exact:true}).waitFor();
+   const terminator=await page.context().newPage();
+   await terminator.goto(f.consoleUrl);
+   await terminator.getByLabel('平台用户名').fill('site-console-0');
+   await terminator.getByLabel('密码',{exact:true}).fill('Console#Pass123');
+   await terminator.getByRole('button',{name:'进入 Console',exact:true}).click();
+   await terminator.getByRole('button',{name:'支持申请工作台',exact:true}).click();
+   const termination=terminator.getByRole('region',{name:'强制终止支持会话'});
+   await termination.getByLabel('支持会话 ID').fill(new URL(read.url()).pathname.split('/')[3]);
+   await termination.getByLabel('终止原因').fill('真实浏览器安全处置');
+   await termination.getByRole('button',{name:'核对终止操作'}).click();
+   await termination.getByRole('button',{name:'确认强制终止',exact:true}).click();
+   await termination.getByRole('status').filter({hasText:'会话已终止'}).waitFor();
+   await termination.screenshot({path:'output/playwright/tenant-support/termination-confirmed.png'});
+   await terminator.close();
+   await popup.getByText('会话已失效，已清除读取结果。',{exact:true}).waitFor();
    await panel.getByText('会话已撤销。',{exact:true}).waitFor();
    if(await popup.getByText('浏览器验收供应商',{exact:true}).count())throw Error('Workspace retained data after exit');
    const replay=await popup.request.post(read.url(),{data:{accessSecret}});

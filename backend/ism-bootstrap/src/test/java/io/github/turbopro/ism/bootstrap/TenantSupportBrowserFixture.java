@@ -25,9 +25,15 @@ class TenantSupportBrowserFixture extends TenantSupportIT {
    int expectedSessions=withWorkspace()?3:1;
    assertThat(jdbc.queryForList("SELECT status FROM plt_support_session WHERE request_id=?",String.class,id))
      .hasSize(expectedSessions).containsOnly("REVOKED");
-   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_REVOKE' AND object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",Integer.class,id)).isEqualTo(expectedSessions);
+   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_REVOKE' AND object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",Integer.class,id)).isEqualTo(expectedSessions-(withWorkspace()?1:0));
    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=?",Integer.class,supplierId)).isEqualTo(expected);
    if(withWorkspace()){
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_TERMINATE' AND object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",Integer.class,id)).isOne();
+
+    var termination=jdbc.queryForMap("SELECT a.operator_id,a.trace_id,a.after_summary FROM sys_audit_event a WHERE a.action='SUPPORT_SESSION_TERMINATE' AND a.object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",id);
+    assertThat(termination.get("trace_id").toString()).isNotBlank();
+    assertThat(termination.get("after_summary").toString()).contains("真实浏览器安全处置", "originalOperatorId", Long.toString(f.tenant()));
+    assertThat(termination.get("operator_id").toString()).isEqualTo(jdbc.queryForObject("SELECT CAST(id AS CHAR) FROM plt_user WHERE username='site-console-0'",String.class));
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=? AND access_digest IS NOT NULL",Integer.class,id)).isZero();
     assertThat(jdbc.queryForObject("""
      SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=?

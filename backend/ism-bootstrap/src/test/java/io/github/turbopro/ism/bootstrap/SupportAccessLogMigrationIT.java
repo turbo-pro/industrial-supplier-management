@@ -27,7 +27,7 @@ class SupportAccessLogMigrationIT {
                 """);
         String columns = "SELECT id,tenant_id,action,after_summary,trace_id FROM sys_audit_event WHERE id BETWEEN 901 AND 903 ORDER BY id";
         var old = jdbc.queryForList(columns);
-        var flyway = Flyway.configure().dataSource(ds).locations("classpath:db/migration").load();
+        var flyway = Flyway.configure().dataSource(ds).locations("classpath:db/migration").target("97").load();
         assertThat(flyway.migrate().migrationsExecuted).isOne();
         flyway.validate();
         assertThat(jdbc.queryForList(columns)).isEqualTo(old);
