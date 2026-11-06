@@ -175,6 +175,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-sessions/{sessionId}/workspace-entry-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Only the original Console operator may issue a browser-bound token for the isolated support workspace. */
+        post: operations["issueSupportWorkspaceEntryToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support-workspace/{sessionId}/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Atomically exchanges the workspace token and its browser secret. Employee and Console bearer credentials are not accepted. */
+        post: operations["exchangeSupportWorkspaceEntryToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support-workspace/{sessionId}/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Resolves only the current support identity and scope. Employee and Console bearer credentials are not accepted. */
+        post: operations["getSupportWorkspaceIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read": {
         parameters: {
             query?: never;
@@ -8467,6 +8518,126 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    issueSupportWorkspaceEntryToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    browserSecret: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Support operation result. Sensitive responses use Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            entryToken: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    exchangeSupportWorkspaceEntryToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    browserSecret: string;
+                    entryToken: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Support operation result. Sensitive responses use Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            accessSecret: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    getSupportWorkspaceIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    accessSecret: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified support identity. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            /** @enum {string} */
+                            realm: "SUPPORT_WORKSPACE";
+                            sessionId: string;
+                            operatorId: string;
+                            operatorName: string;
+                            tenantId: string;
+                            tenantName: string;
+                            /** @description UTC deadline. */
+                            expiresAt: string;
+                            scope: components["schemas"]["TenantSupportScope"];
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     readSupportSupplier: {

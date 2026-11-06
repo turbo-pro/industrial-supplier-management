@@ -450,6 +450,177 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '422':
           $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/workspace-entry-token:
+    post:
+      operationId: issueSupportWorkspaceEntryToken
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Only the original Console operator may issue a browser-bound token for the isolated support workspace.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [browserSecret]
+              properties:
+                browserSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [entryToken]
+                      properties:
+                        entryToken:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /support-workspace/{sessionId}/exchange:
+    post:
+      operationId: exchangeSupportWorkspaceEntryToken
+      tags: [Tenant Support]
+      security: []
+      description: Atomically exchanges the workspace token and its browser secret. Employee and Console bearer credentials are not accepted.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [browserSecret, entryToken]
+              properties:
+                browserSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+                entryToken:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [accessSecret]
+                      properties:
+                        accessSecret:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /support-workspace/{sessionId}/identity:
+    post:
+      operationId: getSupportWorkspaceIdentity
+      tags: [Tenant Support]
+      security: []
+      description: Resolves only the current support identity and scope. Employee and Console bearer credentials are not accepted.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessSecret]
+              properties:
+                accessSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Verified support identity. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [realm, sessionId, operatorId, operatorName, tenantId, tenantName, expiresAt, scope]
+                      properties:
+                        realm:
+                          type: string
+                          enum: [SUPPORT_WORKSPACE]
+                        sessionId:
+                          type: string
+                        operatorId:
+                          type: string
+                        operatorName:
+                          type: string
+                        tenantId:
+                          type: string
+                        tenantName:
+                          type: string
+                        expiresAt:
+                          type: string
+                          description: UTC deadline.
+                        scope:
+                          $ref: '#/components/schemas/TenantSupportScope'
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read:
     post:
       operationId: readSupportSupplier

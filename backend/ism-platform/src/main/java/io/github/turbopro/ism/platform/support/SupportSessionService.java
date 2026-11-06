@@ -25,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SupportSessionService {
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String WORKSPACE_ENTRY = "workspace-entry-v1:";
+    private static final String WORKSPACE_ACCESS = "workspace-access-v1:";
     private final TenantSupportService authorization;
     private final SupportRequestMapper requests;
     private final TenantSupportMapper consent;
@@ -73,6 +75,15 @@ public class SupportSessionService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public String issueEntry(long sessionId, String browserSecret) {
+        return issueEntry(sessionId, browserSecret, "");
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public String issueWorkspaceEntry(long sessionId, String browserSecret) {
+        return issueEntry(sessionId, browserSecret, WORKSPACE_ENTRY);
+    }
+
+    private String issueEntry(long sessionId, String browserSecret, String domain) {
         String browser = digest(browserSecret);
         var grant = revalidate(sessionId);
         var deadline = requests.now().plusSeconds(60);
@@ -80,7 +91,7 @@ public class SupportSessionService {
             deadline = grant.expiresAt();
         }
         String token = randomSecret();
-        if (sessions.issue(sessionId, digest(token), browser, deadline) != 1) {
+        if (sessions.issue(sessionId, digest(token, domain), browser, deadline) != 1) {
             throw unavailable();
         }
         return token;
@@ -98,6 +109,48 @@ public class SupportSessionService {
         audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_ACTIVATE", "SUPPORT_SESSION",
                 sessionId, null, Map.of(), Map.of(), null, null));
         return access;
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public String exchangeWorkspaceEntry(long sessionId, String token, String browserSecret) {
+        String tokenDigest = digest(token, WORKSPACE_ENTRY);
+        String browser = digest(browserSecret);
+        var candidate = sessions.entryCandidate(sessionId, tokenDigest, browser);
+        if (candidate == null) throw unavailable();
+        workspaceGrant(candidate);
+        String access = randomSecret();
+        if (sessions.consume(sessionId, tokenDigest, browser, digest(access, WORKSPACE_ACCESS)) != 1) {
+            throw unavailable();
+        }
+        try (var identity = TenantContext.open(0, candidate.operatorId())) {
+            audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_ACTIVATE", "SUPPORT_SESSION",
+                    sessionId, null, Map.of(), Map.of("surface", "SUPPORT_WORKSPACE"), null, null));
+        }
+        return access;
+    }
+
+    public record WorkspaceIdentity(String realm, String sessionId, String operatorId, String operatorName,
+                                    String tenantId, String tenantName, java.time.LocalDateTime expiresAt,
+                                    TenantSupportModels.Scope scope) {}
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public WorkspaceIdentity workspaceIdentity(long sessionId, String access) {
+        String hash = digest(access, WORKSPACE_ACCESS);
+        var entry = sessions.workspaceCandidate(sessionId, hash);
+        if (entry == null) throw unavailable();
+        var grant = workspaceGrant(entry);
+        var request = requests.get(entry.requestId());
+        if (sessions.lockActive(sessionId, request.targetTenantId(), hash) == null) throw unavailable();
+        return new WorkspaceIdentity("SUPPORT_WORKSPACE", Long.toString(sessionId), Long.toString(entry.operatorId()),
+                request.operatorName(), Long.toString(request.targetTenantId()), request.tenantName(),
+                grant.expiresAt(), grant.scope());
+    }
+
+    private TenantSupportModels.Authorization workspaceGrant(SupportSessionMapper.Entry entry) {
+        // IAM needs a narrowly scoped caller for role lookup; never install a login or permission snapshot.
+        try (var lookup = TenantContext.open(0, entry.operatorId())) {
+            return boundedGrant(entry, authorization.workspaceAuthorization(entry.requestId(), entry.operatorId()));
+        }
     }
 
     /** Business callers must hold the transaction through the protected read and its audit. */
@@ -129,7 +182,11 @@ public class SupportSessionService {
             throw unavailable();
         }
         // Keep the same lock order as reservation and tenant consent changes.
-        var grant = authorization.authorization(entry.requestId());
+        return boundedGrant(entry, authorization.authorization(entry.requestId()));
+    }
+
+    private TenantSupportModels.Authorization boundedGrant(SupportSessionMapper.Entry entry,
+                                                           TenantSupportModels.Authorization grant) {
         if (!grant.authorizationReady()) {
             throw unavailable();
         }
@@ -175,12 +232,16 @@ public class SupportSessionService {
     }
 
     private static String digest(String value) {
+        return digest(value, "");
+    }
+
+    private static String digest(String value, String domain) {
         if (value == null || !value.matches("[A-Za-z0-9_-]{43}")) {
             throw unavailable();
         }
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.US_ASCII)));
+                    .digest((domain + value).getBytes(StandardCharsets.US_ASCII)));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }

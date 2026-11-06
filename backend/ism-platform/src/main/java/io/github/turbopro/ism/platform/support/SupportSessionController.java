@@ -57,6 +57,13 @@ public class SupportSessionController {
     }
 
     @RequiresPermission("platform:support:request")
+    @PostMapping("/support-sessions/{sessionId}/workspace-entry-token")
+    ResponseEntity<ApiResponse<Map<String, String>>> issueWorkspace(@PathVariable long sessionId,
+                                                                    @Valid @RequestBody Entry body) {
+        return reply(Map.of("entryToken", sessions.issueWorkspaceEntry(sessionId, body.browserSecret())));
+    }
+
+    @RequiresPermission("platform:support:request")
     @PostMapping("/support-sessions/{sessionId}/exchange")
     ResponseEntity<ApiResponse<Map<String, String>>> exchange(@PathVariable long sessionId,
                                                              @Valid @RequestBody Exchange body) {
