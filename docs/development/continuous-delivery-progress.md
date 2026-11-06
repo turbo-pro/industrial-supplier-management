@@ -1,5 +1,7 @@
 # 自动续推交接
 
+2026-11-07 [B1 集团组织权限与 Console 隔离](support-access-release-review.md)通过总部/组织子树真实 HTTP 与隔离库 1/1、契约 13/13。验证十次 Console 操作拒绝且不改变会话。下一项实施独立平台终止权限与审计；GAP-01 未关闭。
+
 2026-11-07 [B1 外租户供应商隔离](support-access-release-review.md)通过双租户真实 HTTP 与隔离库 1/1。下一项复核集团管理员和 Console 权限边界。
 
 2026-11-07 [B1 员工 API 权限边界](support-access-release-review.md)新增 15 项直接拒绝断言，真实 HTTP 和隔离库 1/1。下一项复核真实外租户供应商隔离。

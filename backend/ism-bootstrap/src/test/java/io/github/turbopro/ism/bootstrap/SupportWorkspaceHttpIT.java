@@ -155,6 +155,59 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 .doesNotContain(access, entry, browser, "SUP-WORKSPACE", "PRIVATE");
     }
 
+    @Test
+    void groupOrganizationScopeDoesNotGrantConsoleSupportAccess() {
+        var tenant = fixture();
+        String administrator = tenantLogin(tenant, "pref-admin");
+        long role = role(tenant, "ORGANIZATION_SET", java.util.Set.of(Long.toString(tenant.first())));
+        try (var context = io.github.turbopro.ism.common.infrastructure.tenant.TenantContext
+                .open(tenant.tenant(), tenant.admin())) {
+            access.createUser(new io.github.turbopro.ism.iam.access.AccessModels.CreateUser(
+                    "group-manager", "集团组织管理员", "Site#Initial123",
+                    Long.toString(tenant.headquarters()), java.util.Set.of(Long.toString(role))));
+        }
+        jdbc.update("UPDATE iam_user SET force_password_change=0 WHERE tenant_id=? AND username='group-manager'",
+                tenant.tenant());
+        String manager = tenantLogin(tenant, "group-manager");
+        long first = tenant.tenant() + 97000;
+        long second = first + 1;
+        jdbc.update("""
+                INSERT INTO sup_supplier (id, tenant_id, organization_id, supplier_code, supplier_name,
+                    supplier_type, created_by, updated_by)
+                VALUES (?, ?, ?, 'GROUP-IN', '授权车间供应商', 'MANUFACTURER', ?, ?),
+                       (?, ?, ?, 'GROUP-OUT', '其他工厂供应商', 'MANUFACTURER', ?, ?)
+                """, first, tenant.tenant(), tenant.department(), tenant.admin(), tenant.admin(),
+                second, tenant.tenant(), tenant.second(), tenant.admin(), tenant.admin());
+        for (long id : java.util.List.of(first, second)) {
+            assertThat(ok(request("GET", "/api/suppliers/" + id, administrator, null, null))
+                    .path("id").asText()).isEqualTo(Long.toString(id));
+        }
+        assertThat(ok(request("GET", "/api/suppliers/" + first, manager, null, null))
+                .path("name").asText()).isEqualTo("授权车间供应商");
+        assertThat(request("GET", "/api/suppliers/" + second, manager, null, null)
+                .getStatusCode().value()).isIn(403, 404);
+        String requestId = approved(tenant);
+        save(administrator, tenant.role(), 0, true);
+        ok(decide(administrator, requestId, "approve", "group-" + requestId,
+                decision(detail(administrator, requestId))));
+        String reservations = "/api/console/support-requests/" + requestId + "/sessions";
+        String sessionId = ok(request("POST", reservations, login(false), null, null))
+                .path("sessionId").asText();
+        String session = "/api/console/support-sessions/" + sessionId;
+        for (String credential : java.util.List.of(administrator, manager)) {
+            assertDenied("GET", reservations, credential, null);
+            assertDenied("POST", reservations, credential, null);
+            assertDenied("POST", session + "/workspace-entry-token", credential,
+                    Map.of("browserSecret", "G".repeat(43)));
+            assertDenied("GET", session + "/access-logs", credential, null);
+            assertDenied("POST", session + "/revoke", credential, null);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=?",
+                Integer.class, requestId)).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE object_id=? AND action='SUPPORT_SESSION_REVOKE'",
+                Integer.class, sessionId)).isZero();
+    }
+
     private void assertDenied(String method, String path, String credential, Object body) {
         var response = request(method, path, credential, null, body);
         assertThat(response.getStatusCode().value()).as("%s %s", method, path).isIn(401, 403);
