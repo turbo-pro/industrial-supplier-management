@@ -78,7 +78,16 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
         assertThat(projection.size()).isEqualTo(2);
         assertThat(projection.path("code").asText()).isEqualTo("SUP-WORKSPACE");
         assertThat(projection.path("name").asText()).isEqualTo("支持工作台供应商");
-        assertThat(ok(post(workspace + "/suppliers/" + (supplierId + 1) + "/read", body)).isEmpty()).isTrue();
+        var foreign = fixture();
+        long foreignSupplierId = foreign.tenant() + 96000;
+        jdbc.update("""
+                INSERT INTO sup_supplier (id, tenant_id, organization_id, supplier_code, supplier_name,
+                    supplier_type, created_by, updated_by)
+                VALUES (?, ?, ?, 'SUP-FOREIGN', '外租户供应商', 'MANUFACTURER', ?, ?)
+                """, foreignSupplierId, foreign.tenant(), foreign.first(), foreign.admin(), foreign.admin());
+        assertThat(ok(request("GET", "/api/suppliers/" + foreignSupplierId,
+                tenantLogin(foreign, "pref-admin"), null, null)).path("name").asText()).isEqualTo("外租户供应商");
+        assertThat(ok(post(workspace + "/suppliers/" + foreignSupplierId + "/read", body)).isEmpty()).isTrue();
         assertThat(post(workspace + "/exit", Map.of("accessSecret", consoleAccess)).getStatusCode())
                 .isEqualTo(HttpStatus.FORBIDDEN);
         // These credentials have already succeeded on their own support surfaces.
