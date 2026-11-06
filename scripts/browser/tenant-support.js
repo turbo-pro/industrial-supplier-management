@@ -5,7 +5,54 @@ async(page)=>{
  await page.getByRole('heading',{name:'支持授权',exact:true}).waitFor();await page.getByRole('button',{name:'保存支持策略',exact:true}).click({trial:true});await page.locator('.tenant-support .el-switch').click();await page.locator('.tenant-support .el-select__wrapper').click();await page.getByRole('option').filter({hasText:'租户管理员'}).click();await page.getByRole('button',{name:'保存支持策略',exact:true}).click();await page.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();await page.getByRole('button',{name:'重新读取支持授权',exact:true}).click();await page.getByRole('button',{name:'查看租户审批',exact:true}).click();await page.getByRole('button',{name:'批准租户授权',exact:true}).click();await page.getByLabel('租户处理意见',{exact:true}).fill('租户明确批准，只读基础字段');
  let drop=true;const calls=[];await page.route('**/api/tenant-support/requests/*/approve',async route=>{calls.push({key:route.request().headers()['idempotency-key'],body:route.request().postDataJSON()});if(drop){drop=false;const r=await route.fetch();if(r.status()!==200)throw Error('Tenant consent rejected');await route.abort();}else await route.continue();});await page.getByRole('button',{name:'确认租户决定',exact:true}).click();await page.getByRole('alert').filter({hasText:'结果尚未确认'}).waitFor();await page.getByRole('button',{name:'使用原请求重试支持授权',exact:true}).click();await page.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();if(calls.length!==2||JSON.stringify(calls[0])!==JSON.stringify(calls[1]))throw Error('Consent replay changed');await page.screenshot({path:'output/playwright/tenant-support/tenant-approved.png',fullPage:true});
  const admin=page;const consolePage=await page.context().newPage();await consolePage.goto(f.consoleUrl);await consolePage.getByLabel('平台用户名').fill('site-console-1');await consolePage.getByLabel('密码',{exact:true}).fill('Console#Pass123');await consolePage.getByRole('button',{name:'进入 Console',exact:true}).click();await consolePage.getByRole('heading',{name:'套餐与模块',exact:true}).waitFor();await consolePage.getByRole('button',{name:'支持申请工作台',exact:true}).click();await consolePage.getByRole('button',{name:'查看支持申请',exact:true}).first().click();await consolePage.getByRole('button',{name:'检查租户授权交集',exact:true}).click();await consolePage.getByRole('status').filter({hasText:f.supplierId?'授权交集已满足':'授权交集已满足，支持会话仍未启用'}).waitFor();await consolePage.getByRole('region',{name:'支持申请详情',exact:true}).screenshot({path:'output/playwright/tenant-support/console-ready.png'});
- const token=await consolePage.evaluate(()=>sessionStorage.getItem('ism.console.accessToken'));if(!token)throw Error('Missing real Console session');const denied=await consolePage.request.get(f.backendUrl+'/api/suppliers',{headers:{Authorization:'Bearer '+token}});if(![401,403].includes(denied.status()))throw Error('Console obtained tenant business access');if(f.supplierId){
+ const token=await consolePage.evaluate(()=>sessionStorage.getItem('ism.console.accessToken'));if(!token)throw Error('Missing real Console session');const denied=await consolePage.request.get(f.backendUrl+'/api/suppliers',{headers:{Authorization:'Bearer '+token}});if(![401,403].includes(denied.status()))throw Error('Console obtained tenant business access');let workspaceToWithdraw;if(f.workspace){
+   const direct=await page.context().newPage();
+   await direct.goto(f.adminUrl+'/support-workspace.html');
+   await direct.getByText('请从 Console 的支持申请打开此工作台。',{exact:true}).waitFor();
+   if(await direct.getByLabel('供应商 ID').count())throw Error('Direct entry exposes supplier lookup');
+   await direct.close();
+   const panel=consolePage.getByRole('region',{name:'供应商只读支持会话'});
+   const issued=consolePage.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/workspace-entry-token'));
+   const popupReady=consolePage.waitForEvent('popup');
+   await panel.getByRole('button',{name:'打开管理端支持工作台'}).click();
+   const popup=await popupReady;
+   const issue=await issued;
+   if(!issue.ok())throw Error('Workspace entry issue failed');
+   const {data:{entryToken}}=await issue.json();
+   const browserSecret=issue.request().postDataJSON().browserSecret;
+   await popup.getByText(/租户：.*操作人：.*截止：/).waitFor();
+   if(await popup.evaluate(()=>window.opener!==null))throw Error('Workspace retained opener after handoff');
+   await popup.getByLabel('供应商 ID').fill(f.supplierId);
+   const readResponse=popup.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/read'));
+   await popup.getByLabel('供应商 ID').press('Enter');
+   const read=await readResponse;
+   const {accessSecret}=read.request().postDataJSON();
+   await popup.getByText('浏览器验收供应商',{exact:true}).waitFor();
+   if(await popup.getByText('PRIVATE',{exact:true}).count())throw Error('Private field rendered');
+   for(const windowPage of [popup,consolePage]){
+     const surfaces=await windowPage.evaluate(()=>[location.href,document.documentElement.innerHTML,document.cookie,JSON.stringify(localStorage),JSON.stringify(sessionStorage)]);
+     if(surfaces.some(value=>[entryToken,browserSecret,accessSecret].some(secret=>value.includes(secret))))throw Error('Workspace credential leaked');
+   }
+   for(const width of [375,768,1024,1440]){
+     await popup.setViewportSize({width,height:640});
+     if(await popup.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Workspace page overflow '+width);
+   }
+   await popup.setViewportSize({width:1024,height:820});
+   await popup.screenshot({path:'output/playwright/tenant-support/workspace-active.png'});
+   await popup.getByRole('button',{name:'撤销会话并退出'}).click();
+   await popup.getByText('会话已撤销，可关闭此窗口。',{exact:true}).waitFor();
+   await panel.getByText('会话已撤销。',{exact:true}).waitFor();
+   if(await popup.getByText('浏览器验收供应商',{exact:true}).count())throw Error('Workspace retained data after exit');
+   const replay=await popup.request.post(read.url(),{data:{accessSecret}});
+   if(replay.status()!==403)throw Error('Workspace credential usable after exit');
+   await popup.close();
+   const second=consolePage.waitForEvent('popup');
+   await panel.getByRole('button',{name:'打开管理端支持工作台'}).click();
+   workspaceToWithdraw=await second;
+   await workspaceToWithdraw.getByLabel('供应商 ID').fill(f.supplierId);
+   await workspaceToWithdraw.getByRole('button',{name:'读取供应商'}).click();
+   await workspaceToWithdraw.getByText('浏览器验收供应商',{exact:true}).waitFor();
+ }else if(f.supplierId){
    const panel=consolePage.getByRole('region',{name:'供应商只读支持会话'});
    const exchanged=consolePage.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/exchange'));
    await panel.getByRole('button',{name:'开启只读会话'}).click();
@@ -38,6 +85,12 @@ async(page)=>{
    if(![403,404,405].includes(sessionDenied.status()))throw Error('Disabled support session did not deny');
    if(await consolePage.getByRole('button',{name:'开启只读会话'}).count())throw Error('Disabled session entry visible');
  }
- await admin.getByRole('button',{name:'撤回租户授权',exact:true}).click();await admin.getByLabel('租户处理意见',{exact:true}).fill('结束支持，立即撤回');await admin.getByRole('button',{name:'确认租户决定',exact:true}).click();await admin.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();await consolePage.getByRole('button',{name:'检查租户授权交集',exact:true}).click();await consolePage.getByRole('status').filter({hasText:'租户已撤回'}).waitFor();await consolePage.getByRole('region',{name:'支持申请详情',exact:true}).screenshot({path:'output/playwright/tenant-support/console-revoked.png'});
+ await admin.getByRole('button',{name:'撤回租户授权',exact:true}).click();await admin.getByLabel('租户处理意见',{exact:true}).fill('结束支持，立即撤回');await admin.getByRole('button',{name:'确认租户决定',exact:true}).click();await admin.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();if(workspaceToWithdraw){
+   await workspaceToWithdraw.getByText('会话已失效，已清除读取结果。',{exact:true}).waitFor();
+   if(await workspaceToWithdraw.getByText('浏览器验收供应商',{exact:true}).count()||await workspaceToWithdraw.getByLabel('供应商 ID').count())throw Error('Withdrawn workspace retained data or controls');
+   await consolePage.getByText('会话已撤销。',{exact:true}).waitFor();
+   await workspaceToWithdraw.close();
+ }
+ await consolePage.getByRole('button',{name:'检查租户授权交集',exact:true}).click();await consolePage.getByRole('status').filter({hasText:'租户已撤回'}).waitFor();await consolePage.getByRole('region',{name:'支持申请详情',exact:true}).screenshot({path:'output/playwright/tenant-support/console-revoked.png'});
  for(const width of [375,768,1024,1440]){await admin.setViewportSize({width,height:900});if(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Tenant page overflow '+width);}await admin.screenshot({path:'output/playwright/tenant-support/tenant-final.png',fullPage:true});await consolePage.close();
 }

@@ -54,3 +54,11 @@ Spring Boot 真实 HTTP 与隔离 MySQL 1/1、通用 API 契约 13/13 通过。�
 管理端浏览器切片沿用以上契约，使用与普通管理端登录分离的独立页面；跨窗口交接须验证显式信任的来源和窗口身份，凭证不进入 URL、持久存储或普通 API 客户端。未配置可信来源时隐藏交接入口。固定提示显示目标租户、操作者、范围和截止；授权撤回、到期、退出或校验失败立即移除数据和操作入口。
 
 工作台专项真 HTTP 与隔离 MySQL 1/1、通用 API 契约 13/13 通过。验证只返回名称和编码、未知供应商返回空、Console 凭证不能退出工作台、租户撤回后立即拒读且仍可主动退出、退出清摘要，以及读取和撤销审计。证据：`output/support-workspace-read/run.log`。OpenAPI 和生成客户端构建通过。下一项为工作台独立页面及浏览器交接，GAP-01 继续开放。
+
+2026-11-06 管理端浏览器切片（SUPPORT-AT-004/005/006/007/009/011）：新建独立静态入口 `/support-workspace.html`，不会加载普通租户路由、员工会话或登录存储。Console 与工作台按配置精确匹配来源和窗口身份，工作台自行生成浏览器秘密；一次性交接后切断 opener，确认和退出使用专用消息端口。管理端固定提示显示租户、真实操作者、授权范围与截止；只读、关闭和失效处理均清除数据。工作台每 5 秒复核授权，API 每次读取实时检查；工作台失效后 Console 尝试撤销剩余会话。无后端契约或迁移变更。
+
+部署须在两个前端构建时配置精确来源：Console 的 `VITE_ISM_SUPPORT_ADMIN_ORIGIN` 指向管理端，管理端的 `VITE_ISM_SUPPORT_CONSOLE_ORIGIN` 指向 Console。使用 HTTPS，开发只允许回环 HTTP，不接受通配符或路径。管理端发布产物需部署 `support-workspace.html`，且代理策略须允许受信 Console 打开的窗口完成一次跨源交接；上线前验证实际反向代理的弹窗和 COOP 配置。回滚先关闭支持会话开关并撤销或等待旧会话到期，然后移除构建来源配置或回退前端；保留审计。旧库和用户界面草稿保持原样。
+
+最终双端 Chrome、Spring Boot 和隔离 MySQL 1/1 通过（`node scripts/verify-reminder-e2e.mjs --support-workspace`）。验证独立直开拒绝、可信跨源交接、opener 切断、凭证未进入页面/URL/Cookie/存储、键盘读取、375/768/1024/1440px 无横向溢出、主动退出后旧凭证重放拒绝，以及第二次会话中租户撤回后页面清屏、Console 撤销和最终库中两次读取/撤销审计。干净暂存快照的管理端和 Console 生产构建通过。证据：`output/playwright/support-workspace-e2e-1793976791046/database-assertions.txt`；截图：`output/playwright/tenant-support/workspace-active.png`。
+
+GAP-01 不关闭。下一项复核独立工作台拒绝审计：只有可由凭证验证归属的请求才记到真实平台操作者；无法验证身份的失败应由通用安全事件处理。仍须补生产代理配置验收及 PRD 68 各验收项整体验证。
