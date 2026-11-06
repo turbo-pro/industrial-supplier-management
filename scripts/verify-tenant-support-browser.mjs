@@ -10,10 +10,10 @@ function cli(args) {
 }
 try {
   mkdirSync('output/playwright/tenant-support',{recursive:true});
-  const fixture={...JSON.parse(readFileSync(join(control,'fixture.json'),'utf8')),backendUrl,adminUrl,consoleUrl:url};
+  const fixture={...JSON.parse(readFileSync(join(control,'fixture.json'),'utf8')),backendUrl,adminUrl,consoleUrl:url,proxy:url.startsWith('https:')};
   const script=join(control,'tenant-support.js');
   writeFileSync(script,readFileSync('scripts/browser/tenant-support.js','utf8').replace('__FIXTURE__',JSON.stringify(fixture)),{mode:0o600});
-  cli(['open',url,'--browser','chrome']); cli(['run-code','--filename',script]);
+  cli(['open',fixture.proxy?'about:blank':url,'--browser','chrome']); cli(['run-code','--filename',script]);
   writeFileSync(join(control,'finish'),'done');console.log('Support request browser workflow passed.');
 } catch(error){try{writeFileSync('output/playwright/tenant-support/failure-snapshot.txt',cli(['snapshot']));}catch{}writeFileSync(join(control,'abort'),'stop');process.exitCode=1;console.error(error.message);}
 finally{try{cli(['close']);}catch{}}

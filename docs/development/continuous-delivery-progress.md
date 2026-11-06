@@ -1,5 +1,7 @@
 # 自动续推交接
 
+2026-11-06：[B1 支持工作台 HTTPS 代理复核](support-access-release-review.md)以生产构建、真实 Nginx、Chrome、Spring Boot 与隔离 MySQL 通过 1/1。实际部署仍待验证，下一项为 Console 会话状态及访问日志查询。
+
 2026-11-06：[B1 工作台拒绝审计](support-session-delivery-slice.md)为仍可验明归属的工作台拒绝读取落审计，隔离 MySQL 真 HTTP 1/1、契约 13/13 通过。下一项复核部署代理、通用安全事件及 PRD 68 整包证据。
 
 2026-11-06：[B1 管理端支持工作台](support-session-delivery-slice.md)完成独立页面、可信跨窗口交接、固定身份提示、只读和撤销清屏。真实双端及隔离 MySQL 1/1，干净管理端和 Console 构建通过。下一项复核工作台拒绝审计和整包证据。

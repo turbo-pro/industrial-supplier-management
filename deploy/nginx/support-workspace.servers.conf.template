@@ -1,0 +1,51 @@
+# Include in the nginx http block after substituting all @...@ placeholders.
+# Use distinct trusted HTTPS origins and valid certificates in production.
+server {
+    listen @CONSOLE_LISTEN@ ssl;
+    server_name @CONSOLE_HOST@;
+    ssl_certificate @CONSOLE_CERT@;
+    ssl_certificate_key @CONSOLE_KEY@;
+    root @CONSOLE_ROOT@;
+
+    add_header Cross-Origin-Opener-Policy same-origin-allow-popups always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+
+    location ^~ /api/ {
+        proxy_pass @BACKEND_URL@;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_cache off;
+    }
+    location ^~ /assets/ { try_files $uri =404; }
+    location / { try_files $uri $uri/ /index.html; }
+}
+
+server {
+    listen @ADMIN_LISTEN@ ssl;
+    server_name @ADMIN_HOST@;
+    ssl_certificate @ADMIN_CERT@;
+    ssl_certificate_key @ADMIN_KEY@;
+    root @ADMIN_ROOT@;
+
+    add_header Cross-Origin-Opener-Policy unsafe-none always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+
+    location ^~ /api/ {
+        proxy_pass @BACKEND_URL@;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_cache off;
+    }
+    # Do not fall back to the employee login app if the separate HTML is missing.
+    location = /support-workspace.html { try_files $uri =404; }
+    location ^~ /assets/ { try_files $uri =404; }
+    location / { try_files $uri $uri/ /index.html; }
+}

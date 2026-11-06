@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { createWriteStream, mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, copyFileSync } from 'node:fs';
+import { createWriteStream, mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, copyFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import { get as httpsGet } from 'node:https';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--platform-branding','--dictionaries','--subscription-access','--tenant-support','--support-session','--support-workspace','--support-requests','--subscription-assignment','--supplier-quota','--package-authoring','--tenant-create','--project-entry','--site-project','--site-context','--site-preference','--site-upgrade','--site-initialization','--iam-batch-roles','--portal','--portal-management','--portal-exit','--portal-password','--portal-recovery','--portal-changes','--portal-certificates','--portal-submissions'].includes(arg)))
-  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--platform-branding | --dictionaries | --subscription-access | --tenant-support | --support-session | --support-workspace | --support-requests | --subscription-assignment | --supplier-quota | --package-authoring | --tenant-create | --project-entry | --site-project | --site-context | --site-preference | --site-upgrade | --site-initialization | --iam-batch-roles | --portal | --portal-management | --portal-exit | --portal-password | --portal-recovery | --portal-changes | --portal-certificates | --portal-submissions]');
+if(process.argv.slice(2).length>1 || process.argv.slice(2).some(arg=>!['--platform-branding','--dictionaries','--subscription-access','--tenant-support','--support-session','--support-workspace','--support-workspace-proxy','--support-requests','--subscription-assignment','--supplier-quota','--package-authoring','--tenant-create','--project-entry','--site-project','--site-context','--site-preference','--site-upgrade','--site-initialization','--iam-batch-roles','--portal','--portal-management','--portal-exit','--portal-password','--portal-recovery','--portal-changes','--portal-certificates','--portal-submissions'].includes(arg)))
+  throw new Error('Usage: node scripts/verify-reminder-e2e.mjs [--platform-branding | --dictionaries | --subscription-access | --tenant-support | --support-session | --support-workspace | --support-workspace-proxy | --support-requests | --subscription-assignment | --supplier-quota | --package-authoring | --tenant-create | --project-entry | --site-project | --site-context | --site-preference | --site-upgrade | --site-initialization | --iam-batch-roles | --portal | --portal-management | --portal-exit | --portal-password | --portal-recovery | --portal-changes | --portal-certificates | --portal-submissions]');
 const platformBranding=process.argv.includes('--platform-branding');
 const dictionaries = process.argv.includes('--dictionaries');
 const subscriptionAccess = process.argv.includes('--subscription-access');
-const supportWorkspace = process.argv.includes('--support-workspace');
+const workspaceProxy = process.argv.includes('--support-workspace-proxy');
+const supportWorkspace = workspaceProxy || process.argv.includes('--support-workspace');
 const supportSession = process.argv.includes('--support-session');
 const tenantSupport = supportWorkspace || supportSession || process.argv.includes('--tenant-support');
 const supportRequests = process.argv.includes('--support-requests');
@@ -35,7 +37,7 @@ const password = process.argv.includes('--portal-password');
 const exit = process.argv.includes('--portal-exit');
 const management = process.argv.includes('--portal-management') || exit || recovery || changes || submissions;
 const portal = process.argv.includes('--portal') || management || password || certificates;
-const scenario = platformBranding ? 'platform-branding' : dictionaries ? 'dictionaries' : subscriptionAccess ? 'subscription-access' : supportWorkspace ? 'support-workspace' : supportSession ? 'support-session' : tenantSupport ? 'tenant-support' : supportRequests ? 'support-requests' : subscriptionAssignment ? 'subscription-assignment' : supplierQuota ? 'supplier-quota' : packageAuthoring ? 'package-authoring' : tenantCreate ? 'tenant-create' : projectEntry ? 'project-entry' : siteProject ? 'site-project' : siteContext ? 'site-context' : sitePreference ? 'site-preference' : siteUpgrade ? 'site-upgrade' : siteInitialization ? 'site-initialization' : batchRoles ? 'iam-batch-roles' : submissions ? 'portal-submissions' : certificates ? 'portal-certificates' : changes ? 'portal-changes' : recovery ? 'portal-recovery' : password ? 'portal-password' : exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
+const scenario = platformBranding ? 'platform-branding' : dictionaries ? 'dictionaries' : subscriptionAccess ? 'subscription-access' : workspaceProxy ? 'support-workspace-proxy' : supportWorkspace ? 'support-workspace' : supportSession ? 'support-session' : tenantSupport ? 'tenant-support' : supportRequests ? 'support-requests' : subscriptionAssignment ? 'subscription-assignment' : supplierQuota ? 'supplier-quota' : packageAuthoring ? 'package-authoring' : tenantCreate ? 'tenant-create' : projectEntry ? 'project-entry' : siteProject ? 'site-project' : siteContext ? 'site-context' : sitePreference ? 'site-preference' : siteUpgrade ? 'site-upgrade' : siteInitialization ? 'site-initialization' : batchRoles ? 'iam-batch-roles' : submissions ? 'portal-submissions' : certificates ? 'portal-certificates' : changes ? 'portal-changes' : recovery ? 'portal-recovery' : password ? 'portal-password' : exit ? 'portal-exit' : management ? 'portal-management' : portal ? 'portal' : 'reminder';
 const fixture = platformBranding ? 'PlatformBrandingBrowserFixture#servePlatformBranding' : dictionaries ? 'TenantDictionaryBrowserFixture#serveTwoTenantDictionaryInheritance' : subscriptionAccess ? 'SubscriptionAccessImpactBrowserFixture#serveMenuDowngradeAndRestoration' : supportWorkspace ? 'SupportWorkspaceBrowserFixture#serveTenantConsentAndVerifyNoBusinessSession' : supportSession ? 'SupportSessionBrowserFixture#serveTenantConsentAndVerifyNoBusinessSession' : tenantSupport ? 'TenantSupportBrowserFixture#serveTenantConsentAndVerifyNoBusinessSession' : supportRequests ? 'SupportRequestBrowserFixture' : subscriptionAssignment ? 'SubscriptionAssignmentBrowserFixture' : supplierQuota ? 'SupplierQuotaBrowserFixture' : packageAuthoring ? 'PackageAuthoringBrowserFixture' : tenantCreate ? 'TenantCreationBrowserFixture' : projectEntry ? 'ProjectEntryBrowserFixture' : siteProject ? 'SiteProjectBrowserFixture' : siteContext ? 'SiteContextBrowserFixture' : sitePreference ? 'SitePreferenceBrowserFixture' : siteUpgrade ? 'SiteUpgradeBrowserFixture' : siteInitialization ? 'SiteInitializationBrowserFixture' : batchRoles ? 'IamBatchRolesBrowserFixture' : portal ? 'PortalBrowserFixture' : 'ConsoleReminderBrowserFixture';
 const control = mkdtempSync(join(tmpdir(), portal ? 'ism-portal-e2e-' : 'ism-reminder-e2e-'));
 const artifacts = join(root, 'output/playwright', `${scenario}-e2e-${Date.now()}`);
@@ -43,9 +45,9 @@ mkdirSync(artifacts, { recursive: true });
 const children = [];
 let interrupted = false;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-function start(name, command, args, env = {}) {
+function start(name, command, args, env = {}, cwd = root) {
   const log = createWriteStream(join(artifacts, `${name}.log`));
-  const child = spawn(command, args, { cwd: root, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });
   const entry = { name, child, done: false, code: null, error: null };
   entry.closed = new Promise(resolve => {
@@ -87,6 +89,71 @@ async function unusedPort() {
   await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   return port;
 }
+function probeTls(url, ca) {
+  return new Promise((resolve, reject) => {
+    const request = httpsGet(url, { ca, timeout: 3000 }, response => {
+      response.resume();
+      resolve({ status: response.statusCode, headers: response.headers });
+    });
+    request.on('timeout', () => request.destroy(new Error('TLS probe timed out')));
+    request.on('error', reject);
+  });
+}
+async function serveWorkspaceProxy(frontendUrl, adminUrl, target) {
+  const snapshot = join(control, 'frontend-source');
+  mkdirSync(snapshot);
+  const archive = join(control, 'source.tar');
+  await waitExit(start('snapshot', 'git', ['archive', '--format=tar', '-o', archive, 'HEAD']), 30_000);
+  await waitExit(start('extract', 'tar', ['-xf', archive, '-C', snapshot]), 30_000);
+  for (const relative of ['node_modules','frontend/apps/admin/node_modules','frontend/apps/console/node_modules','frontend/packages/api-client/node_modules']) {
+    symlinkSync(join(root, relative), join(snapshot, relative), 'dir');
+  }
+  await waitExit(start('console-build','corepack',['pnpm','--filter','@ism/console','build'],
+    { VITE_ISM_SUPPORT_ADMIN_ORIGIN: adminUrl },snapshot),120_000);
+  await waitExit(start('admin-build','corepack',['pnpm','--filter','@ism/admin','build'],
+    { VITE_ISM_SUPPORT_CONSOLE_ORIGIN: frontendUrl },snapshot),120_000);
+  if (!existsSync(join(snapshot,'frontend/apps/admin/dist/support-workspace.html'))) throw Error('Independent HTML missing from admin dist');
+  const cert = join(control, 'localhost.crt'), key = join(control, 'localhost.key');
+  await waitExit(start('tls-cert','openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+    '-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',key,'-out',cert]),30_000);
+  const quote = value => '"' + value.replaceAll('\\','\\\\').replaceAll('"','\\"') + '"';
+  const values = { CONSOLE_LISTEN: '127.0.0.1:' + new URL(frontendUrl).port, ADMIN_LISTEN: '127.0.0.1:' + new URL(adminUrl).port,
+    CONSOLE_HOST: '127.0.0.1', ADMIN_HOST: '127.0.0.1',
+    CONSOLE_CERT: quote(cert), ADMIN_CERT: quote(cert), CONSOLE_KEY: quote(key), ADMIN_KEY: quote(key),
+    CONSOLE_ROOT: quote(join(snapshot,'frontend/apps/console/dist')), ADMIN_ROOT: quote(join(snapshot,'frontend/apps/admin/dist')),
+    BACKEND_URL: target };
+  const servers = readFileSync(join(root,'deploy/nginx/support-workspace.servers.conf.template'),'utf8')
+    .replace(/@([A-Z_]+)@/g, (_,key) => {
+      if (!(key in values)) throw Error('Unknown proxy substitution: '+key);
+      return values[key];
+    });
+  const config = join(control, 'nginx.conf');
+  writeFileSync(config,`pid ${quote(join(control,'nginx.pid'))};
+lock_file ${quote(join(control,'nginx.lock'))};
+error_log stderr warn;
+events {}
+http {
+  access_log off;
+  client_body_temp_path ${quote(join(control,'client-body'))};
+  proxy_temp_path ${quote(join(control,'proxy-temp'))};
+  fastcgi_temp_path ${quote(join(control,'fastcgi-temp'))};
+  uwsgi_temp_path ${quote(join(control,'uwsgi-temp'))};
+  scgi_temp_path ${quote(join(control,'scgi-temp'))};
+  types { text/html html; text/css css; application/javascript js; application/json json; image/svg+xml svg; }
+  ${servers}
+}
+`);
+  const nginx = start('nginx','nginx',['-p',control+'/', '-c',config, '-e','stderr', '-g','daemon off;']);
+  const ca = readFileSync(cert);
+  await until(async () => { try { return (await probeTls(frontendUrl,ca)).status === 200; } catch { return false; } },nginx,30_000);
+  const console = await probeTls(frontendUrl,ca);
+  const admin = await probeTls(adminUrl+'/support-workspace.html',ca);
+  const missing = await probeTls(adminUrl+'/assets/missing-workspace.js',ca);
+  if (console.headers['cross-origin-opener-policy'] !== 'same-origin-allow-popups'
+      || admin.status !== 200 || admin.headers['cross-origin-opener-policy'] !== 'unsafe-none'
+      || admin.headers['referrer-policy'] !== 'no-referrer' || missing.status !== 404) throw Error('Proxy routing or isolation headers differ');
+  writeFileSync(join(artifacts,'proxy-assertions.txt'),'Pinned local TLS, Console opener policy, Admin HTML/opener/referrer policy, and asset 404 verified.\n');
+}
 process.on('SIGINT', () => { interrupted = true; });
 process.on('SIGTERM', () => { interrupted = true; });
 try {
@@ -99,15 +166,19 @@ try {
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(target)) throw new Error('Invalid isolated backend URL');
   console.log('[ready] isolated backend');
   const port = await unusedPort();
-  const frontendUrl = `http://127.0.0.1:${port}`;
-  const adminUrl = management||tenantCreate||tenantSupport||subscriptionAccess ? `http://127.0.0.1:${await unusedPort()}` : '';
-  const frontend = start('frontend', 'corepack', ['pnpm', '--filter', (dictionaries || batchRoles || sitePreference || siteContext || siteProject || projectEntry) ? '@ism/admin' : portal ? '@ism/portal' : '@ism/console', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    (dictionaries || batchRoles || sitePreference || siteContext || siteProject || projectEntry) ? { ISM_DEV_API_TARGET: target } : portal ? { ISM_PORTAL_API_TARGET: target } : { ISM_CONSOLE_API_TARGET: target, ...(supportWorkspace ? { VITE_ISM_SUPPORT_ADMIN_ORIGIN: adminUrl } : {}) });
-  await until(async () => { try { return (await fetch(frontendUrl, { signal: AbortSignal.timeout(1000) })).ok; } catch { return false; } }, frontend, 60_000);
-  ensureRunning(backend);
-  if(adminUrl){
-    const admin = start('admin-frontend', 'corepack', ['pnpm','--filter','@ism/admin','dev','--host','127.0.0.1','--port',new URL(adminUrl).port,'--strictPort'], { ISM_DEV_API_TARGET: target, ...(supportWorkspace ? { VITE_ISM_SUPPORT_CONSOLE_ORIGIN: frontendUrl } : {}) });
-    await until(async () => {try{return (await fetch(adminUrl,{signal:AbortSignal.timeout(1000)})).ok;}catch{return false;}},admin,60_000);
+  const protocol = workspaceProxy ? 'https' : 'http';
+  const frontendUrl = `${protocol}://127.0.0.1:${port}`;
+  const adminUrl = management||tenantCreate||tenantSupport||subscriptionAccess ? `${protocol}://127.0.0.1:${await unusedPort()}` : '';
+  if (workspaceProxy) await serveWorkspaceProxy(frontendUrl, adminUrl, target);
+  else {
+    const frontend = start('frontend', 'corepack', ['pnpm', '--filter', (dictionaries || batchRoles || sitePreference || siteContext || siteProject || projectEntry) ? '@ism/admin' : portal ? '@ism/portal' : '@ism/console', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+      (dictionaries || batchRoles || sitePreference || siteContext || siteProject || projectEntry) ? { ISM_DEV_API_TARGET: target } : portal ? { ISM_PORTAL_API_TARGET: target } : { ISM_CONSOLE_API_TARGET: target, ...(supportWorkspace ? { VITE_ISM_SUPPORT_ADMIN_ORIGIN: adminUrl } : {}) });
+    await until(async () => { try { return (await fetch(frontendUrl, { signal: AbortSignal.timeout(1000) })).ok; } catch { return false; } }, frontend, 60_000);
+    ensureRunning(backend);
+    if(adminUrl){
+      const admin = start('admin-frontend', 'corepack', ['pnpm','--filter','@ism/admin','dev','--host','127.0.0.1','--port',new URL(adminUrl).port,'--strictPort'], { ISM_DEV_API_TARGET: target, ...(supportWorkspace ? { VITE_ISM_SUPPORT_CONSOLE_ORIGIN: frontendUrl } : {}) });
+      await until(async () => {try{return (await fetch(adminUrl,{signal:AbortSignal.timeout(1000)})).ok;}catch{return false;}},admin,60_000);
+    }
   }
   console.log(`[run] real browser scenario: ${scenario}`);
   const browser = platformBranding ? start('browser',process.execPath,['scripts/verify-platform-branding-browser.mjs',control,frontendUrl]) : dictionaries ? start('browser',process.execPath,['scripts/verify-dictionaries-browser.mjs',control,frontendUrl]) : subscriptionAccess ? start('browser',process.execPath,['scripts/verify-subscription-access-browser.mjs',control,frontendUrl,adminUrl,target]) : tenantSupport ? start('browser',process.execPath,['scripts/verify-tenant-support-browser.mjs',control,frontendUrl,adminUrl,target]) : supportRequests ? start('browser',process.execPath,['scripts/verify-support-requests-browser.mjs',control,frontendUrl,target]) : subscriptionAssignment ? start('browser',process.execPath,['scripts/verify-subscription-assignment-browser.mjs',control,frontendUrl,target]) : supplierQuota ? start('browser',process.execPath,['scripts/verify-supplier-quota-browser.mjs',control,frontendUrl,target]) : packageAuthoring ? start('browser',process.execPath,['scripts/verify-package-authoring-browser.mjs',control,frontendUrl]) : tenantCreate ? start('browser',process.execPath,['scripts/verify-tenant-create-browser.mjs',control,frontendUrl,adminUrl]) : projectEntry ? start('browser',process.execPath,['scripts/verify-project-entry-browser.mjs',control,frontendUrl]) : siteProject ? start('browser',process.execPath,['scripts/verify-site-project-browser.mjs',control,frontendUrl]) : siteContext ? start('browser',process.execPath,['scripts/verify-site-context-browser.mjs',control,frontendUrl]) : sitePreference ? start('browser',process.execPath,['scripts/verify-site-preference-browser.mjs',control,frontendUrl]) : siteUpgrade ? start('browser',process.execPath,['scripts/verify-site-upgrade-browser.mjs',control,frontendUrl]) : siteInitialization ? start('browser',process.execPath,['scripts/verify-site-initialization-browser.mjs',control,frontendUrl]) : batchRoles ? start('browser',process.execPath,['scripts/verify-iam-batch-roles-browser.mjs',control,frontendUrl]) : portal

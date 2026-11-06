@@ -1,5 +1,7 @@
 async(page)=>{
  const f=__FIXTURE__;
+ // The proxy probe pins the temporary certificate. Only this browser context accepts it.
+ if(f.proxy)page=await (await page.context().browser().newContext({ignoreHTTPSErrors:true})).newPage();
  // Use real tenant login; navigation and policy calls pass through the production HTTP stack.
  await page.goto(f.adminUrl);await page.getByLabel('租户编码',{exact:true}).fill(f.tenantCode);await page.getByLabel('用户名',{exact:true}).fill('pref-admin');await page.getByLabel('密码',{exact:true}).fill('Site#Initial123');await page.getByRole('button',{name:'登录系统',exact:true}).click();await page.getByText('登录成功',{exact:true}).waitFor();await page.goto(f.adminUrl+'/system/support-authorization');
  await page.getByRole('heading',{name:'支持授权',exact:true}).waitFor();await page.getByRole('button',{name:'保存支持策略',exact:true}).click({trial:true});await page.locator('.tenant-support .el-switch').click();await page.locator('.tenant-support .el-select__wrapper').click();await page.getByRole('option').filter({hasText:'租户管理员'}).click();await page.getByRole('button',{name:'保存支持策略',exact:true}).click();await page.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();await page.getByRole('button',{name:'重新读取支持授权',exact:true}).click();await page.getByRole('button',{name:'查看租户审批',exact:true}).click();await page.getByRole('button',{name:'批准租户授权',exact:true}).click();await page.getByLabel('租户处理意见',{exact:true}).fill('租户明确批准，只读基础字段');
@@ -17,7 +19,7 @@ async(page)=>{
    await panel.getByRole('button',{name:'打开管理端支持工作台'}).click();
    const popup=await popupReady;
    const issue=await issued;
-   if(!issue.ok())throw Error('Workspace entry issue failed');
+   if(!issue.ok()||!issue.headers()['cache-control']?.includes('no-store'))throw Error('Workspace entry issue failed or was cacheable');
    const {data:{entryToken}}=await issue.json();
    const browserSecret=issue.request().postDataJSON().browserSecret;
    await popup.getByText(/租户：.*操作人：.*截止：/).waitFor();
@@ -26,6 +28,7 @@ async(page)=>{
    const readResponse=popup.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/read'));
    await popup.getByLabel('供应商 ID').press('Enter');
    const read=await readResponse;
+   if(!read.headers()['cache-control']?.includes('no-store'))throw Error('Workspace read was cacheable');
    const {accessSecret}=read.request().postDataJSON();
    await popup.getByText('浏览器验收供应商',{exact:true}).waitFor();
    if(await popup.getByText('PRIVATE',{exact:true}).count())throw Error('Private field rendered');
