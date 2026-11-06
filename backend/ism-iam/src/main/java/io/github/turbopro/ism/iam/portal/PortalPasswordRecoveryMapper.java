@@ -5,7 +5,7 @@ import org.apache.ibatis.annotations.*;
 @Mapper
 public interface PortalPasswordRecoveryMapper extends TenantScopedMapper {
     record Redemption(long id,int accountVersion,int tokenVersion,boolean valid) {}
-    @Select("SELECT CAST(r.id AS CHAR) id,CASE WHEN r.status='PENDING' AND (r.account_version!=a.version OR r.token_version!=a.token_version OR a.status!='ACTIVE') THEN 'INVALIDATED' WHEN r.status='PENDING' AND r.expires_at<=UTC_TIMESTAMP(3) THEN 'EXPIRED' ELSE r.status END status,r.expires_at,r.created_at,CAST(r.created_by AS CHAR) created_by FROM iam_portal_password_recovery r JOIN iam_portal_account a ON a.id=r.account_id AND a.tenant_id=r.tenant_id WHERE r.tenant_id=#{tenantId} AND r.account_id=#{accountId} ORDER BY r.id DESC LIMIT 1")
+    @Select("SELECT CAST(r.id AS CHAR) id,CASE WHEN r.status='PENDING' AND (r.account_version!=a.version OR r.token_version!=a.token_version OR a.status!='ACTIVE') THEN 'INVALIDATED' WHEN r.status='PENDING' AND r.expires_at<=UTC_TIMESTAMP(3) THEN 'EXPIRED' ELSE r.status END status,r.expires_at,r.created_at,CAST(r.created_by AS CHAR) created_by FROM iam_portal_password_recovery r JOIN iam_portal_account a ON a.id=r.account_id AND a.tenant_id=r.tenant_id WHERE r.tenant_id=#{tenantId} AND r.account_id=#{accountId} ORDER BY r.account_version DESC,r.created_at DESC,r.id DESC LIMIT 1")
     State current(long tenantId,long accountId);
     @Update("UPDATE iam_portal_password_recovery SET status=#{status},revoked_at=UTC_TIMESTAMP(3),revoked_by=#{actorId} WHERE tenant_id=#{tenantId} AND account_id=#{accountId} AND status='PENDING'")
     int retire(long tenantId,long accountId,String status,long actorId);
