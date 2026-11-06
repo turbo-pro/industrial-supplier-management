@@ -48,6 +48,13 @@ async(page)=>{
    await terminator.getByLabel('密码',{exact:true}).fill('Console#Pass123');
    await terminator.getByRole('button',{name:'进入 Console',exact:true}).click();
    await terminator.getByRole('button',{name:'支持申请工作台',exact:true}).click();
+   const audit=terminator.getByRole('region',{name:'独立支持审计'});
+   await audit.getByRole('button',{name:'读取会话审计',exact:true}).click();
+   const auditedId=new URL(read.url()).pathname.split('/')[3];
+   await audit.getByRole('row').filter({hasText:auditedId}).getByRole('button',{name:'查看访问记录',exact:true}).click();
+   await audit.getByRole('region',{name:'审计访问记录'}).getByText('读取成功',{exact:true}).waitFor();
+   if(await audit.getByText('浏览器验收供应商',{exact:true}).count())throw Error('Audit leaked business fields');
+   await audit.screenshot({path:'output/playwright/tenant-support/independent-audit.png'});
    const termination=terminator.getByRole('region',{name:'强制终止支持会话'});
    await termination.getByLabel('支持会话 ID').fill(new URL(read.url()).pathname.split('/')[3]);
    await termination.getByLabel('终止原因').fill('真实浏览器安全处置');

@@ -295,6 +295,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-audit/sessions/{sessionId}/access-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires platform:support:audit in Console; views verified supplier access events for the selected session. No audit payloads or credentials are returned. */
+        get: operations["auditSupportAccessLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/support-audit/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires platform:support:audit in Console; lists support session control metadata only. No business fields are returned. No audit payloads or credentials are returned. */
+        get: operations["auditSupportSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-sessions/{sessionId}/revoke": {
         parameters: {
             query?: never;
@@ -8028,7 +8062,7 @@ export interface components {
             /** Format: password */
             initialPassword: string;
             /** @enum {string} */
-            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_SUPPORT_AUDITOR";
         };
         ChangeConsoleUserStatus: {
             /** @enum {string} */
@@ -8037,7 +8071,7 @@ export interface components {
         };
         ChangeConsoleUserRole: {
             /** @enum {string} */
-            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+            roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_SUPPORT_AUDITOR";
             version: number;
         };
         ConsoleRoleImpactPreview: {
@@ -8046,7 +8080,7 @@ export interface components {
             version: number;
             currentRoleCodes: string[];
             /** @enum {string} */
-            proposedRoleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+            proposedRoleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_SUPPORT_AUDITOR";
             addedPermissions: string[];
             removedPermissions: string[];
             canApply: boolean;
@@ -8904,6 +8938,89 @@ export interface operations {
                                 surface: "CONSOLE" | "SUPPORT_WORKSPACE" | "UNSPECIFIED";
                                 traceId: string | null;
                                 occurredAt: string;
+                            }[];
+                            hasMore: boolean;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    auditSupportAccessLogs: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 audit events per page. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            items: {
+                                id: string;
+                                objectId: string;
+                                /** @enum {string} */
+                                result: "READ" | "NOT_VISIBLE" | "DENIED";
+                                /** @enum {string} */
+                                surface: "CONSOLE" | "SUPPORT_WORKSPACE" | "UNSPECIFIED";
+                                traceId: string | null;
+                                occurredAt: string;
+                            }[];
+                            hasMore: boolean;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    auditSupportSessions: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 sessions per page. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            items: {
+                                id: string;
+                                requestId: string;
+                                operatorId: string;
+                                tenantId: string;
+                                /** @enum {string} */
+                                state: "ACTIVE" | "PENDING" | "EXPIRED" | "REVOKED";
+                                createdAt: string;
+                                expiresAt: string;
+                                revokedAt: string | null;
                             }[];
                             hasMore: boolean;
                         };
@@ -11550,7 +11667,7 @@ export interface operations {
     previewConsoleUserRoleImpact: {
         parameters: {
             query: {
-                roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
+                roleCode: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_SUPPORT_AUDITOR";
                 version: number;
             };
             header?: never;

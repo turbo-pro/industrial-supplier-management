@@ -39,7 +39,7 @@ public class ConsoleUserService {
 
     @Transactional(readOnly=true)
     public ConsoleUserModels.RoleImpactPreview previewRoleChange(long id,String roleCode,int version,long actorId){
-        if(version<0||!Set.of("PLATFORM_ADMIN","PLATFORM_SUPPORT").contains(roleCode))
+        if(version<0||!Set.of("PLATFORM_ADMIN","PLATFORM_SUPPORT","PLATFORM_SUPPORT_AUDITOR").contains(roleCode))
             throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
         ConsoleUserModels.Row target=mapper.findUser(id);
         if(target==null) throw new ApiException(CommonErrorCode.NOT_FOUND);
@@ -52,7 +52,7 @@ public class ConsoleUserService {
         Set<String> removed=new TreeSet<>(before);removed.removeAll(after);
         Set<String> blockers=new TreeSet<>();
         if(id==actorId) blockers.add("SELF_ROLE_CHANGE");
-        if(currentRoles.contains("PLATFORM_ADMIN")=="PLATFORM_ADMIN".equals(roleCode)) blockers.add("NO_CHANGE");
+        if(currentRoles.equals(Set.of(roleCode))) blockers.add("NO_CHANGE");
         if(currentRoles.contains("PLATFORM_ADMIN")&&!"PLATFORM_ADMIN".equals(roleCode)
                 &&"ACTIVE".equals(target.status())&&!target.manualLocked()&&mapper.activeAdmins()<=1)
             blockers.add("LAST_ADMIN");
@@ -83,7 +83,7 @@ public class ConsoleUserService {
         if(target.version()!=command.version()) throw new ApiException(CommonErrorCode.CONFLICT);
         if(id==actorId) throw new ApiException(ConsoleUserErrorCode.SELF_ROLE_CHANGE);
         boolean admin=mapper.isAdmin(id)>0;
-        if(admin=="PLATFORM_ADMIN".equals(command.roleCode())) throw new ApiException(CommonErrorCode.CONFLICT);
+        if(new HashSet<>(mapper.userRoleCodes(id)).equals(Set.of(command.roleCode()))) throw new ApiException(CommonErrorCode.CONFLICT);
         if(admin&&"ACTIVE".equals(target.status())&&!target.manualLocked()&&mapper.activeAdmins()<=1)
             throw new ApiException(ConsoleUserErrorCode.LAST_ADMIN);
         mapper.clearRoles(id);

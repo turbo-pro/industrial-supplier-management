@@ -4,6 +4,7 @@ import { createIsmClient, type components } from '@ism/api-client';
 import SubscriptionPlans from './SubscriptionPlans.vue';
 import SupportRequests from './SupportRequests.vue';
 import SupportTermination from './SupportTermination.vue';
+import SupportAudit from './SupportAudit.vue';
 import TenantInitialization from './TenantInitialization.vue';
 import TenantCreation from './TenantCreation.vue';
 import PackageAuthoring from './PackageAuthoring.vue';
@@ -41,9 +42,9 @@ const initializeTarget = ref<components['schemas']['Tenant'] | null>(null);
 const subscriptionTenant = ref<components['schemas']['Tenant'] | null>(null);
 const currentUser = ref<components['schemas']['ConsoleUserSummary'] | null>(null);
 const users = ref<components['schemas']['ConsoleUser'][]>([]);
-const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' });
+const userForm = reactive({ username: '', displayName: '', initialPassword: '', roleCode: 'PLATFORM_SUPPORT' as 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' | 'PLATFORM_SUPPORT_AUDITOR' });
 const userBusy = ref(false);
-const roleDrafts = reactive<Record<string, 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT'>>({});
+const roleDrafts = reactive<Record<string, 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' | 'PLATFORM_SUPPORT_AUDITOR'>>({});
 const rolePreview = ref<components['schemas']['ConsoleRoleImpactPreview'] | null>(null);
 const resetTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
 const lockTarget = ref<components['schemas']['ConsoleUser'] | null>(null);
@@ -120,7 +121,7 @@ async function loadUsers() {
   if (error) { message.value = error.error.message; return; }
   users.value = data.data;
   rolePreview.value = null;
-  for (const user of users.value) roleDrafts[user.id] = user.roleCodes.includes('PLATFORM_ADMIN') ? 'PLATFORM_ADMIN' : 'PLATFORM_SUPPORT';
+  for (const user of users.value) roleDrafts[user.id] = user.roleCodes.includes('PLATFORM_ADMIN') ? 'PLATFORM_ADMIN' : user.roleCodes.includes('PLATFORM_SUPPORT_AUDITOR') ? 'PLATFORM_SUPPORT_AUDITOR' : 'PLATFORM_SUPPORT';
 }
 
 async function createUser() {
@@ -335,6 +336,7 @@ if (accessToken.value) {
         <tr v-if="tenants.length === 0"><td colspan="6" class="empty">尚未创建租户</td></tr></tbody>
       </table><p v-else>当前没有租户列表查看权限，创建操作仍需单独授权。</p></div><p v-if="currentUser?.permissions.includes('platform:tenant:view') && tenants.length===0" class="tenant-empty">当前未加载到租户记录。</p>
     </section>
+    <SupportAudit v-if="currentUser?.permissions.includes('platform:support:audit')" :token="accessToken!" />
     <SupportTermination v-if="supportOpen && currentUser?.permissions.includes('platform:support:terminate')" :token="accessToken!" />
     <SupportRequests v-if="supportOpen" :token="accessToken!" :tenant="supportTenant" :can-request="currentUser?.permissions.includes('platform:support:request')??false" :can-review="currentUser?.permissions.includes('platform:support:review')??false" @close="supportOpen=false;supportTenant=undefined" />
     <TenantCreation v-if="createTenantOpen" :token="accessToken" @close="createTenantOpen=false" @created="tenantCreated" />
@@ -349,12 +351,12 @@ if (accessToken.value) {
         <label>平台用户名<input v-model="userForm.username" required pattern="[a-zA-Z][a-zA-Z0-9._-]{2,99}" /></label>
         <label>显示名称<input v-model="userForm.displayName" required maxlength="100" /></label>
         <label>初始密码<input v-model="userForm.initialPassword" required type="password" minlength="12" autocomplete="new-password" /></label>
-        <label>平台角色<select v-model="userForm.roleCode"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select></label>
+        <label>平台角色<select v-model="userForm.roleCode"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_SUPPORT_AUDITOR">支持会话审计员</option><option value="PLATFORM_ADMIN">运营管理员</option></select></label>
         <button :disabled="userBusy" type="submit">创建平台账号</button>
       </form>
       <div class="account-table-scroll"><table><thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
         <tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.displayName }}</td>
-          <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id" @change="rolePreview=null"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
+          <td><div v-if="canManageUsers()" class="account-role"><select v-model="roleDrafts[user.id]" :aria-label="`${user.username} 平台角色`" :disabled="user.id === currentUser?.id" @change="rolePreview=null"><option value="PLATFORM_SUPPORT">支持人员</option><option value="PLATFORM_SUPPORT_AUDITOR">支持会话审计员</option><option value="PLATFORM_ADMIN">运营管理员</option></select>
             <button type="button" :disabled="user.id === currentUser?.id || user.roleCodes.includes(roleDrafts[user.id])" @click="previewUserRole(user)">预览影响</button></div><span v-else>{{ user.roleCodes.join('、') }}</span></td>
           <td><ElTag :type="user.status==='ACTIVE'?'success':'info'" size="small">{{user.status==='ACTIVE'?'启用':'停用'}}</ElTag><span v-if="user.manualLocked"> · 人工锁定</span><span v-else-if="user.automaticLockedUntil"> · 登录失败暂锁</span></td>
           <td><div v-if="canManageUsers()" class="account-actions"><button type="button" :disabled="user.id === currentUser?.id" @click="changeUserStatus(user)">{{ user.status === 'ACTIVE' ? '停用' : '恢复' }}</button>

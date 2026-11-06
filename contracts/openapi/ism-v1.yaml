@@ -939,6 +939,137 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '404':
           $ref: '#/components/responses/ApiFailure'
+  /console/support-audit/sessions/{sessionId}/access-logs:
+    get:
+      operationId: auditSupportAccessLogs
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires platform:support:audit in Console; views verified supplier access events for the selected session. No audit payloads or credentials are returned.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+      responses:
+        '200':
+          description: Up to 20 audit events per page. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [items, hasMore]
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, objectId, result, surface, traceId, occurredAt]
+                            properties:
+                              id:
+                                type: string
+                              objectId:
+                                type: string
+                              result:
+                                type: string
+                                enum: [READ, NOT_VISIBLE, DENIED]
+                              surface:
+                                type: string
+                                enum: [CONSOLE, SUPPORT_WORKSPACE, UNSPECIFIED]
+                              traceId:
+                                type: string
+                                nullable: true
+                              occurredAt:
+                                type: string
+                        hasMore:
+                          type: boolean
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+  /console/support-audit/sessions:
+    get:
+      operationId: auditSupportSessions
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires platform:support:audit in Console; lists support session control metadata only. No business fields are returned. No audit payloads or credentials are returned.
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+      responses:
+        '200':
+          description: Up to 20 sessions per page. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [items, hasMore]
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, requestId, operatorId, tenantId, state, createdAt, expiresAt, revokedAt]
+                            properties:
+                              id:
+                                type: string
+                              requestId:
+                                type: string
+                              operatorId:
+                                type: string
+                              tenantId:
+                                type: string
+                              state:
+                                type: string
+                                enum: [ACTIVE, PENDING, EXPIRED, REVOKED]
+                              createdAt:
+                                type: string
+                              expiresAt:
+                                type: string
+                              revokedAt:
+                                type: string
+                                nullable: true
+                        hasMore:
+                          type: boolean
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-sessions/{sessionId}/revoke:
     post:
       operationId: revokeSupportSession
@@ -2275,7 +2406,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
-        - { name: roleCode, in: query, required: true, schema: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] } }
+        - { name: roleCode, in: query, required: true, schema: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT, PLATFORM_SUPPORT_AUDITOR] } }
         - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
       responses:
         '200': { description: Read-only permission delta and current role-change blockers; not authorization to write, content: { application/json: { schema: { $ref: '#/components/schemas/ConsoleRoleImpactPreviewResponse' } } } }
@@ -7144,7 +7275,7 @@ components:
         username: { type: string, pattern: '^[a-zA-Z][a-zA-Z0-9._-]{2,99}$' }
         displayName: { type: string, maxLength: 100 }
         initialPassword: { type: string, format: password, writeOnly: true, minLength: 12, maxLength: 128 }
-        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT, PLATFORM_SUPPORT_AUDITOR] }
     ChangeConsoleUserStatus:
       type: object
       required: [status, version]
@@ -7155,7 +7286,7 @@ components:
       type: object
       required: [roleCode, version]
       properties:
-        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+        roleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT, PLATFORM_SUPPORT_AUDITOR] }
         version: { type: integer, minimum: 0 }
     ConsoleRoleImpactPreview:
       type: object
@@ -7165,7 +7296,7 @@ components:
         username: { type: string }
         version: { type: integer }
         currentRoleCodes: { type: array, uniqueItems: true, items: { type: string } }
-        proposedRoleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT] }
+        proposedRoleCode: { type: string, enum: [PLATFORM_ADMIN, PLATFORM_SUPPORT, PLATFORM_SUPPORT_AUDITOR] }
         addedPermissions: { type: array, uniqueItems: true, items: { type: string } }
         removedPermissions: { type: array, uniqueItems: true, items: { type: string } }
         canApply: { type: boolean }

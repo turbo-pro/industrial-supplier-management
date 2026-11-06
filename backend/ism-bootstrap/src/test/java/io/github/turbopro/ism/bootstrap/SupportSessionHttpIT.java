@@ -14,6 +14,53 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = "ism.support.sessions.enabled=true")
 class SupportSessionHttpIT extends TenantSupportIT {
     @Test
+    void independentAuditorSeesMetadataWithoutOperatorCapabilities() {
+        var tenant = fixture();
+        String employee = tenantLogin(tenant, "pref-admin"), owner = login(false);
+        String platformAdmin = login(true);
+        String auditorId = ok(request("POST", "/api/console/users", platformAdmin, "create-auditor",
+                Map.of("username","support-auditor","displayName","独立审计员","initialPassword","Console#Pass123","roleCode","PLATFORM_SUPPORT_AUDITOR"))).path("id").asText();
+        jdbc.update("UPDATE plt_user SET force_password_change=0 WHERE id=?", auditorId);
+        String auditor = http.postForEntity("/api/console/auth/login", Map.of("username","support-auditor","password","Console#Pass123","deviceId","audit-tests"), com.fasterxml.jackson.databind.JsonNode.class)
+                .getBody().path("data").path("accessToken").asText();
+        String requestId = approved(tenant);
+        save(employee, tenant.role(), 0, true);
+        ok(decide(employee, requestId, "approve", "audit-" + requestId, decision(detail(employee, requestId))));
+        String reservation = "/api/console/support-requests/" + requestId + "/sessions";
+        String sessionId = ok(request("POST", reservation, owner, null, null)).path("sessionId").asText();
+        String console = "/api/console/support-sessions/" + sessionId;
+        String browser = "A".repeat(43);
+        String entry = ok(request("POST", console + "/entry-token", owner, null, Map.of("browserSecret",browser))).path("entryToken").asText();
+        String access = ok(request("POST", console + "/exchange", owner, null, Map.of("browserSecret",browser,"entryToken",entry))).path("accessSecret").asText();
+        ok(request("POST", console + "/tenants/" + tenant.tenant() + "/suppliers/1/read", owner, null, Map.of("accessSecret",access)));
+        String sessions = "/api/console/support-audit/sessions";
+        var response = request("GET", sessions, auditor, null, null);
+        assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        var rows = ok(response).path("items");
+        assertThat(rows.findValuesAsText("id")).contains(sessionId);
+        assertThat(rows.toString()).doesNotContain(access, entry, browser, "scope", "reason");
+        var logs = ok(request("GET", sessions + "/" + sessionId + "/access-logs", auditor, null, null)).path("items");
+        assertThat(logs.size()).isOne();
+        assertThat(logs.get(0).path("result").asText()).isEqualTo("NOT_VISIBLE");
+        assertThat(request("GET", sessions + "?page=101", auditor, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        for (String denied : java.util.List.of(owner, employee)) {
+            assertThat(request("GET", sessions, denied, null, null).getStatusCode().value()).isIn(401,403);
+            assertThat(request("GET", sessions + "/" + sessionId + "/access-logs", denied, null, null).getStatusCode().value()).isIn(401,403);
+        }
+        for (String path : java.util.List.of(reservation, console + "/entry-token", console + "/terminate", console + "/revoke")) {
+            assertThat(request("POST", path, auditor, null, Map.of("browserSecret",browser,"reason","unauthorized"))
+                    .getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        }
+        assertThat(request("GET", "/api/suppliers/1", auditor, null, null).getStatusCode().value()).isIn(401,403);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_role_permission WHERE role_id=1003",Integer.class)).isOne();
+        var preview = ok(request("GET", "/api/console/users/" + auditorId + "/role-impact?roleCode=PLATFORM_SUPPORT&version=0", platformAdmin, null, null));
+        assertThat(preview.path("canApply").asBoolean()).isTrue();
+        ok(request("PUT", "/api/console/users/" + auditorId + "/role", platformAdmin, "auditor-to-support", Map.of("roleCode","PLATFORM_SUPPORT","version",0)));
+        assertThat(request("GET", sessions, auditor, null, null).getStatusCode().value()).isIn(401,403);
+
+    }
+
+    @Test
     void ownerCanPageAndRevokeSessionsWithoutAnyCredential() {
         var tenant = fixture();
         String employee = tenantLogin(tenant, "pref-admin"), owner = login(false);

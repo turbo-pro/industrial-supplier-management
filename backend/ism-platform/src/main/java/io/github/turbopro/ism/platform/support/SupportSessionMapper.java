@@ -44,6 +44,18 @@ public interface SupportSessionMapper {
     @Select("SELECT status FROM plt_support_session WHERE id=#{id} FOR UPDATE")
     String lockState(long id);
 
+    record AuditSummary(String id, String requestId, String operatorId, String tenantId,
+                        String state, LocalDateTime createdAt, LocalDateTime expiresAt, LocalDateTime revokedAt) {}
+
+    @Select("""
+            SELECT CAST(id AS CHAR) AS id, CAST(request_id AS CHAR) AS request_id,
+              CAST(platform_operator_id AS CHAR) AS operator_id, CAST(target_tenant_id AS CHAR) AS tenant_id,
+              CASE WHEN status IN ('ACTIVE','PENDING') AND expires_at <= UTC_TIMESTAMP(3)
+                THEN 'EXPIRED' ELSE status END AS state, created_at, expires_at, revoked_at
+            FROM plt_support_session ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET #{offset}
+            """)
+    List<AuditSummary> auditSessions(int offset);
+
     record Entry(long requestId, long decisionId, long operatorId, String scopeJson) {}
 
     @Select("""

@@ -80,6 +80,30 @@ public class SupportSessionService {
         return audit.ownSupportAccess(sessionId, Long.parseLong(request.tenantId()), page);
     }
 
+    public record AuditSessionPage(List<SupportSessionMapper.AuditSummary> items, boolean hasMore) {}
+
+    private void requireAuditor() {
+        if (TenantContext.require().tenantId() != 0 || !AuthorizationContext.require().hasAction("platform:support:audit")) {
+            throw unavailable();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public AuditSessionPage auditSessions(int page) {
+        requireAuditor();
+        if (page < 0 || page > 100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var rows = sessions.auditSessions(page * 20);
+        return new AuditSessionPage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
+    }
+
+    @Transactional(readOnly = true)
+    public AuditService.SupportAccessPage auditAccess(long sessionId, int page) {
+        requireAuditor();
+        var entry = sessions.entry(sessionId);
+        if (entry == null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        return audit.auditedSupportAccess(sessionId, requests.get(entry.requestId()).targetTenantId(), entry.operatorId(), page);
+    }
+
     /** Reserves a session record. Activation and credentials require a separate exchange. */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public long createPending(long requestId) {

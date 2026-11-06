@@ -6,7 +6,7 @@ import PlatformBrand from './PlatformBrand.vue';
 import type {Branding} from './platformBranding';
 const props=defineProps<{branding:Branding;displayName:string;permissions:string[];activeSection:string}>();
 const emit=defineEmits<{navigate:[section:string]}>();const mobileOpen=ref(false),active=computed(()=>props.activeSection);
-const entries=[{key:'packages',label:'套餐与授权',icon:Box,permissions:['platform:package:view','platform:package:manage']},{key:'tenants',label:'租户管理',icon:OfficeBuilding,permissions:['platform:tenant:view','platform:tenant:create']},{key:'support',label:'支持访问',icon:Service,permissions:['platform:support:view']},{key:'accounts',label:'平台账号',icon:User,permissions:['platform:user:view']},{key:'branding',label:'平台配置',icon:Setting,permissions:['platform:branding:view']}];
+const entries=[{key:'packages',label:'套餐与授权',icon:Box,permissions:['platform:package:view','platform:package:manage']},{key:'tenants',label:'租户管理',icon:OfficeBuilding,permissions:['platform:tenant:view','platform:tenant:create']},{key:'support',label:'支持访问',icon:Service,permissions:['platform:support:view']},{key:'support-audit',label:'支持审计',icon:Lock,permissions:['platform:support:audit']},{key:'accounts',label:'平台账号',icon:User,permissions:['platform:user:view']},{key:'branding',label:'平台配置',icon:Setting,permissions:['platform:branding:view']}];
 function select(key:string){mobileOpen.value=false;emit('navigate',key);}
 </script>
 <template><div class="console-frame">

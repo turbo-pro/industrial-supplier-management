@@ -48,6 +48,14 @@ public class AuditService {
         return new SupportAccessPage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
     }
 
+    public SupportAccessPage auditedSupportAccess(long sessionId, long targetTenantId, long operatorId, int page) {
+        if (TenantContext.require().tenantId() != 0 || !io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext
+                .require().hasAction("platform:support:audit")) throw new ApiException(CommonErrorCode.FORBIDDEN);
+        if (page < 0 || page > 100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var rows = mapper.supportAccess(0, operatorId, Long.toString(sessionId), Long.toString(targetTenantId), page * 20);
+        return new SupportAccessPage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
+    }
+
     private LocalDateTime utcNow() {
         return LocalDateTime.now(ZoneOffset.UTC);
     }

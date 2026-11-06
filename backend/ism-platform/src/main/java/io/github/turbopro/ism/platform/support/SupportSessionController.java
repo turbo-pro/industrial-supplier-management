@@ -122,6 +122,19 @@ public class SupportSessionController {
         return reply(Map.of("status", "REVOKED"));
     }
 
+    @RequiresPermission("platform:support:audit")
+    @GetMapping("/support-audit/sessions")
+    ResponseEntity<ApiResponse<SupportSessionService.AuditSessionPage>> auditSessions(@RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.auditSessions(page)));
+    }
+
+    @RequiresPermission("platform:support:audit")
+    @GetMapping("/support-audit/sessions/{sessionId}/access-logs")
+    ResponseEntity<ApiResponse<AuditService.SupportAccessPage>> auditAccess(@PathVariable long sessionId,
+            @RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.auditAccess(sessionId, page)));
+    }
+
     public record Termination(@NotBlank @jakarta.validation.constraints.Size(max = 1000) String reason) {}
 
     @RequiresPermission("platform:support:terminate")
