@@ -1,12 +1,15 @@
 package io.github.turbopro.ism.operation;
 
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.common.api.error.ApiException;
+import io.github.turbopro.ism.common.api.error.CommonErrorCode;
 import io.github.turbopro.ism.common.infrastructure.web.TraceIdContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Service
 public class AuditService {
@@ -30,6 +33,19 @@ public class AuditService {
                 sanitizer.sanitize(command.beforeSummary()), sanitizer.sanitize(command.afterSummary()),
                 command.ip(), command.userAgent(), TraceIdContext.currentTraceId(), utcNow());
         return id;
+    }
+
+    public record SupportAccessRow(String id, String objectId, String result, String surface,
+                                   String traceId, LocalDateTime occurredAt) {}
+    public record SupportAccessPage(List<SupportAccessRow> items, boolean hasMore) {}
+
+    public SupportAccessPage ownSupportAccess(long sessionId, long targetTenantId, int page) {
+        var actor = TenantContext.require();
+        if (actor.tenantId() != 0) throw new ApiException(CommonErrorCode.FORBIDDEN);
+        if (page < 0 || page > 100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var rows = mapper.supportAccess(0, actor.actorId(), Long.toString(sessionId),
+                Long.toString(targetTenantId), page * 20);
+        return new SupportAccessPage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
     }
 
     private LocalDateTime utcNow() {

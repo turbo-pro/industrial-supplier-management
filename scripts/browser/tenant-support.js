@@ -65,6 +65,14 @@ async(page)=>{
    await pending.getByRole('button',{name:'撤销此会话'}).click();
    await history.getByRole('button',{name:'确认撤销会话'}).click();
    await pending.getByText('已撤销',{exact:true}).waitFor();
+   const auditedSession=new URL(read.url()).pathname.split('/')[3];
+   const audited=history.getByRole('row').filter({hasText:auditedSession});
+   await audited.getByRole('button',{name:'查看访问日志'}).click();
+   const logs=history.getByRole('region',{name:'会话访问日志'});
+   const auditRow=logs.getByRole('row').filter({hasText:f.supplierId});
+   await auditRow.getByText('读取成功',{exact:true}).waitFor();
+   if(await logs.getByText('浏览器验收供应商',{exact:true}).count())throw Error('Log exposed supplier field');
+
    const second=consolePage.waitForEvent('popup');
    await panel.getByRole('button',{name:'打开管理端支持工作台'}).click();
    workspaceToWithdraw=await second;

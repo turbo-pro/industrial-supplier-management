@@ -71,6 +71,15 @@ public class SupportSessionService {
         return new SessionPage(items, rows.size() > 20 ? items.get(19).id() : null);
     }
 
+    @Transactional(readOnly = true)
+    public AuditService.SupportAccessPage listOwnAccess(long sessionId, int page) {
+        var actor = requireOperator();
+        var entry = sessions.entry(sessionId);
+        if (entry == null || entry.operatorId() != actor.actorId()) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var request = requestVisibility.get(entry.requestId());
+        return audit.ownSupportAccess(sessionId, Long.parseLong(request.tenantId()), page);
+    }
+
     /** Reserves a session record. Activation and credentials require a separate exchange. */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public long createPending(long requestId) {

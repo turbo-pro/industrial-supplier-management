@@ -46,6 +46,13 @@ public class SupportSessionController {
     public record Access(@NotBlank @Pattern(regexp = SECRET) String accessSecret) {}
 
     @RequiresPermission("platform:support:request")
+    @GetMapping("/support-sessions/{sessionId}/access-logs")
+    ResponseEntity<ApiResponse<AuditService.SupportAccessPage>> accessLogs(@PathVariable long sessionId,
+            @RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.listOwnAccess(sessionId, page)));
+    }
+
+    @RequiresPermission("platform:support:request")
     @GetMapping("/support-requests/{requestId}/sessions")
     ResponseEntity<ApiResponse<SupportSessionService.SessionPage>> list(@PathVariable long requestId,
             @RequestParam(required = false) Long before) {

@@ -278,6 +278,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-sessions/{sessionId}/access-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The original Console applicant can view verified supplier access events for this session. No audit payloads or credentials are returned. */
+        get: operations["listOwnSupportAccessLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-sessions/{sessionId}/revoke": {
         parameters: {
             query?: never;
@@ -8838,6 +8855,48 @@ export interface operations {
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnSupportAccessLogs: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 audit events per page. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            items: {
+                                id: string;
+                                objectId: string;
+                                /** @enum {string} */
+                                result: "READ" | "NOT_VISIBLE" | "DENIED";
+                                /** @enum {string} */
+                                surface: "CONSOLE" | "SUPPORT_WORKSPACE" | "UNSPECIFIED";
+                                traceId: string | null;
+                                occurredAt: string;
+                            }[];
+                            hasMore: boolean;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     revokeSupportSession: {

@@ -872,6 +872,73 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '422':
           $ref: '#/components/responses/ApiFailure'
+  /console/support-sessions/{sessionId}/access-logs:
+    get:
+      operationId: listOwnSupportAccessLogs
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: The original Console applicant can view verified supplier access events for this session. No audit payloads or credentials are returned.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+      responses:
+        '200':
+          description: Up to 20 audit events per page. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [items, hasMore]
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, objectId, result, surface, traceId, occurredAt]
+                            properties:
+                              id:
+                                type: string
+                              objectId:
+                                type: string
+                              result:
+                                type: string
+                                enum: [READ, NOT_VISIBLE, DENIED]
+                              surface:
+                                type: string
+                                enum: [CONSOLE, SUPPORT_WORKSPACE, UNSPECIFIED]
+                              traceId:
+                                type: string
+                                nullable: true
+                              occurredAt:
+                                type: string
+                        hasMore:
+                          type: boolean
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-sessions/{sessionId}/revoke:
     post:
       operationId: revokeSupportSession

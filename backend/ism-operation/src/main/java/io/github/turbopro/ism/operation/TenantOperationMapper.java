@@ -4,6 +4,7 @@ import io.github.turbopro.ism.common.infrastructure.tenant.TenantScopedMapper;
 import org.apache.ibatis.annotations.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 public interface TenantOperationMapper extends TenantScopedMapper {
@@ -16,6 +17,23 @@ public interface TenantOperationMapper extends TenantScopedMapper {
     int insertAudit(long id, long tenantId, long operatorId, Long actingUserId, String action,
                     String objectType, long objectId, String beforeSummary, String afterSummary,
                     String ip, String userAgent, String traceId, LocalDateTime occurredAt);
+
+    @Select("""
+        SELECT CAST(id AS CHAR) AS id, CAST(object_id AS CHAR) AS object_id,
+          CASE WHEN action='SUPPORT_SUPPLIER_READ_DENIED' THEN 'DENIED'
+               WHEN JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.result'))='READ' THEN 'READ'
+               ELSE 'NOT_VISIBLE' END AS result,
+          CASE JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.surface'))
+               WHEN 'SUPPORT_WORKSPACE' THEN 'SUPPORT_WORKSPACE' WHEN 'CONSOLE' THEN 'CONSOLE'
+               ELSE 'UNSPECIFIED' END AS surface,
+          trace_id, occurred_at
+        FROM sys_audit_event
+        WHERE tenant_id=#{tenantId} AND operator_id=#{operatorId} AND support_session_ref=#{sessionId}
+          AND JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.targetTenantId'))=#{targetTenantId}
+        ORDER BY occurred_at DESC,id DESC LIMIT 21 OFFSET #{offset}
+        """)
+    List<AuditService.SupportAccessRow> supportAccess(long tenantId, long operatorId, String sessionId,
+                                                       String targetTenantId, int offset);
 
     @Insert("""
         INSERT INTO sys_outbox_event(id,event_id,tenant_id,event_type,event_version,aggregate_type,aggregate_id,

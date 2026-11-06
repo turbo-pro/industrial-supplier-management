@@ -110,6 +110,20 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 SELECT operator_id, trace_id, after_summary FROM sys_audit_event
                 WHERE action='SUPPORT_SUPPLIER_READ_DENIED' AND object_id=? AND tenant_id=0
                 """, supplierId);
+        String logs = console + "/access-logs";
+        var report = request("GET", logs, owner, null, null);
+        assertThat(report.getHeaders().getCacheControl()).contains("no-store");
+        var rows = ok(report).path("items");
+        assertThat(rows.size()).isEqualTo(3);
+        assertThat(rows.get(0).path("result").asText()).isEqualTo("DENIED");
+        assertThat(rows.get(1).path("result").asText()).isEqualTo("NOT_VISIBLE");
+        assertThat(rows.get(2).path("result").asText()).isEqualTo("READ");
+        assertThat(rows.get(2).path("objectId").asText()).isEqualTo(Long.toString(supplierId));
+        assertThat(rows.toString()).doesNotContain(access, entry, browser, "SUP-WORKSPACE", "PRIVATE");
+        assertThat(ok(request("GET", otherConsole + "/access-logs", owner, null, null)).path("items").isEmpty()).isTrue();
+        assertThat(request("GET", logs, login(true), null, null).getStatusCode().value()).isIn(403,404);
+        assertThat(request("GET", logs, employee, null, null).getStatusCode().value()).isIn(401,403);
+        assertThat(request("GET", logs + "?page=101", owner, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(denial.get("operator_id").toString()).isEqualTo(identity.path("operatorId").asText());
         assertThat(denial.get("trace_id").toString()).isNotBlank();
         assertThat(denial.get("after_summary").toString())
