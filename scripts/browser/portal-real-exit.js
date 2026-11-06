@@ -10,9 +10,12 @@ async page=>{
     await tab.goto('__ADMIN_URL__/suppliers/master');await tab.locator('body').ariaSnapshot();
   };
   const openExit=async tab=>{
-    const direct=tab.getByRole('button',{name:'退出流程',exact:true});
-    if(await direct.count())await direct.click();
-    else{await tab.getByRole('button',{name:'浏览器供应商的更多操作',exact:true}).click();await tab.getByRole('menuitem',{name:'退出流程',exact:true}).click();}
+    const supplierRow=tab.getByRole('row').filter({has:tab.getByText('浏览器供应商',{exact:true})});
+    const direct=supplierRow.getByRole('button',{name:'退出流程',exact:true});
+    const more=tab.getByRole('button',{name:'浏览器供应商的更多操作',exact:true});
+    await direct.or(more).first().waitFor();
+    if(await direct.isVisible())await direct.click();
+    else{await more.click();await tab.getByRole('menuitem',{name:'退出流程',exact:true}).click();}
     const flow=tab.getByRole('dialog',{name:'浏览器供应商 · 退出流程',exact:true});
     await flow.waitFor();await tab.locator('body').ariaSnapshot();return flow;
   };
@@ -36,7 +39,9 @@ async page=>{
     const issueResponse=await issued;if(issueResponse.status()!==200)throw new Error('Real invitation issue failed');
     const pendingToken=(await issueResponse.json()).data.token;
     await invitations.getByRole('button',{name:'隐藏令牌',exact:true}).click();
-    await writer.getByRole('button',{name:'关闭',exact:true}).click();
+    const detail=writer.getByRole('dialog',{name:/^供应商档案 ·/});
+    await detail.getByRole('button',{name:/^(Close this dialog|关闭此对话框)$/}).click();
+    await detail.waitFor({state:'hidden'});
     const submittedFlow=await openExit(writer);
     await submittedFlow.getByRole('textbox',{name:'退出原因',exact:true}).fill('真实跨端退出回收验收');
     await submittedFlow.getByRole('textbox',{name:'已上传的依据文件 ID',exact:true}).fill('21010');
