@@ -22,9 +22,10 @@ class TenantSupportBrowserFixture extends TenantSupportIT {
   assertThat(jdbc.queryForObject("SELECT status FROM plt_support_tenant_decision WHERE request_id=?",String.class,id)).isEqualTo("REVOKED");assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE object_id=? AND tenant_id=? AND action IN ('TENANT_SUPPORT_APPROVE','TENANT_SUPPORT_REVOKE')",Integer.class,id,f.tenant())).isEqualTo(2);assertThat(jdbc.queryForObject("SELECT enabled FROM plt_tenant_support_policy WHERE tenant_id=?",Boolean.class,f.tenant())).isTrue();assertThat(count("iam_user",f.tenant())).isEqualTo(users);assertThat(count("iam_user_role",f.tenant())).isEqualTo(grants);assertThat(count("sup_supplier",f.tenant())).isEqualTo(withSession()?1:0);
   if(withSession()){
    int expected=withWorkspace()?2:1;
+   int expectedSessions=withWorkspace()?3:1;
    assertThat(jdbc.queryForList("SELECT status FROM plt_support_session WHERE request_id=?",String.class,id))
-     .hasSize(expected).containsOnly("REVOKED");
-   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_REVOKE' AND object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",Integer.class,id)).isEqualTo(expected);
+     .hasSize(expectedSessions).containsOnly("REVOKED");
+   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_REVOKE' AND object_id IN (SELECT id FROM plt_support_session WHERE request_id=?)",Integer.class,id)).isEqualTo(expectedSessions);
    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=?",Integer.class,supplierId)).isEqualTo(expected);
    if(withWorkspace()){
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=? AND access_digest IS NOT NULL",Integer.class,id)).isZero();

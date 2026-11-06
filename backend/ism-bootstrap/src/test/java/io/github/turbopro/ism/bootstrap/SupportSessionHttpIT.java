@@ -10,6 +10,41 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = "ism.support.sessions.enabled=true")
 class SupportSessionHttpIT extends TenantSupportIT {
     @Test
+    void ownerCanPageAndRevokeSessionsWithoutAnyCredential() {
+        var tenant = fixture();
+        String employee = tenantLogin(tenant, "pref-admin"), owner = login(false);
+        String requestId = approved(tenant);
+        save(employee, tenant.role(), 0, true);
+        ok(decide(employee, requestId, "approve", "http-list-" + requestId, decision(detail(employee, requestId))));
+        String path = "/api/console/support-requests/" + requestId + "/sessions";
+        for (int i = 0; i < 21; i++) ok(request("POST", path, owner, null, null));
+        var newestFirst = jdbc.queryForList("""
+                SELECT CAST(id AS CHAR) FROM plt_support_session WHERE request_id=?
+                ORDER BY created_at DESC, id DESC
+                """, String.class, requestId);
+        var response = request("GET", path, owner, null, null);
+        assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        var first = ok(response);
+        assertThat(first.path("items").size()).isEqualTo(20);
+        assertThat(first.path("items").get(0).path("id").asText()).isEqualTo(newestFirst.get(0));
+        var second = ok(request("GET", path + "?before=" + first.path("nextBefore").asText(), owner, null, null));
+        assertThat(second.path("items").size()).isOne();
+        assertThat(second.path("items").get(0).path("id").asText()).isEqualTo(newestFirst.get(20));
+        assertThat(second.path("nextBefore").isNull()).isTrue();
+        assertThat(first.toString()).doesNotContain("entryToken", "accessSecret", "Digest", "scope");
+        assertThat(request("GET", path, login(true), null, null).getStatusCode().value()).isIn(403,404);
+        assertThat(request("GET", path, employee, null, null).getStatusCode().value()).isIn(401,403);
+        assertThat(request("GET", path + "?before=0", owner, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        String last = newestFirst.get(0);
+        String revoke = "/api/console/support-sessions/" + last + "/revoke";
+        ok(request("POST", revoke, owner, null, null));
+        ok(request("POST", revoke, owner, null, null));
+        assertThat(ok(request("GET", path, owner, null, null)).path("items").get(0).path("state").asText()).isEqualTo("REVOKED");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE object_id=? AND action='SUPPORT_SESSION_REVOKE'",
+                Integer.class, last)).isOne();
+    }
+
+    @Test
     void consoleCanReadOnlyApprovedProjectionUntilRevoked() {
         var tenant = fixture();
         String employee = tenantLogin(tenant, "pref-admin");

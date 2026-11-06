@@ -1,6 +1,7 @@
 package io.github.turbopro.ism.platform.support;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
@@ -17,6 +18,28 @@ public interface SupportSessionMapper {
             """)
     int insert(long id, long requestId, long decisionId, long operatorId, long tenantId,
                long roleId, String scope, LocalDateTime createdAt, LocalDateTime expiresAt);
+
+    record Summary(long id, String state, LocalDateTime createdAt, LocalDateTime expiresAt,
+                   LocalDateTime revokedAt) {}
+
+    @Select("""
+            SELECT created_at FROM plt_support_session
+            WHERE request_id=#{requestId} AND platform_operator_id=#{operatorId} AND id=#{before}
+            """)
+    LocalDateTime cursorTime(long requestId, long operatorId, long before);
+
+    @Select("""
+            <script>
+            SELECT id, CASE WHEN status IN ('ACTIVE','PENDING') AND expires_at &lt;= UTC_TIMESTAMP(3)
+                THEN 'EXPIRED' ELSE status END AS state, created_at, expires_at, revoked_at
+            FROM plt_support_session WHERE request_id=#{requestId} AND platform_operator_id=#{operatorId}
+            <if test="before != null">
+              AND (created_at &lt; #{cursorTime} OR (created_at = #{cursorTime} AND id &lt; #{before}))
+            </if>
+            ORDER BY created_at DESC, id DESC LIMIT 21
+            </script>
+            """)
+    List<Summary> listOwn(long requestId, long operatorId, Long before, LocalDateTime cursorTime);
 
     record Entry(long requestId, long decisionId, long operatorId, String scopeJson) {}
 

@@ -14,10 +14,12 @@ import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -42,6 +44,13 @@ public class SupportSessionController {
     public record Exchange(@NotBlank @Pattern(regexp = SECRET) String browserSecret,
                            @NotBlank @Pattern(regexp = SECRET) String entryToken) {}
     public record Access(@NotBlank @Pattern(regexp = SECRET) String accessSecret) {}
+
+    @RequiresPermission("platform:support:request")
+    @GetMapping("/support-requests/{requestId}/sessions")
+    ResponseEntity<ApiResponse<SupportSessionService.SessionPage>> list(@PathVariable long requestId,
+            @RequestParam(required = false) Long before) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.listOwn(requestId, before)));
+    }
 
     @RequiresPermission("platform:support:request")
     @PostMapping("/support-requests/{requestId}/sessions")

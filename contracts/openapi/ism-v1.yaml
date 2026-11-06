@@ -303,6 +303,68 @@ paths:
             schema:
               $ref: '#/components/schemas/TenantSupportDecision'
   /console/support-requests/{requestId}/sessions:
+    get:
+      operationId: listOwnSupportSessions
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Lists the original Console applicant's sessions for the visible request, newest first. Stored state does not replace live authorization checks. No credentials are returned.
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: before
+        in: query
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      responses:
+        '200':
+          description: Up to 20 session summaries. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [items, nextBefore]
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, state, createdAt, expiresAt, revokedAt]
+                            properties:
+                              id:
+                                type: string
+                              state:
+                                type: string
+                                enum: [PENDING, ACTIVE, EXPIRED, REVOKED]
+                              createdAt:
+                                type: string
+                              expiresAt:
+                                type: string
+                              revokedAt:
+                                type: string
+                                nullable: true
+                        nextBefore:
+                          type: string
+                          nullable: true
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
     post:
       operationId: reserveSupportSession
       tags: [Tenant Support]

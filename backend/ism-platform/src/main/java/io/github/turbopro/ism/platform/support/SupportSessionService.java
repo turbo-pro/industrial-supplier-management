@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,7 @@ public class SupportSessionService {
     private static final String WORKSPACE_ACCESS = "workspace-access-v1:";
     private final TenantSupportService authorization;
     private final SupportRequestMapper requests;
+    private final SupportRequestService requestVisibility;
     private final TenantSupportMapper consent;
     private final SupportSessionMapper sessions;
     private final OperationIdGenerator ids;
@@ -36,15 +38,37 @@ public class SupportSessionService {
     private final AuditService audit;
 
     public SupportSessionService(TenantSupportService authorization, SupportRequestMapper requests,
+                                 SupportRequestService requestVisibility,
                                  TenantSupportMapper consent, SupportSessionMapper sessions,
                                  OperationIdGenerator ids, ObjectMapper json, AuditService audit) {
         this.authorization = authorization;
         this.requests = requests;
+        this.requestVisibility = requestVisibility;
         this.consent = consent;
         this.sessions = sessions;
         this.ids = ids;
         this.json = json;
         this.audit = audit;
+    }
+
+    public record SessionSummary(String id, String state, java.time.LocalDateTime createdAt,
+                                 java.time.LocalDateTime expiresAt, java.time.LocalDateTime revokedAt) {}
+    public record SessionPage(List<SessionSummary> items, String nextBefore) {}
+
+    @Transactional(readOnly = true)
+    public SessionPage listOwn(long requestId, Long before) {
+        var actor = requireOperator();
+        var request = requestVisibility.get(requestId);
+        if (!request.operatorId().equals(Long.toString(actor.actorId()))) {
+            throw new ApiException(CommonErrorCode.NOT_FOUND);
+        }
+        if (before != null && before <= 0) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var cursorTime = before == null ? null : sessions.cursorTime(requestId, actor.actorId(), before);
+        if (before != null && cursorTime == null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        var rows = sessions.listOwn(requestId, actor.actorId(), before, cursorTime);
+        var items = rows.stream().limit(20).map(row -> new SessionSummary(Long.toString(row.id()), row.state(),
+                row.createdAt(), row.expiresAt(), row.revokedAt())).toList();
+        return new SessionPage(items, rows.size() > 20 ? items.get(19).id() : null);
     }
 
     /** Reserves a session record. Activation and credentials require a separate exchange. */

@@ -131,7 +131,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** @description Lists the original Console applicant's sessions for the visible request, newest first. Stored state does not replace live authorization checks. No credentials are returned. */
+        get: operations["listOwnSupportSessions"];
         put?: never;
         /** @description Requires the original Console operator and an enabled support session HTTP feature. */
         post: operations["reserveSupportSession"];
@@ -8446,6 +8447,46 @@ export interface operations {
             409: components["responses"]["ApiFailure"];
             422: components["responses"]["ApiFailure"];
             500: components["responses"]["ApiFailure"];
+        };
+    };
+    listOwnSupportSessions: {
+        parameters: {
+            query?: {
+                before?: string;
+            };
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 session summaries. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            items: {
+                                id: string;
+                                /** @enum {string} */
+                                state: "PENDING" | "ACTIVE" | "EXPIRED" | "REVOKED";
+                                createdAt: string;
+                                expiresAt: string;
+                                revokedAt: string | null;
+                            }[];
+                            nextBefore: string | null;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
         };
     };
     reserveSupportSession: {

@@ -49,6 +49,22 @@ async(page)=>{
    const replay=await popup.request.post(read.url(),{data:{accessSecret}});
    if(replay.status()!==403)throw Error('Workspace credential usable after exit');
    await popup.close();
+   const orphan=await consolePage.request.post(f.backendUrl+'/api/console/support-requests/'+f.id+'/sessions',
+     {headers:{Authorization:'Bearer '+token}});
+   if(!orphan.ok())throw Error('Could not seed a pending session from a separate request');
+   const {data:{sessionId}}=await orphan.json();
+   await consolePage.reload();
+   await consolePage.getByRole('heading',{name:'套餐与模块',exact:true}).waitFor();
+   await consolePage.getByRole('button',{name:'支持申请工作台',exact:true}).click();
+   await consolePage.getByRole('button',{name:'查看支持申请',exact:true}).first().click();
+   await consolePage.getByRole('button',{name:'检查租户授权交集',exact:true}).click();
+   await panel.getByRole('button',{name:'打开管理端支持工作台'}).waitFor();
+   const history=consolePage.getByRole('region',{name:'支持会话记录'});
+   await history.getByRole('button',{name:'读取最新会话记录'}).click();
+   const pending=history.getByRole('row').filter({hasText:sessionId});
+   await pending.getByRole('button',{name:'撤销此会话'}).click();
+   await history.getByRole('button',{name:'确认撤销会话'}).click();
+   await pending.getByText('已撤销',{exact:true}).waitFor();
    const second=consolePage.waitForEvent('popup');
    await panel.getByRole('button',{name:'打开管理端支持工作台'}).click();
    workspaceToWithdraw=await second;
@@ -91,7 +107,7 @@ async(page)=>{
  await admin.getByRole('button',{name:'撤回租户授权',exact:true}).click();await admin.getByLabel('租户处理意见',{exact:true}).fill('结束支持，立即撤回');await admin.getByRole('button',{name:'确认租户决定',exact:true}).click();await admin.getByRole('status').filter({hasText:'操作回执已收到'}).waitFor();if(workspaceToWithdraw){
    await workspaceToWithdraw.getByText('会话已失效，已清除读取结果。',{exact:true}).waitFor();
    if(await workspaceToWithdraw.getByText('浏览器验收供应商',{exact:true}).count()||await workspaceToWithdraw.getByLabel('供应商 ID').count())throw Error('Withdrawn workspace retained data or controls');
-   await consolePage.getByText('会话已撤销。',{exact:true}).waitFor();
+   await consolePage.getByRole('region',{name:'供应商只读支持会话'}).getByText('会话已撤销。',{exact:true}).waitFor();
    await workspaceToWithdraw.close();
  }
  await consolePage.getByRole('button',{name:'检查租户授权交集',exact:true}).click();await consolePage.getByRole('status').filter({hasText:'租户已撤回'}).waitFor();await consolePage.getByRole('region',{name:'支持申请详情',exact:true}).screenshot({path:'output/playwright/tenant-support/console-revoked.png'});
