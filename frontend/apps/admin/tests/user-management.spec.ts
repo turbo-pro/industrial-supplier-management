@@ -85,6 +85,7 @@ test('tenant user page creates and disables a member with versioned request', as
   });
   await page.goto('/');
   await page.getByRole('button', { name: '登录系统' }).click();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('ism.admin.accessToken'))).toBe('user-token');
   await page.goto('/system/users');
   await expect(page.getByText('用户管理', { exact: true }).first()).toBeVisible();
   const adminRow = page.getByRole('row').filter({ hasText: 'admin' });
