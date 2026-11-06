@@ -621,6 +621,123 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '404':
           $ref: '#/components/responses/ApiFailure'
+  /support-workspace/{sessionId}/suppliers/{supplierId}/read:
+    post:
+      operationId: readSupportWorkspaceSupplier
+      tags: [Tenant Support]
+      security: []
+      description: Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: supplierId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessSecret]
+              properties:
+                accessSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      description: Approved fields only. Empty for absent or out-of-scope suppliers.
+                      properties:
+                        id:
+                          type: string
+                        code:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+                        status:
+                          type: string
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
+  /support-workspace/{sessionId}/exit:
+    post:
+      operationId: exitSupportWorkspace
+      tags: [Tenant Support]
+      security: []
+      description: Revokes the verified workspace session and clears its access digest. Invalid or already revoked credentials are denied.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessSecret]
+              properties:
+                accessSecret:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '200':
+          description: Support operation result. Sensitive responses use Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [status]
+                      properties:
+                        status:
+                          type: string
+                          enum: [REVOKED]
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
+        '422':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read:
     post:
       operationId: readSupportSupplier

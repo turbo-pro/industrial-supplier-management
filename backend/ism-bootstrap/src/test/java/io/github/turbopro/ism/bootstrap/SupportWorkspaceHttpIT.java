@@ -67,6 +67,20 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 Map.of("entryToken", otherEntry, "browserSecret", browser))).path("accessSecret").asText();
         assertThat(post("/api/support-workspace/" + other + "/identity",
                 Map.of("accessSecret", consoleAccess)).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        long supplierId = tenant.tenant() + 96000;
+        jdbc.update("""
+                INSERT INTO sup_supplier (id, tenant_id, organization_id, supplier_code, supplier_name,
+                    supplier_type, remark, created_by, updated_by)
+                VALUES (?, ?, ?, 'SUP-WORKSPACE', '支持工作台供应商', 'MANUFACTURER', 'PRIVATE', ?, ?)
+                """, supplierId, tenant.tenant(), tenant.first(), tenant.admin(), tenant.admin());
+        String read = workspace + "/suppliers/" + supplierId + "/read";
+        var projection = ok(post(read, body));
+        assertThat(projection.size()).isEqualTo(2);
+        assertThat(projection.path("code").asText()).isEqualTo("SUP-WORKSPACE");
+        assertThat(projection.path("name").asText()).isEqualTo("支持工作台供应商");
+        assertThat(ok(post(workspace + "/suppliers/" + (supplierId + 1) + "/read", body)).isEmpty()).isTrue();
+        assertThat(post(workspace + "/exit", Map.of("accessSecret", consoleAccess)).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
         var consent = detail(employee, requestId);
         ok(decide(employee, requestId, "revoke", "workspace-revoke-" + requestId, decision(consent)));
         assertThat(post(workspace + "/identity", body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -76,6 +90,21 @@ class SupportWorkspaceHttpIT extends TenantSupportIT {
                 """, Integer.class, sessionId)).isOne();
         assertThat(jdbc.queryForObject("SELECT access_digest FROM plt_support_session WHERE id=?",
                 String.class, sessionId)).hasSize(64).isNotEqualTo(access);
+        assertThat(post(read, body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ok(post(workspace + "/exit", body)).path("status").asText()).isEqualTo("REVOKED");
+        assertThat(post(read, body).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(jdbc.queryForObject("SELECT access_digest FROM plt_support_session WHERE id=?",
+                String.class, sessionId)).isNull();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys_audit_event
+                WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=? AND tenant_id=0
+                  AND JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.surface'))='SUPPORT_WORKSPACE'
+                """, Integer.class, supplierId)).isOne();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM sys_audit_event
+                WHERE action='SUPPORT_SESSION_REVOKE' AND object_id=? AND tenant_id=0
+                  AND JSON_UNQUOTE(JSON_EXTRACT(after_summary,'$.surface'))='SUPPORT_WORKSPACE'
+                """, Integer.class, sessionId)).isOne();
     }
 
     private ResponseEntity<JsonNode> post(String path, Object body) {

@@ -146,6 +146,20 @@ public class SupportSessionService {
                 grant.expiresAt(), grant.scope());
     }
 
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void exitWorkspace(long sessionId, String access) {
+        String hash = digest(access, WORKSPACE_ACCESS);
+        var entry = sessions.workspaceCandidate(sessionId, hash);
+        if (entry == null) throw unavailable();
+        var request = requests.get(entry.requestId());
+        if (sessions.lockActive(sessionId, request.targetTenantId(), hash) == null
+                || sessions.revoke(sessionId, entry.operatorId()) != 1) throw unavailable();
+        try (var identity = TenantContext.open(0, entry.operatorId())) {
+            audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_REVOKE", "SUPPORT_SESSION",
+                    sessionId, null, Map.of(), Map.of("surface", "SUPPORT_WORKSPACE"), null, null));
+        }
+    }
+
     private TenantSupportModels.Authorization workspaceGrant(SupportSessionMapper.Entry entry) {
         // IAM needs a narrowly scoped caller for role lookup; never install a login or permission snapshot.
         try (var lookup = TenantContext.open(0, entry.operatorId())) {

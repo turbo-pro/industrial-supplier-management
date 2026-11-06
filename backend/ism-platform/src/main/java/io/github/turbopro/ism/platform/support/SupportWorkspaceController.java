@@ -18,10 +18,13 @@ import org.springframework.web.bind.annotation.*;
 public class SupportWorkspaceController {
     private final SupportSessionService sessions;
     private final ApiResponseFactory responses;
+    private final SupportSupplierReadService suppliers;
 
-    public SupportWorkspaceController(SupportSessionService sessions, ApiResponseFactory responses) {
+    public SupportWorkspaceController(SupportSessionService sessions, ApiResponseFactory responses,
+                                      SupportSupplierReadService suppliers) {
         this.sessions = sessions;
         this.responses = responses;
+        this.suppliers = suppliers;
     }
 
     @PostMapping("/exchange")
@@ -38,6 +41,23 @@ public class SupportWorkspaceController {
             @Valid @RequestBody SupportSessionController.Access body) {
         requireDedicatedIdentity(authorization);
         return reply(sessions.workspaceIdentity(sessionId, body.accessSecret()));
+    }
+
+    @PostMapping("/suppliers/{supplierId}/read")
+    ResponseEntity<ApiResponse<Map<String, String>>> read(@PathVariable long sessionId, @PathVariable long supplierId,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @Valid @RequestBody SupportSessionController.Access body) {
+        requireDedicatedIdentity(authorization);
+        return reply(suppliers.readWorkspace(sessionId, body.accessSecret(), supplierId));
+    }
+
+    @PostMapping("/exit")
+    ResponseEntity<ApiResponse<Map<String, String>>> exit(@PathVariable long sessionId,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @Valid @RequestBody SupportSessionController.Access body) {
+        requireDedicatedIdentity(authorization);
+        sessions.exitWorkspace(sessionId, body.accessSecret());
+        return reply(Map.of("status", "REVOKED"));
     }
 
     private static void requireDedicatedIdentity(String authorization) {

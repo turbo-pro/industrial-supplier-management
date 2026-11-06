@@ -37,7 +37,9 @@ public class SecurityConfiguration {
                         // Dedicated support credential is checked inside these exact operations.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/support-workspace/{sessionId}/exchange",
-                                "/api/support-workspace/{sessionId}/identity").permitAll()
+                                "/api/support-workspace/{sessionId}/identity",
+                                "/api/support-workspace/{sessionId}/suppliers/{supplierId}/read",
+                                "/api/support-workspace/{sessionId}/exit").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
                     response.setStatus(401);

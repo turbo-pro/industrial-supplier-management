@@ -226,6 +226,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support-workspace/{sessionId}/suppliers/{supplierId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Uses the dedicated workspace credential and its live tenant scope. The client cannot select a tenant. */
+        post: operations["readSupportWorkspaceSupplier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support-workspace/{sessionId}/exit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Revokes the verified workspace session and clears its access digest. Invalid or already revoked credentials are denied. */
+        post: operations["exitSupportWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read": {
         parameters: {
             query?: never;
@@ -8638,6 +8672,87 @@ export interface operations {
             401: components["responses"]["ApiFailure"];
             403: components["responses"]["ApiFailure"];
             404: components["responses"]["ApiFailure"];
+        };
+    };
+    readSupportWorkspaceSupplier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    accessSecret: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Support operation result. Sensitive responses use Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        /** @description Approved fields only. Empty for absent or out-of-scope suppliers. */
+                        data: {
+                            id?: string;
+                            code?: string;
+                            name?: string;
+                            type?: string;
+                            status?: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
+        };
+    };
+    exitSupportWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    accessSecret: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Support operation result. Sensitive responses use Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            /** @enum {string} */
+                            status: "REVOKED";
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+            422: components["responses"]["ApiFailure"];
         };
     };
     readSupportSupplier: {
