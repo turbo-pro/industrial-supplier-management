@@ -14,9 +14,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -76,9 +79,7 @@ public class SupportSessionService {
         if (grant.expiresAt().isBefore(deadline)) {
             deadline = grant.expiresAt();
         }
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String token = randomSecret();
         if (sessions.issue(sessionId, digest(token), browser, deadline) != 1) {
             throw unavailable();
         }
@@ -86,14 +87,37 @@ public class SupportSessionService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void exchangeEntry(long sessionId, String token, String browserSecret) {
+    public String exchangeEntry(long sessionId, String token, String browserSecret) {
         String tokenDigest = digest(token);
         String browser = digest(browserSecret);
         revalidate(sessionId);
-        if (sessions.consume(sessionId, tokenDigest, browser) != 1) {
+        String access = randomSecret();
+        if (sessions.consume(sessionId, tokenDigest, browser, digest(access)) != 1) {
             throw unavailable();
         }
         audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_ACTIVATE", "SUPPORT_SESSION",
+                sessionId, null, Map.of(), Map.of(), null, null));
+        return access;
+    }
+
+    /** Business callers must hold the transaction through the protected read and its audit. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public TenantSupportModels.Scope requireAccess(long sessionId, long targetTenantId, String access) {
+        String digest = digest(access);
+        var grant = revalidate(sessionId);
+        if (sessions.lockActive(sessionId, targetTenantId, digest) == null) {
+            throw unavailable();
+        }
+        return grant.scope();
+    }
+
+    @Transactional
+    public void revoke(long sessionId) {
+        var actor = requireOperator();
+        if (sessions.revoke(sessionId, actor.actorId()) != 1) {
+            throw unavailable();
+        }
+        audit.append(new AuditService.AuditCommand("SUPPORT_SESSION_REVOKE", "SUPPORT_SESSION",
                 sessionId, null, Map.of(), Map.of(), null, null));
     }
 
@@ -116,12 +140,25 @@ public class SupportSessionService {
         }
         var frozen = readScope(entry.scopeJson());
         var current = grant.scope();
-        if (frozen.fields().stream().noneMatch(current.fields()::contains)
-                || (!frozen.tenantAll() && !current.tenantAll()
-                    && frozen.organizations().stream().noneMatch(current.organizations()::contains))) {
+        var fields = new HashSet<>(frozen.fields());
+        fields.retainAll(current.fields());
+        boolean all = frozen.tenantAll() && current.tenantAll();
+        var organizations = new HashSet<>(frozen.tenantAll() ? current.organizations() : frozen.organizations());
+        if (!frozen.tenantAll() && !current.tenantAll()) {
+            organizations.retainAll(current.organizations());
+        }
+        if (fields.isEmpty() || (!all && organizations.isEmpty())) {
             throw unavailable();
         }
-        return grant;
+        var effective = new TenantSupportModels.Scope(all, Set.copyOf(organizations), Set.copyOf(fields));
+        return new TenantSupportModels.Authorization(grant.requestId(), true, false,
+                grant.reason(), effective, grant.expiresAt());
+    }
+
+    private static String randomSecret() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private TenantContext.Identity requireOperator() {

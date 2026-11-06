@@ -31,6 +31,7 @@ class TenantSupportIT extends SiteProjectSupport {
  @Test void competingDecisionsAndAuditRollbackKeepOneDurableOutcome()throws Exception{var f=fixture();String t=tenantLogin(f,"pref-admin"),id=approved(f);save(t,f.role(),0,true);var b=decision(detail(t,id));trigger("CREATE TRIGGER ts_audit_fail BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.action='TENANT_SUPPORT_APPROVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test tenant support rollback'; END IF; END");try{assertThat(decide(t,id,"approve","retry-"+id,b).getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);}finally{trigger("DROP TRIGGER ts_audit_fail");}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isZero();var gate=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);try{var a=pool.submit(()->{gate.await();return decide(t,id,"approve","retry-"+id,b).getStatusCode().value();});var c=pool.submit(()->{gate.await();return decide(t,id,"reject","reject-"+id,b).getStatusCode().value();});gate.countDown();assertThat(List.of(a.get(30,TimeUnit.SECONDS),c.get(30,TimeUnit.SECONDS))).containsExactlyInAnyOrder(200,409);}finally{pool.shutdownNow();}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isOne();}
 
  @Autowired SupportSessionService supportSessions;
+ @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
 
  @Test void pendingSessionBindsOwnerConsentAndFrozenScope() throws Exception {
   var f = fixture();
@@ -42,7 +43,8 @@ class TenantSupportIT extends SiteProjectSupport {
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");
   }
-  save(tenantToken, role(f, "ORGANIZATION_SET", Set.of(Long.toString(f.first()))), 0, true);
+  long roleId = role(f, "ORGANIZATION_SET", Set.of(Long.toString(f.first())));
+  save(tenantToken, roleId, 0, true);
   var approved = ok(decide(tenantToken, id, "approve", "reserve-approve-" + id, decision(detail(tenantToken, id))));
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner + 1000)) {
    assertThatThrownBy(() -> supportSessions.createPending(requestId))
@@ -80,22 +82,24 @@ class TenantSupportIT extends SiteProjectSupport {
       .hasSize(64).isNotEqualTo(entry);
   var start = new CountDownLatch(1);
   var workers = Executors.newFixedThreadPool(2);
-  Callable<Boolean> redeem = () -> {
+  Callable<String> redeem = () -> {
    start.await();
    try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
-    supportSessions.exchangeEntry(sessionId, entry, browser);
-    return true;
+    return supportSessions.exchangeEntry(sessionId, entry, browser);
    } catch (io.github.turbopro.ism.common.api.error.ApiException e) {
     assertThat(e).hasMessageContaining("不可用");
-    return false;
+    return null;
    }
   };
+  String accessToken;
   try {
    var first = workers.submit(redeem);
    var second = workers.submit(redeem);
    start.countDown();
-   assertThat(List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)))
-       .containsExactlyInAnyOrder(true, false);
+   String firstResult = first.get(30, TimeUnit.SECONDS);
+   String secondResult = second.get(30, TimeUnit.SECONDS);
+   assertThat((firstResult == null) != (secondResult == null)).isTrue();
+   accessToken = firstResult == null ? secondResult : firstResult;
   } finally {
    workers.shutdownNow();
   }
@@ -105,12 +109,34 @@ class TenantSupportIT extends SiteProjectSupport {
       """, Integer.class, sessionId)).isOne();
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_ACTIVATE' AND object_id=?",
       Integer.class, sessionId)).isOne();
+  var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+  transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
+  grant(f, roleId, "TENANT_ALL", Set.of(), true);
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   var scope = transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken));
+   assertThat(scope.tenantAll()).isFalse();
+   assertThat(scope.organizations()).containsExactlyInAnyOrder(Long.toString(f.first()), Long.toString(f.department()));
+   assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant() + 1, accessToken)))
+       .hasMessageContaining("不可用");
+   assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), browser)))
+       .hasMessageContaining("不可用");
+  }
+  grant(f, roleId, "ORGANIZATION_SET", Set.of(Long.toString(f.department())), true);
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   assertThat(transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken)).organizations())
+       .containsExactly(Long.toString(f.department()));
+   supportSessions.revoke(sessionId);
+   assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken)))
+       .hasMessageContaining("不可用");
+  }
   ok(decide(tenantToken, id, "revoke", "reserve-revoke-" + id, decision(detail(tenantToken, id))));
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");
    assertThatThrownBy(() -> supportSessions.exchangeEntry(revokedSession, revokedEntry, browser)).hasMessageContaining("不可用");
+   assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken)))
+       .hasMessageContaining("不可用");
   }
-  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=? AND status='ACTIVE'",
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=? AND status='REVOKED' AND revoked_at IS NOT NULL AND access_digest IS NULL",
       Integer.class, requestId)).isOne();
  }
 }

@@ -37,11 +37,27 @@ public interface SupportSessionMapper {
 
     @Update("""
             UPDATE plt_support_session
-            SET status='ACTIVE', activated_at=UTC_TIMESTAMP(3), entry_digest=NULL,
+            SET status='ACTIVE', activated_at=UTC_TIMESTAMP(3), access_digest=#{access}, entry_digest=NULL,
                 browser_digest=NULL, entry_expires_at=NULL
             WHERE id=#{id} AND status='PENDING' AND entry_digest=#{digest}
               AND browser_digest=#{browser} AND entry_expires_at > UTC_TIMESTAMP(3)
               AND expires_at > UTC_TIMESTAMP(3)
             """)
-    int consume(long id, String digest, String browser);
+    int consume(long id, String digest, String browser, String access);
+
+    @Select("""
+            SELECT id FROM plt_support_session
+            WHERE id=#{id} AND target_tenant_id=#{tenantId} AND status='ACTIVE'
+              AND access_digest=#{digest} AND expires_at > UTC_TIMESTAMP(3)
+            FOR UPDATE
+            """)
+    Long lockActive(long id, long tenantId, String digest);
+
+    @Update("""
+            UPDATE plt_support_session
+            SET status='REVOKED', revoked_at=UTC_TIMESTAMP(3), access_digest=NULL,
+                entry_digest=NULL, browser_digest=NULL, entry_expires_at=NULL
+            WHERE id=#{id} AND platform_operator_id=#{operatorId} AND status IN ('ACTIVE','PENDING')
+            """)
+    int revoke(long id, long operatorId);
 }
