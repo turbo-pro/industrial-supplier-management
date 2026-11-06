@@ -31,6 +31,7 @@ class TenantSupportIT extends SiteProjectSupport {
  @Test void competingDecisionsAndAuditRollbackKeepOneDurableOutcome()throws Exception{var f=fixture();String t=tenantLogin(f,"pref-admin"),id=approved(f);save(t,f.role(),0,true);var b=decision(detail(t,id));trigger("CREATE TRIGGER ts_audit_fail BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.action='TENANT_SUPPORT_APPROVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test tenant support rollback'; END IF; END");try{assertThat(decide(t,id,"approve","retry-"+id,b).getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);}finally{trigger("DROP TRIGGER ts_audit_fail");}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isZero();var gate=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);try{var a=pool.submit(()->{gate.await();return decide(t,id,"approve","retry-"+id,b).getStatusCode().value();});var c=pool.submit(()->{gate.await();return decide(t,id,"reject","reject-"+id,b).getStatusCode().value();});gate.countDown();assertThat(List.of(a.get(30,TimeUnit.SECONDS),c.get(30,TimeUnit.SECONDS))).containsExactlyInAnyOrder(200,409);}finally{pool.shutdownNow();}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isOne();}
 
  @Autowired SupportSessionService supportSessions;
+ @Autowired io.github.turbopro.ism.platform.support.SupportSupplierReadService supportReads;
  @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
 
  @Test void pendingSessionBindsOwnerConsentAndFrozenScope() throws Exception {
@@ -111,9 +112,21 @@ class TenantSupportIT extends SiteProjectSupport {
       Integer.class, sessionId)).isOne();
   var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
   transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
+  long visibleSupplier = f.tenant() + 95000;
+  long hiddenSupplier = visibleSupplier + 1;
+  jdbc.update("""
+      INSERT INTO sup_supplier(id,tenant_id,organization_id,supplier_code,supplier_name,
+        supplier_type,remark,created_by,updated_by)
+      VALUES (?,?,?,'SUP-VISIBLE','授权供应商','MANUFACTURER','PRIVATE_REMARK',?,?),
+             (?,?,?,'SUP-HIDDEN','范围外供应商','MANUFACTURER','PRIVATE_REMARK',?,?)
+      """, visibleSupplier, f.tenant(), f.first(), f.admin(), f.admin(),
+      hiddenSupplier, f.tenant(), f.headquarters(), f.admin(), f.admin());
   grant(f, roleId, "TENANT_ALL", Set.of(), true);
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    var scope = transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken));
+   assertThat(supportReads.read(sessionId, f.tenant(), accessToken, visibleSupplier))
+       .containsExactlyInAnyOrderEntriesOf(Map.of("code", "SUP-VISIBLE", "name", "授权供应商"));
+   assertThat(supportReads.read(sessionId, f.tenant(), accessToken, hiddenSupplier)).isEmpty();
    assertThat(scope.tenantAll()).isFalse();
    assertThat(scope.organizations()).containsExactlyInAnyOrder(Long.toString(f.first()), Long.toString(f.department()));
    assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant() + 1, accessToken)))
@@ -125,10 +138,21 @@ class TenantSupportIT extends SiteProjectSupport {
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    assertThat(transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken)).organizations())
        .containsExactly(Long.toString(f.department()));
+   assertThat(supportReads.read(sessionId, f.tenant(), accessToken, visibleSupplier)).isEmpty();
    supportSessions.revoke(sessionId);
+   assertThatThrownBy(() -> supportReads.read(sessionId, f.tenant(), accessToken, visibleSupplier))
+       .hasMessageContaining("不可用");
    assertThatThrownBy(() -> transaction.execute(status -> supportSessions.requireAccess(sessionId, f.tenant(), accessToken)))
        .hasMessageContaining("不可用");
   }
+  assertThat(jdbc.queryForList("""
+      SELECT JSON_UNQUOTE(JSON_EXTRACT(after_summary, '$.result'))
+      FROM sys_audit_event
+      WHERE tenant_id=0 AND operator_id=? AND action='SUPPORT_SUPPLIER_READ'
+        AND trace_id IS NOT NULL AND JSON_UNQUOTE(JSON_EXTRACT(after_summary, '$.sessionId'))=?
+        AND JSON_UNQUOTE(JSON_EXTRACT(after_summary, '$.targetTenantId'))=?
+      """, String.class, owner, Long.toString(sessionId), Long.toString(f.tenant())))
+      .containsExactlyInAnyOrder("READ", "NOT_VISIBLE", "NOT_VISIBLE");
   ok(decide(tenantToken, id, "revoke", "reserve-revoke-" + id, decision(detail(tenantToken, id))));
   try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
    assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");

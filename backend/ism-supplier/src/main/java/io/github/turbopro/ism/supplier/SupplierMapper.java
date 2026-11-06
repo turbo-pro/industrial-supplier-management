@@ -6,6 +6,21 @@ import java.util.*;
 
 @Mapper
 public interface SupplierMapper extends TenantScopedMapper {
+    @Select("""
+            <script>
+            SELECT id, supplier_code AS code, supplier_name AS name, supplier_type AS type, status
+            FROM sup_supplier WHERE tenant_id=#{tenantId} AND id=#{id} AND deleted=0
+            <if test="!tenantAll">
+              AND organization_id IN
+              <foreach collection="organizations" item="org" open="(" separator="," close=")">
+                #{org}
+              </foreach>
+            </if>
+            </script>
+            """)
+    io.github.turbopro.ism.common.api.support.SupportSupplierProjection.Row findSupportProjection(
+            long tenantId, long id, boolean tenantAll, Set<Long> organizations);
+
     @Select("SELECT COUNT(*) FROM sup_supplier WHERE tenant_id=#{tenantId} AND deleted=0")
     long quotaCount(long tenantId);
     @Select("SELECT COUNT(*) FROM sup_supplier WHERE tenant_id=#{tenantId} AND deleted=0 FOR UPDATE")
