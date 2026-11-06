@@ -45,9 +45,31 @@ class SupportSessionHttpIT extends TenantSupportIT {
         assertThat(result.path("name").asText()).isEqualTo("支持验收供应商");
         assertThat(result.path("code").asText()).isEqualTo("SUP-HTTP");
         assertThat(request("POST", read, employee, null, secret).getStatusCode().value()).isIn(401, 403);
+        String incorrectSecret = "B".repeat(43);
+        assertThat(request("POST", read, owner, null, Map.of("accessSecret", incorrectSecret)).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        long wrongTenantId = tenant.tenant() + 1;
+        String wrongTenant = session + "/tenants/" + wrongTenantId + "/suppliers/" + supplierId + "/read";
+        assertThat(request("POST", wrongTenant, owner, null, secret).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         ok(request("POST", session + "/revoke", owner, null, null));
         assertThat(request("POST", read, owner, null, secret).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SUPPLIER_READ' AND object_id=?",
                 Integer.class, supplierId)).isOne();
+        var denied = jdbc.queryForList("""
+                SELECT tenant_id, operator_id, trace_id, after_summary
+                FROM sys_audit_event
+                WHERE action='SUPPORT_SUPPLIER_READ_DENIED' AND object_id=?
+                """, supplierId);
+        Long operator = jdbc.queryForObject("SELECT platform_operator_id FROM plt_support_session WHERE id=?",
+                Long.class, sessionId);
+        assertThat(denied).hasSize(3).allSatisfy(event -> {
+            assertThat(event.get("tenant_id")).isEqualTo(0L);
+            assertThat(event.get("operator_id")).isEqualTo(operator);
+            assertThat((String) event.get("trace_id")).isNotBlank();
+            assertThat(event.get("after_summary").toString()).contains("DENIED", sessionId)
+                    .doesNotContain(access, incorrectSecret, entry, browser, "SUP-HTTP", "PRIVATE");
+        });
+        assertThat(denied).anySatisfy(event ->
+                assertThat(event.get("after_summary").toString()).contains(Long.toString(wrongTenantId)));
     }
 }

@@ -1,8 +1,12 @@
 package io.github.turbopro.ism.platform.support;
 
 import io.github.turbopro.ism.common.api.ApiResponse;
+import io.github.turbopro.ism.common.api.error.ApiException;
+import io.github.turbopro.ism.common.api.error.CommonErrorCode;
 import io.github.turbopro.ism.common.infrastructure.authorization.RequiresPermission;
 import io.github.turbopro.ism.common.infrastructure.web.ApiResponseFactory;
+import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
+import io.github.turbopro.ism.operation.AuditService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -24,12 +28,14 @@ public class SupportSessionController {
     private final SupportSessionService sessions;
     private final SupportSupplierReadService suppliers;
     private final ApiResponseFactory responses;
+    private final AuditService audit;
 
     public SupportSessionController(SupportSessionService sessions, SupportSupplierReadService suppliers,
-                                    ApiResponseFactory responses) {
+                                    ApiResponseFactory responses, AuditService audit) {
         this.sessions = sessions;
         this.suppliers = suppliers;
         this.responses = responses;
+        this.audit = audit;
     }
 
     public record Entry(@NotBlank @Pattern(regexp = SECRET) String browserSecret) {}
@@ -61,7 +67,17 @@ public class SupportSessionController {
     @PostMapping("/support-sessions/{sessionId}/tenants/{tenantId}/suppliers/{supplierId}/read")
     ResponseEntity<ApiResponse<Map<String, String>>> read(@PathVariable long sessionId,
             @PathVariable long tenantId, @PathVariable long supplierId, @Valid @RequestBody Access body) {
-        return reply(suppliers.read(sessionId, tenantId, body.accessSecret(), supplierId));
+        try {
+            return reply(suppliers.read(sessionId, tenantId, body.accessSecret(), supplierId));
+        } catch (ApiException failure) {
+            if (failure.errorCode() == CommonErrorCode.FORBIDDEN && TenantContext.require().tenantId() == 0) {
+                // The read transaction has rolled back. Persist the attempt independently in the Console realm.
+                audit.append(new AuditService.AuditCommand("SUPPORT_SUPPLIER_READ_DENIED", "SUPPLIER", supplierId,
+                        null, Map.of(), Map.of("requestedSessionId", Long.toString(sessionId),
+                        "requestedTenantId", Long.toString(tenantId), "result", "DENIED"), null, null));
+            }
+            throw failure;
+        }
     }
 
     @RequiresPermission("platform:support:request")

@@ -456,7 +456,7 @@ paths:
       tags: [Tenant Support]
       security:
       - bearerAuth: []
-      description: Requires the original Console operator and an enabled support session HTTP feature.
+      description: Requires the original Console operator and an enabled support session HTTP feature. Denied read attempts reaching the session check are audited without credentials.
       parameters:
       - name: sessionId
         in: path

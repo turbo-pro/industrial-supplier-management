@@ -184,7 +184,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Requires the original Console operator and an enabled support session HTTP feature. */
+        /** @description Requires the original Console operator and an enabled support session HTTP feature. Denied read attempts reaching the session check are audited without credentials. */
         post: operations["readSupportSupplier"];
         delete?: never;
         options?: never;

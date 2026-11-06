@@ -38,3 +38,7 @@ Spring Boot 与隔离 MySQL 定向 1/1 通过。真实 HTTP 双审批后，内�
 干净暂存快照：OpenAPI 重生成与暂存客户端逐字节一致，Console 生产构建和 32 项浏览器回归通过。停用入口后若计划重新启用，先确认旧会话已撤销或全部到期。
 
 默认关闭场景 `node scripts/verify-reminder-e2e.mjs --tenant-support` 真实双端与隔离库 1/1 通过：原申请人能检查授权交集，但不会出现会话按钮，会话 API 拒绝访问；租户撤回后预览即时失效。证据：`output/playwright/tenant-support-e2e-1793975237594/database-assertions.txt`。
+
+2026-11-06 SUPPORT-AT-009/011 凭证拒绝审计切片：已进入 Console 会话业务校验的拒绝读取返回原 403；业务事务结束后，独立记录平台操作者、请求中的会话和目标租户 ID、对象 ID、结果与 trace。请求 ID 标记为请求值，避免当成真实授权关系。记录无凭证或供应商值。入口权限拦截的通用 401/403 仍由通用认证层处理。无数据库迁移或页面契约变更；可独立回滚审计代码，历史记录保留。
+
+Spring Boot 真实 HTTP 与隔离 MySQL 1/1、通用 API 契约 13/13 通过。错凭证、错目标租户、撤销后重放各留下拒绝审计，正常读取保持单条读取审计，租户员工令牌不进入 Console 业务审计。证据：`output/support-session-denial/run.log`。OpenAPI 和生成客户端核对一致。GAP-01 下一项是管理端隔离支持身份及固定身份提示；本次不关闭整包。
