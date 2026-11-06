@@ -65,7 +65,7 @@ async page => {
     await submit('浏览器批准验证', '批准后的工业园地址');
     await panel.getByRole('button', { name: '刷新资料变更', exact: true }).click();
     await review('浏览器批准验证', true);
-    await admin.getByText('批准后的工业园地址', { exact: true }).first().waitFor();
+    await admin.locator('.el-descriptions').getByText('批准后的工业园地址', { exact: true }).waitFor();
     await page.getByRole('button', { name: '刷新企业档案', exact: true }).click();
     await page.locator('.profile-section > dl').getByText('批准后的工业园地址', { exact: true }).waitFor();
     await page.locator('article.change-item').filter({ hasText: '浏览器批准验证' }).getByRole('heading').filter({ hasText: '已批准' }).waitFor();
@@ -73,7 +73,9 @@ async page => {
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Portal changes mobile overflow');
     await page.screenshot({ path: 'output/playwright/portal-real-changes-mobile.png', fullPage: true });
     panel = admin.getByRole('region', { name: '门户企业资料变更审核', exact: true });
-    await panel.getByRole('button', { name: '资料变更审核', exact: true }).click();
+    const openReview = panel.getByRole('button', { name: '资料变更审核', exact: true });
+    await openReview.or(panel.getByRole('button', { name: '收起资料变更', exact: true })).waitFor();
+    if (await openReview.isVisible()) await openReview.click();
     await panel.getByRole('row').filter({ hasText: '浏览器批准验证' }).getByRole('button', { name: '查看变更' }).click();
     await panel.getByRole('heading', { name: '变更前后对比 · 已批准', exact: true }).scrollIntoViewIfNeeded();
     await admin.screenshot({ path: 'output/playwright/portal-real-changes-review.png', fullPage: true });

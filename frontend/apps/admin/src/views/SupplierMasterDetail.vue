@@ -52,7 +52,7 @@ async function changeStatus(status:'ACTIVE'|'SUSPENDED'){const d=detail.value;if
 }
 </script>
 <template>
-  <el-drawer :model-value="modelValue" :title="`供应商档案 · ${detail?.code??''}`" size="820px" @update:model-value="emit('update:modelValue',$event)">
+  <el-drawer :model-value="modelValue" :title="`供应商档案 · ${detail?.code??''}`" size="min(820px, 100vw)" @update:model-value="emit('update:modelValue',$event)">
     <template v-if="detail">
       <template v-if="!editing">
         <el-descriptions :column="2" border>
