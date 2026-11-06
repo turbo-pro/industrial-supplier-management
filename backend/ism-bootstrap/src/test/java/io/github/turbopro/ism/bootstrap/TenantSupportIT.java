@@ -2,6 +2,10 @@ package io.github.turbopro.ism.bootstrap;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.turbopro.ism.common.infrastructure.tenant.TenantContext;
 import io.github.turbopro.ism.iam.access.AccessModels;
+import io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext;
+import io.github.turbopro.ism.common.infrastructure.authorization.PermissionSnapshot;
+import io.github.turbopro.ism.platform.support.SupportSessionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.*;
 import java.util.*;
@@ -25,4 +29,43 @@ class TenantSupportIT extends SiteProjectSupport {
  @Test void expirationAndFieldTamperingFailClosed(){var f=fixture();String t=tenantLogin(f,"pref-admin"),id=approved(f);var bad=new HashMap<>(policy(f.role(),0,true));bad.put("fields",List.of("password","mobile"));assertThat(request("PUT","/api/tenant-support/policy",t,UUID.randomUUID().toString(),bad).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);save(t,f.role(),0,true);ok(decide(t,id,"approve","expire-ap-"+id,decision(detail(t,id))));jdbc.update("UPDATE plt_support_tenant_decision SET expires_at=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 1 SECOND) WHERE request_id=?",id);assertThat(authorization(id).path("reason").asText()).isEqualTo("EXPIRED");}
  @Test void operatorRequestAndModuleRevocationAndReceiptReplayRemainBounded(){var f=fixture();String t=tenantLogin(f,"pref-admin"),id=approved(f);save(t,f.role(),0,true);var b=decision(detail(t,id));String key="replay-"+id;ok(decide(t,id,"approve",key,b));ok(decide(t,id,"approve",key,b));assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isOne();jdbc.update("UPDATE plt_user SET manual_locked=1 WHERE id=790002");assertThat(authorization(id).path("reason").asText()).isEqualTo("OPERATOR_UNAVAILABLE");jdbc.update("UPDATE plt_user SET manual_locked=0 WHERE id=790002");assertThat(authorization(id).path("authorizationReady").asBoolean()).isTrue();jdbc.update("UPDATE plt_package_module pm JOIN plt_tenant t ON t.package_version_id=pm.package_version_id JOIN plt_module m ON m.id=pm.module_id SET pm.enabled=0 WHERE t.id=? AND m.module_code='SUPPLIER'",f.tenant());assertThat(authorization(id).path("authorizationReady").asBoolean()).isFalse();jdbc.update("UPDATE plt_package_module pm JOIN plt_tenant t ON t.package_version_id=pm.package_version_id JOIN plt_module m ON m.id=pm.module_id SET pm.enabled=1 WHERE t.id=? AND m.module_code='SUPPLIER'",f.tenant());var current=ok(request("GET","/api/console/support-requests/"+id,login(false),null,null));ok(request("POST","/api/console/support-requests/"+id+"/cancel",login(false),UUID.randomUUID().toString(),Map.of("version",current.path("version").asInt(),"comment","取消不再支持")));assertThat(authorization(id).path("authorizationReady").asBoolean()).isFalse();assertThat(detail(t,id).path("status").asText()).isEqualTo("CANCELLED");}
  @Test void competingDecisionsAndAuditRollbackKeepOneDurableOutcome()throws Exception{var f=fixture();String t=tenantLogin(f,"pref-admin"),id=approved(f);save(t,f.role(),0,true);var b=decision(detail(t,id));trigger("CREATE TRIGGER ts_audit_fail BEFORE INSERT ON sys_audit_event FOR EACH ROW BEGIN IF NEW.action='TENANT_SUPPORT_APPROVE' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test tenant support rollback'; END IF; END");try{assertThat(decide(t,id,"approve","retry-"+id,b).getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);}finally{trigger("DROP TRIGGER ts_audit_fail");}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isZero();var gate=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);try{var a=pool.submit(()->{gate.await();return decide(t,id,"approve","retry-"+id,b).getStatusCode().value();});var c=pool.submit(()->{gate.await();return decide(t,id,"reject","reject-"+id,b).getStatusCode().value();});gate.countDown();assertThat(List.of(a.get(30,TimeUnit.SECONDS),c.get(30,TimeUnit.SECONDS))).containsExactlyInAnyOrder(200,409);}finally{pool.shutdownNow();}assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_tenant_decision WHERE request_id=?",Integer.class,id)).isOne();}
+
+ @Autowired SupportSessionService supportSessions;
+
+ @Test void pendingSessionBindsOwnerConsentAndFrozenScope() {
+  var f = fixture();
+  String tenantToken = tenantLogin(f, "pref-admin");
+  String id = approved(f);
+  long requestId = Long.parseLong(id);
+  long owner = jdbc.queryForObject("SELECT platform_operator_id FROM plt_support_request WHERE id=?", Long.class, requestId);
+  var permissions = new PermissionSnapshot(Set.of("platform:support:request", "platform:support:view", "platform:support:review"), Map.of(), Set.of());
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");
+  }
+  save(tenantToken, role(f, "ORGANIZATION_SET", Set.of(Long.toString(f.first()))), 0, true);
+  var approved = ok(decide(tenantToken, id, "approve", "reserve-approve-" + id, decision(detail(tenantToken, id))));
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner + 1000)) {
+   assertThatThrownBy(() -> supportSessions.createPending(requestId))
+       .isInstanceOf(io.github.turbopro.ism.common.api.error.ApiException.class);
+  }
+  long sessionId;
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   sessionId = supportSessions.createPending(requestId);
+  }
+  assertThat(jdbc.queryForObject("""
+      SELECT COUNT(*) FROM plt_support_session
+      WHERE id=? AND request_id=? AND decision_id=? AND platform_operator_id=? AND target_tenant_id=?
+        AND status='PENDING' AND expires_at > created_at
+        AND JSON_CONTAINS(granted_scope_json, JSON_ARRAY('code','name'), '$.fields')
+        AND JSON_LENGTH(granted_scope_json, '$.fields')=2
+      """, Integer.class, sessionId, requestId, Long.parseLong(approved.path("consent").path("id").asText()), owner, f.tenant())).isOne();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_audit_event WHERE action='SUPPORT_SESSION_RESERVE' AND object_id=?",
+      Integer.class, sessionId)).isOne();
+  ok(decide(tenantToken, id, "revoke", "reserve-revoke-" + id, decision(detail(tenantToken, id))));
+  try (var auth = AuthorizationContext.open(permissions); var actor = TenantContext.open(0, owner)) {
+   assertThatThrownBy(() -> supportSessions.createPending(requestId)).hasMessageContaining("支持授权当前不可用");
+  }
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_support_session WHERE request_id=?",
+      Integer.class, requestId)).isOne();
+ }
 }
