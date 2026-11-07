@@ -53,6 +53,26 @@ class SupportSessionHttpIT extends TenantSupportIT {
         }
         assertThat(request("GET", "/api/suppliers/1", auditor, null, null).getStatusCode().value()).isIn(401,403);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_role_permission WHERE role_id=1003",Integer.class)).isOne();
+        ok(request("POST", console + "/terminate", platformAdmin, null, Map.of("reason","private termination reason")));
+        String lifecyclePath = sessions + "/" + sessionId + "/lifecycle";
+        var lifecycleResponse = request("GET", lifecyclePath, auditor, null, null);
+        assertThat(lifecycleResponse.getHeaders().getCacheControl()).contains("no-store");
+        var lifecycle = ok(lifecycleResponse).path("items");
+        assertThat(lifecycle.findValuesAsText("action")).containsExactly("SUPPORT_SESSION_TERMINATE", "SUPPORT_SESSION_ACTIVATE", "SUPPORT_SESSION_RESERVE");
+        assertThat(lifecycle.get(0).path("operatorId").asText()).isEqualTo("790001");
+        assertThat(lifecycle.get(1).path("operatorId").asText()).isEqualTo("790002");
+        assertThat(lifecycle.toString()).doesNotContain("private termination reason",access,entry,browser,"afterSummary");
+        assertThat(request("GET", lifecyclePath, owner, null, null).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(request("GET", lifecyclePath, employee, null, null).getStatusCode().value()).isIn(401,403);
+        assertThat(request("GET", lifecyclePath + "?page=101", auditor, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(ok(request("GET", lifecyclePath + "?page=1", auditor, null, null)).path("items").isEmpty()).isTrue();
+        jdbc.update("""
+                INSERT INTO sys_audit_event(id,tenant_id,operator_id,action,object_type,object_id,trace_id,occurred_at)
+                VALUES (90101,?,790001,'SUPPORT_SESSION_REVOKE','SUPPORT_SESSION',?,'foreign',UTC_TIMESTAMP(3)),
+                       (90102,0,790001,'UNKNOWN_ACTION','SUPPORT_SESSION',?,'unknown',UTC_TIMESTAMP(3)),
+                       (90103,0,790001,'SUPPORT_SESSION_REVOKE','SUPPLIER',?,'wrong-type',UTC_TIMESTAMP(3))
+                """,tenant.tenant(),sessionId,sessionId,sessionId);
+        assertThat(ok(request("GET", lifecyclePath, auditor, null, null)).path("items").size()).isEqualTo(3);
         var preview = ok(request("GET", "/api/console/users/" + auditorId + "/role-impact?roleCode=PLATFORM_SUPPORT&version=0", platformAdmin, null, null));
         assertThat(preview.path("canApply").asBoolean()).isTrue();
         ok(request("PUT", "/api/console/users/" + auditorId + "/role", platformAdmin, "auditor-to-support", Map.of("roleCode","PLATFORM_SUPPORT","version",0)));

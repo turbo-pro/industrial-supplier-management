@@ -8,6 +8,17 @@ import java.util.List;
 
 @Mapper
 public interface TenantOperationMapper extends TenantScopedMapper {
+    @Select("""
+        SELECT CAST(id AS CHAR) AS id, CAST(operator_id AS CHAR) AS operator_id,
+          action, trace_id, occurred_at
+        FROM sys_audit_event
+        WHERE tenant_id=#{tenantId} AND object_type='SUPPORT_SESSION' AND object_id=#{sessionId}
+          AND action IN ('SUPPORT_SESSION_RESERVE','SUPPORT_SESSION_ACTIVATE',
+                         'SUPPORT_SESSION_REVOKE','SUPPORT_SESSION_TERMINATE')
+        ORDER BY occurred_at DESC,id DESC LIMIT 21 OFFSET #{offset}
+        """)
+    List<AuditService.SupportLifecycleRow> supportLifecycle(long tenantId, long sessionId, int offset);
+
     @Insert("""
         INSERT INTO sys_audit_event(id,tenant_id,operator_id,acting_user_id,action,object_type,object_id,
           before_summary,after_summary,ip,user_agent,trace_id,occurred_at)

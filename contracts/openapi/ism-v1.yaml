@@ -1006,6 +1006,69 @@ paths:
           $ref: '#/components/responses/ApiFailure'
         '404':
           $ref: '#/components/responses/ApiFailure'
+  /console/support-audit/sessions/{sessionId}/lifecycle:
+    get:
+      operationId: auditSupportLifecycle
+      tags: [Tenant Support]
+      security:
+      - bearerAuth: []
+      description: Requires platform:support:audit in Console; views whitelisted lifecycle events for the selected session, including the actual actor of termination. No audit payloads or credentials are returned.
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+      responses:
+        '200':
+          description: Up to 20 audit events per page. Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [items, hasMore]
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, operatorId, action, traceId, occurredAt]
+                            properties:
+                              id:
+                                type: string
+                              operatorId:
+                                type: string
+                              action:
+                                type: string
+                                enum: [SUPPORT_SESSION_RESERVE, SUPPORT_SESSION_ACTIVATE, SUPPORT_SESSION_REVOKE, SUPPORT_SESSION_TERMINATE]
+                              traceId:
+                                type: string
+                              occurredAt:
+                                type: string
+                        hasMore:
+                          type: boolean
+        '400':
+          $ref: '#/components/responses/ApiFailure'
+        '401':
+          $ref: '#/components/responses/ApiFailure'
+        '403':
+          $ref: '#/components/responses/ApiFailure'
+        '404':
+          $ref: '#/components/responses/ApiFailure'
   /console/support-audit/sessions:
     get:
       operationId: auditSupportSessions

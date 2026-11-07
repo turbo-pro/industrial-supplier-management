@@ -104,6 +104,13 @@ public class SupportSessionService {
         return audit.auditedSupportAccess(sessionId, requests.get(entry.requestId()).targetTenantId(), entry.operatorId(), page);
     }
 
+    @Transactional(readOnly = true)
+    public AuditService.SupportLifecyclePage auditLifecycle(long sessionId, int page) {
+        requireAuditor();
+        if (sessions.entry(sessionId) == null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        return audit.supportLifecycle(sessionId, page);
+    }
+
     /** Reserves a session record. Activation and credentials require a separate exchange. */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public long createPending(long requestId) {

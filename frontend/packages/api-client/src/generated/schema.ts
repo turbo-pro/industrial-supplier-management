@@ -312,6 +312,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-audit/sessions/{sessionId}/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires platform:support:audit in Console; views whitelisted lifecycle events for the selected session, including the actual actor of termination. No audit payloads or credentials are returned. */
+        get: operations["auditSupportLifecycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-audit/sessions": {
         parameters: {
             query?: never;
@@ -8979,6 +8996,46 @@ export interface operations {
                                 /** @enum {string} */
                                 surface: "CONSOLE" | "SUPPORT_WORKSPACE" | "UNSPECIFIED";
                                 traceId: string | null;
+                                occurredAt: string;
+                            }[];
+                            hasMore: boolean;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    auditSupportLifecycle: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 audit events per page. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            items: {
+                                id: string;
+                                operatorId: string;
+                                /** @enum {string} */
+                                action: "SUPPORT_SESSION_RESERVE" | "SUPPORT_SESSION_ACTIVATE" | "SUPPORT_SESSION_REVOKE" | "SUPPORT_SESSION_TERMINATE";
+                                traceId: string;
                                 occurredAt: string;
                             }[];
                             hasMore: boolean;

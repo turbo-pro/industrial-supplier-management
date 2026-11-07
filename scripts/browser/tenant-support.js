@@ -62,6 +62,13 @@ async(page)=>{
    await termination.getByRole('button',{name:'确认强制终止',exact:true}).click();
    await termination.getByRole('status').filter({hasText:'会话已终止'}).waitFor();
    await termination.screenshot({path:'output/playwright/tenant-support/termination-confirmed.png'});
+   await audit.getByRole('row').filter({hasText:auditedId}).getByRole('button',{name:'查看生命周期',exact:true}).click();
+   const lifecycle=audit.getByRole('region',{name:'会话生命周期'});
+   await lifecycle.getByText('管理员强制终止',{exact:true}).waitFor();
+   await lifecycle.getByText('启用会话',{exact:true}).waitFor();
+   await lifecycle.getByText('创建会话',{exact:true}).waitFor();
+   await lifecycle.screenshot({path:'output/playwright/tenant-support/session-lifecycle.png'});
+
    await terminator.close();
    await popup.getByText('会话已失效，已清除读取结果。',{exact:true}).waitFor();
    await panel.getByText('会话已撤销。',{exact:true}).waitFor();

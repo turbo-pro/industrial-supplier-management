@@ -56,6 +56,18 @@ public class AuditService {
         return new SupportAccessPage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
     }
 
+    public record SupportLifecycleRow(String id, String operatorId, String action, String traceId,
+                                      LocalDateTime occurredAt) {}
+    public record SupportLifecyclePage(List<SupportLifecycleRow> items, boolean hasMore) {}
+
+    public SupportLifecyclePage supportLifecycle(long sessionId, int page) {
+        if (TenantContext.require().tenantId() != 0 || !io.github.turbopro.ism.common.infrastructure.authorization.AuthorizationContext
+                .require().hasAction("platform:support:audit")) throw new ApiException(CommonErrorCode.FORBIDDEN);
+        if (page < 0 || page > 100) throw new ApiException(CommonErrorCode.VALIDATION_FAILED);
+        var rows = mapper.supportLifecycle(0, sessionId, page * 20);
+        return new SupportLifecyclePage(rows.stream().limit(20).toList(), rows.size() > 20 && page < 100);
+    }
+
     private LocalDateTime utcNow() {
         return LocalDateTime.now(ZoneOffset.UTC);
     }
