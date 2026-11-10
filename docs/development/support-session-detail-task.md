@@ -33,3 +33,9 @@ Console 从审计列表进入详情，展示上述元数据和冻结范围，串
 2026-11-09 页面补验：扩展 `support-audit.spec.ts`，首读503后重试成功、冻结组织/字段提示显示、切换生命周期清除旧详情及无审计权不展示入口，Chrome 2/2通过，证据 `output/support-detail/ui.log`。这是模拟接口页面测试，不代替真实服务联调。仍缺历史范围收紧对照及HTTPS详情联调；所有详情相关变更继续保持工作区未提交状态。
 
 2026-11-11 历史语义补验：真实HTTP/隔离MySQL1/1及接口契约13/13通过，证据 `output/support-detail/http-history-verified.log`。自定义租户角色撤去读权限后，原业务凭证403，审计冻结范围不变；到期详情派生EXPIRED而持久状态仍ACTIVE，查询前后数据库整行相同，不存在会话404。首轮Docker未启动及两次测试夹具错误（内置角色禁止修改、到期时间约束）已修正，未修改产品规则或旧库。产品与浏览器脚本已本地提交91f3795，真实HTTPS联调执行中，尚未推送。
+
+2026-11-11 final acceptance: session audit detail delivered in 91f3795/ff8789d. Real HTTP + isolated MySQL 1/1 and API contract 13/13 passed (output/support-detail/http-history-verified.log); Console build and mock Chrome 2/2 passed. Role permission withdrawal rejects business reads while frozen historical scope remains unchanged. Expired detail is derived without modifying the stored session; missing session returns 404.
+
+Clean HEAD HTTPS/Nginx/Chrome/two-frontend integration and final isolated database assertions passed: output/playwright/support-workspace-proxy-e2e-1794350531253/database-assertions.txt; driver log output/support-detail/https-recheck.log. Initial browser assertion incorrectly assumed only two approved fields; corrected to allow the actual approved field set. Reviewed output/playwright/tenant-support/session-detail.png: metadata, frozen scope, scope warning and reload control visible. Earlier in-progress entries are superseded by this result.
+
+No migration, no V25 changes, no user draft changes. Rollback application/frontend only and preserve historical data. Production deployment and anonymous security alerts remain unverified; GAP-01 and whole task packages remain open. Next: assess the existing PRD68 anonymous security-event gap without expanding detail scope.
