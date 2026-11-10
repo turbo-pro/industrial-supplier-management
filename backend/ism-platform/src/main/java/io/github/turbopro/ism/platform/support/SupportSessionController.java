@@ -142,6 +142,12 @@ public class SupportSessionController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.auditLifecycle(sessionId, page)));
     }
 
+    @RequiresPermission("platform:support:audit")
+    @GetMapping("/support-audit/sessions/{sessionId}")
+    ResponseEntity<ApiResponse<SupportSessionService.AuditSessionDetail>> detail(@PathVariable long sessionId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(responses.success(sessions.auditDetail(sessionId)));
+    }
+
     public record Termination(@NotBlank @jakarta.validation.constraints.Size(max = 1000) String reason) {}
 
     @RequiresPermission("platform:support:terminate")

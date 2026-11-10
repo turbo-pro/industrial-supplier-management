@@ -111,6 +111,21 @@ public class SupportSessionService {
         return audit.supportLifecycle(sessionId, page);
     }
 
+    public record AuditSessionDetail(String id, String requestId, String operatorId, String tenantId,
+            String decisionId, String roleId, String persistedState, String state,
+            java.time.LocalDateTime createdAt, java.time.LocalDateTime expiresAt,
+            java.time.LocalDateTime revokedAt, TenantSupportModels.Scope frozenScope) {}
+
+    @Transactional(readOnly = true)
+    public AuditSessionDetail auditDetail(long sessionId) {
+        requireAuditor();
+        var row = sessions.auditDetail(sessionId);
+        if (row == null) throw new ApiException(CommonErrorCode.NOT_FOUND);
+        return new AuditSessionDetail(row.id(), row.requestId(), row.operatorId(), row.tenantId(),
+                row.decisionId(), row.roleId(), row.persistedState(), row.state(), row.createdAt(),
+                row.expiresAt(), row.revokedAt(), readScope(row.scopeJson()));
+    }
+
     /** Reserves a session record. Activation and credentials require a separate exchange. */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public long createPending(long requestId) {

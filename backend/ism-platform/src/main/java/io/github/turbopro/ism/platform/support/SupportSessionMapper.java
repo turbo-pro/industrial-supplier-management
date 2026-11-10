@@ -56,6 +56,23 @@ public interface SupportSessionMapper {
             """)
     List<AuditSummary> auditSessions(int offset);
 
+    record AuditDetail(String id, String requestId, String operatorId, String tenantId,
+                       String decisionId, String roleId, String persistedState, String state,
+                       LocalDateTime createdAt, LocalDateTime expiresAt, LocalDateTime revokedAt,
+                       String scopeJson) {}
+
+    @Select("""
+            SELECT CAST(id AS CHAR) AS id, CAST(request_id AS CHAR) AS request_id,
+              CAST(platform_operator_id AS CHAR) AS operator_id, CAST(target_tenant_id AS CHAR) AS tenant_id,
+              CAST(decision_id AS CHAR) AS decision_id, CAST(effective_role_id AS CHAR) AS role_id,
+              status AS persisted_state,
+              CASE WHEN status IN ('ACTIVE','PENDING') AND expires_at <= UTC_TIMESTAMP(3)
+                THEN 'EXPIRED' ELSE status END AS state,
+              created_at, expires_at, revoked_at, granted_scope_json AS scope_json
+            FROM plt_support_session WHERE id=#{id}
+            """)
+    AuditDetail auditDetail(long id);
+
     record Entry(long requestId, long decisionId, long operatorId, String scopeJson) {}
 
     @Select("""

@@ -24,7 +24,8 @@ class SupportSessionHttpIT extends TenantSupportIT {
         String auditor = http.postForEntity("/api/console/auth/login", Map.of("username","support-auditor","password","Console#Pass123","deviceId","audit-tests"), com.fasterxml.jackson.databind.JsonNode.class)
                 .getBody().path("data").path("accessToken").asText();
         String requestId = approved(tenant);
-        save(employee, tenant.role(), 0, true);
+        long supportRole = role(tenant, "TENANT_ALL", java.util.Set.of());
+        save(employee, supportRole, 0, true);
         ok(decide(employee, requestId, "approve", "audit-" + requestId, decision(detail(employee, requestId))));
         String reservation = "/api/console/support-requests/" + requestId + "/sessions";
         String sessionId = ok(request("POST", reservation, owner, null, null)).path("sessionId").asText();
@@ -53,6 +54,19 @@ class SupportSessionHttpIT extends TenantSupportIT {
         }
         assertThat(request("GET", "/api/suppliers/1", auditor, null, null).getStatusCode().value()).isIn(401,403);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plt_role_permission WHERE role_id=1003",Integer.class)).isOne();
+        String detailPath = sessions + "/" + sessionId;
+        var frozenBefore = ok(request("GET", detailPath, auditor, null, null)).path("frozenScope");
+        grant(tenant, supportRole, "TENANT_ALL", java.util.Set.of(), false);
+        assertThat(request("POST", console + "/tenants/" + tenant.tenant() + "/suppliers/1/read",
+                owner, null, Map.of("accessSecret",access)).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(ok(request("GET", detailPath, auditor, null, null)).path("frozenScope")).isEqualTo(frozenBefore);
+        jdbc.update("UPDATE plt_support_session SET created_at=DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 2 MINUTE), expires_at=DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 1 MINUTE) WHERE id=?",sessionId);
+        var beforeAudit = jdbc.queryForMap("SELECT * FROM plt_support_session WHERE id=?",sessionId);
+        var expired = ok(request("GET", detailPath, auditor, null, null));
+        assertThat(expired.path("state").asText()).isEqualTo("EXPIRED");
+        assertThat(expired.path("persistedState").asText()).isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForMap("SELECT * FROM plt_support_session WHERE id=?",sessionId)).isEqualTo(beforeAudit);
+        assertThat(request("GET", sessions + "/1", auditor, null, null).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         ok(request("POST", console + "/terminate", platformAdmin, null, Map.of("reason","private termination reason")));
         String lifecyclePath = sessions + "/" + sessionId + "/lifecycle";
         var lifecycleResponse = request("GET", lifecyclePath, auditor, null, null);
@@ -73,6 +87,14 @@ class SupportSessionHttpIT extends TenantSupportIT {
                        (90103,0,790001,'SUPPORT_SESSION_REVOKE','SUPPLIER',?,'wrong-type',UTC_TIMESTAMP(3))
                 """,tenant.tenant(),sessionId,sessionId,sessionId);
         assertThat(ok(request("GET", lifecyclePath, auditor, null, null)).path("items").size()).isEqualTo(3);
+        var detailResponse = request("GET", sessions + "/" + sessionId, auditor, null, null);
+        assertThat(detailResponse.getHeaders().getCacheControl()).contains("no-store");
+        var sessionDetail = ok(detailResponse);
+        assertThat(sessionDetail.path("state").asText()).isEqualTo("REVOKED");
+        assertThat(sessionDetail.path("frozenScope").path("fields").toString()).contains("code", "name");
+        assertThat(sessionDetail.toString()).doesNotContain(access,entry,browser,"digest","scopeJson");
+        assertThat(request("GET", sessions + "/" + sessionId, owner, null, null).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(request("GET", sessions + "/" + sessionId, employee, null, null).getStatusCode().value()).isIn(401,403);
         var preview = ok(request("GET", "/api/console/users/" + auditorId + "/role-impact?roleCode=PLATFORM_SUPPORT&version=0", platformAdmin, null, null));
         assertThat(preview.path("canApply").asBoolean()).isTrue();
         ok(request("PUT", "/api/console/users/" + auditorId + "/role", platformAdmin, "auditor-to-support", Map.of("roleCode","PLATFORM_SUPPORT","version",0)));

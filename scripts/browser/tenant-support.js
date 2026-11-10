@@ -55,6 +55,11 @@ async(page)=>{
    await audit.getByRole('region',{name:'审计访问记录'}).getByText('读取成功',{exact:true}).waitFor();
    if(await audit.getByText('浏览器验收供应商',{exact:true}).count())throw Error('Audit leaked business fields');
    await audit.screenshot({path:'output/playwright/tenant-support/independent-audit.png'});
+   await audit.getByRole('row').filter({hasText:auditedId}).getByRole('button',{name:'查看详情',exact:true}).click();
+   const sessionDetail=audit.getByRole('region',{name:'支持会话详情'});
+   await sessionDetail.getByText('以下为创建时批准的权限上界，不代表当前有效访问权限。',{exact:true}).waitFor();
+   await sessionDetail.getByText(/^(code、name|name、code)$/).waitFor();
+   await sessionDetail.screenshot({path:'output/playwright/tenant-support/session-detail.png'});
    const termination=terminator.getByRole('region',{name:'强制终止支持会话'});
    await termination.getByLabel('支持会话 ID').fill(new URL(read.url()).pathname.split('/')[3]);
    await termination.getByLabel('终止原因').fill('真实浏览器安全处置');

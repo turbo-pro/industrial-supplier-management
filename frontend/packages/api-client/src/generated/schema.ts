@@ -329,6 +329,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/console/support-audit/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Requires platform:support:audit. Frozen scope is the creation-time upper bound, not current access permission. No credentials or raw audit payloads. Cache-Control no-store. */
+        get: operations["auditSupportSessionDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/support-audit/sessions": {
         parameters: {
             query?: never;
@@ -9039,6 +9056,51 @@ export interface operations {
                                 occurredAt: string;
                             }[];
                             hasMore: boolean;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ApiFailure"];
+            401: components["responses"]["ApiFailure"];
+            403: components["responses"]["ApiFailure"];
+            404: components["responses"]["ApiFailure"];
+        };
+    };
+    auditSupportSessionDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical session metadata and frozen scope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data: {
+                            id: string;
+                            requestId: string;
+                            operatorId: string;
+                            tenantId: string;
+                            decisionId: string;
+                            roleId: string;
+                            persistedState: string;
+                            state: string;
+                            createdAt: string;
+                            expiresAt: string;
+                            revokedAt: string | null;
+                            frozenScope: {
+                                tenantAll: boolean;
+                                organizations: string[];
+                                fields: string[];
+                            };
                         };
                     };
                 };
